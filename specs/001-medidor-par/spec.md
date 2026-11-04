@@ -1,0 +1,40 @@
+# 001 - Medidor en par
+
+## Objetivo
+Medir el enlace entre dos equipos con NPerf (A ↔ B) usando el protocolo propio, por CLI, con resultados comparables a iperf3. Es el núcleo que después usarán la GUI, el mapa y las pruebas programadas.
+
+## Alcance
+
+### Incluye
+- Un solo `.exe` con dos modos CLI: `nperf escuchar` (lado B, queda esperando) y `nperf medir <host>` (lado A, inicia la prueba).
+- Canal de control TCP autenticado con clave compartida; la clave nunca viaja en claro.
+- Compatibilidad por versión mayor: si no coincide, se rechaza con mensaje claro en ambos lados.
+- Negociación de `sentido`, `duracion`, `flujos`, `tasa_udp` (y protocolo).
+- Protocolo: `tcp`, `udp` o `ambos` (default: TCP y luego UDP).
+- Sentido: `ida` (A → B), `vuelta` (B → A), `ambos` (default). El sentido no pedido se reporta como "no medido".
+- Duración 3–300 s, default 10; en `ambos` aplica por sentido.
+- TCP con N flujos paralelos (default 4).
+- UDP a tasa fija; por defecto 90 % del throughput TCP medido en ese sentido.
+- RTT (ping por el canal de control) antes de la carga.
+- Métricas: throughput (Mbps), jitter y pérdida (UDP), retransmisiones (TCP, si Windows las entrega sin admin; si no, "no disponible").
+- Cola por concurrencia: si B ya está en prueba, la nueva espera en cola y A recibe aviso con su posición.
+- Salida legible por defecto y `-json` para comparar y automatizar.
+- Puerto fijo por defecto, configurable con `-puerto`. Clave por `-clave` o configuración local.
+
+### Excluye (specs posteriores)
+GUI y bandeja, mapa, descubrimiento automático, routers/APs sin agente, detección de adaptadores y WiFi, ejecución programada, alertas, exportación CSV, aviso guiado de firewall, compatibilidad de protocolo con iperf3.
+
+## Criterios de aceptación
+1. `nperf escuchar` y `nperf medir 127.0.0.1` completan una prueba con valores por defecto y terminan con código 0.
+2. Con clave distinta, la prueba se rechaza antes de la carga, con código ≠ 0 y mensaje "clave incorrecta"; una captura del canal de control no contiene la clave en claro.
+3. Con versión mayor distinta (simulada en test), ambos lados muestran aviso de incompatibilidad y no se mide.
+4. Por defecto el resultado trae, en este orden: RTT, TCP ida, TCP vuelta, UDP ida, UDP vuelta.
+5. `-sentido ida` reporta "vuelta: no medido" (y viceversa).
+6. `-duracion 5` dura 5 s ±0,5 s por sentido y protocolo; valores fuera de 3–300 se rechazan antes de conectar.
+7. `-flujos 8` abre 8 conexiones TCP de datos (verificable en test o con `netstat`); el resultado suma los flujos.
+8. Sin `-tasa-udp`, la tasa UDP enviada es 90 % ±5 % del throughput TCP del mismo sentido; con `-tasa-udp 50M` se envía 50 Mbps ±5 %. Con `-proto udp` sin tasa se usa la tasa por defecto definida en decisiones.
+9. UDP reporta jitter (ms) y pérdida (%); con pérdida inducida en test, la pérdida reportada coincide ±1 punto.
+10. Dos `medir` simultáneos contra el mismo B: el segundo recibe "en cola (posición 1)" y se ejecuta al terminar el primero.
+11. `-json` produce un objeto válido con todas las métricas, sentidos y protocolos (incluidos "no medido"/"no disponible").
+12. En la misma red cableada, el throughput TCP (4 flujos, 10 s) difiere ≤10 % del de `iperf3 -P 4 -t 10`, en ambos sentidos (`-R`).
+13. Funciona sin privilegios de administrador. `go vet` y `go test ./...` pasan.

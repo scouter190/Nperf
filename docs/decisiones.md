@@ -90,3 +90,9 @@
 - [ ] Confirmar Walk como librería de interfaz.
 - [ ] Escribir la especificación en el repositorio.
 - [ ] Validar resultados contra iperf3.
+
+## 16. Medidor por CLI (spec 001)
+- Un solo `.exe` con modos `nperf escuchar` y `nperf medir <host>`; salida legible y `-json`.
+- Sentido en CLI: `ida` (A → B), `vuelta` (B → A), `ambos` (default).
+- La clave nunca viaja en claro por el canal de control.
+- Validación: throughput TCP a ≤10 % de iperf3 en la misma red cableada.
