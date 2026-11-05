@@ -2,7 +2,6 @@
 ## 1. Instalar herramientas
 
 En PowerShell:
-
 ```powershell
 winget install --id Git.Git -e
 winget install --id GoLang.Go -e
@@ -24,6 +23,8 @@ git clone https://github.com/scouter190/Nperf.git
 cd Nperf
 ```
 
+El repo fuerza LF vía `.gitattributes`; no hace falta configurar `autocrlf`.
+
 ## 3. Verificar
 
 ```powershell
@@ -35,7 +36,6 @@ go build -o nperf.exe ./cmd/nperf
 ## 4. Probar en la misma máquina
 
 Terminal 1 (servidor, puerto 5300):
-
 ```powershell
 .\nperf.exe server
 ```
