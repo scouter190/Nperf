@@ -6,7 +6,7 @@
 **Fase 4 - Implementando spec 002 (interfaz y descubrimiento).** Spec 001 completa a falta de la validación manual del usuario (docs/validacion-iperf3.md).
 
 ## Spec activa
-`specs/002-interfaz-descubrimiento/` (T1-T13 hechas de T1-T18). Spec 001: `specs/001-medidor-par/` (cerrada).
+`specs/002-interfaz-descubrimiento/` (T1-T14 hechas de T1-T18). Spec 001: `specs/001-medidor-par/` (cerrada).
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencia de spec 002 (pendiente de integrar en T15): jchv/go-webview2 + go-winloader.
@@ -32,10 +32,10 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 ## Notas
 - Subidas: regla en AGENTS.md (wip/actual → CI Windows verde → main, sin pedir permiso; el usuario revisa por tarea).
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
-- UI (T14): todo dato que llega por la red (alias, etc.) se inserta como texto, nunca como HTML.
+- UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-T14 (UI HTML embebida), T15 (ventana WebView2 + validar Defender), T16 (bandeja), T17 (sin WebView2), T18 (validación manual).
+T15 (ventana WebView2: enlazar App, añadir has_key, validar Defender), T16 (bandeja), T17 (sin WebView2), T18 (validación manual).
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

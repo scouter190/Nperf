@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NPerf</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header id="bar" class="bar">
+  <label class="field">Sentido
+    <select id="direction"></select>
+  </label>
+  <label class="field">Duración (s)
+    <input id="duration" type="number" min="3" max="300" step="1" list="durations" inputmode="numeric">
+    <datalist id="durations"><option value="5"><option value="10"><option value="30"><option value="60"><option value="120"><option value="300"></datalist>
+  </label>
+  <span id="total" class="total"></span>
+  <span class="spacer"></span>
+  <span id="blocked" class="blocked"></span>
+  <button id="test" class="primary" type="button">TEST!</button>
+  <button id="cancel" class="danger" type="button" hidden>Cancelar</button>
+</header>
+<div id="banners">
+  <div id="config-error" class="banner error" hidden></div>
+  <div id="firewall" class="banner warn" hidden></div>
+  <div id="toast" class="banner error" hidden></div>
+</div>
+<main class="layout">
+  <aside class="panel list-panel">
+    <h2>Equipos</h2>
+    <div id="self" class="devices"></div>
+    <h3>En la red</h3>
+    <div id="peers" class="devices"></div>
+    <p id="empty" class="muted" hidden>Buscando equipos…</p>
+    <details class="settings" id="settings">
+      <summary>Ajustes</summary>
+      <label class="stack">Alias
+        <span class="row"><input id="alias" type="text" maxlength="64"><button id="alias-save" type="button">Guardar</button></span>
+      </label>
+      <label class="stack">Clave compartida <span id="key-state" class="muted"></span>
+        <span class="row"><input id="key" type="password" autocomplete="new-password" placeholder="Nueva clave"><button id="key-save" type="button">Guardar</button></span>
+      </label>
+      <div class="stack">Subredes extra
+        <ul id="subnets" class="subnets"></ul>
+        <span class="row"><input id="subnet" type="text" placeholder="192.168.2.0/24"><button id="subnet-add" type="button">Añadir</button></span>
+      </div>
+    </details>
+  </aside>
+  <section class="panel detail-panel">
+    <div class="detail-head">
+      <h2>Detalle</h2>
+      <label class="check"><input id="detailed" type="checkbox"> Modo detallado</label>
+    </div>
+    <div id="detail"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
