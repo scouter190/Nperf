@@ -105,4 +105,5 @@
 - Autenticación por desafío y respuesta HMAC-SHA256.
 - Módulo Go `nperf` hasta confirmar el repositorio.
 - Desarrollo y tests en Linux; lo específico de Windows con build tags; CI en `windows-latest`.
+- Secuencia por defecto (`-proto both`): RTT (10 ping/pong por el canal de control, antes de cualquier carga; mín/media/máx), TCP fwd, TCP rev, UDP fwd, UDP rev. UDP = 90 % del TCP del mismo sentido, con tope de 10 Gbps (en loopback el TCP da decenas de Gbps); `-udp-rate` manda sobre la derivación. Si el TCP de un sentido da una tasa inutilizable (< 1 datagrama/s), ese UDP queda "no medido" con una nota; un error TCP/UDP aborta toda la medición.
 - Streams: el cliente envía siempre el número explícito (default 4, rango 1–64); el server trata 0 como 1 solo por compatibilidad.

@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - Implementando spec 001.** T1-T7 y T14 hechas y aprobadas (más arreglos Windows de TCP y UDP).
+**Fase 3 - Implementando spec 001.** T1-T8 y T14 hechas y aprobadas (más arreglos Windows de TCP y UDP).
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T7 y T14 hechas; T8-T13 y T15 pendientes).
+`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T8 y T14 hechas; T9-T13 y T15 pendientes).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar).
@@ -16,7 +16,9 @@
 - Saludo UDP `NPUDP1 <session>` en el puerto 5300: el server responde `ok`; solo el primer saludo asocia la dirección, los de otra dirección se ignoran.
 - T6: el cliente siempre abre las conexiones; en rev mide el cliente. "No medido" con `Result{Fwd,Rev}` y `Measured`. `both` = dos sesiones (fwd y rev); sesión única pendiente en T10.
 - T7: `-streams` 1-64 (default 4) en TCP fwd/rev; throughput = suma medida por el receptor en ventana común; un flujo que falla = error, sin suma parcial; el server limita las conexiones de datos al número negociado (0 = 1).
-- `-proto both` sigue dando error claro (pendiente de T8).
+- T8: `-proto both` es el default de la CLI: RTT (10 ping/pong por el canal de control antes de la carga; mín/media/máx; "<1 µs" si es menor) -> TCP fwd/rev -> UDP fwd/rev. UDP = 90 % del TCP del mismo sentido, tope 10 Gbps; `-udp-rate` manda; con `-proto tcp` es error de uso. Si el TCP da tasa inutilizable, ese UDP queda "no medido" con nota. Un fallo de cualquier fase aborta todo. `Result`: RTT, Fwd/Rev (TCP), UDPFwd/UDPRev.
+- Server: plazo (hsWait, 10 s) único desde el fin del handshake hasta recibir params; los ping no lo extienden.
+- `client.Run` usa fwd por defecto y la CLI both: los consumidores (T12/T13) deben pasar Direction explícito.
 - Tests con `-race`: integración TCP y UDP en loopback, errores, cancelación, saludo UDP, unitarios de proto y meter.
 - Auth (T5): HMAC-SHA256 mutua (rol + ambos nonces + id de sesión firmado); la clave nunca viaja; deadline de handshake 10 s; aviso en stderr si no hay clave.
 - Versión única en `internal/version` (`Current`), regla de versión mayor; aviso en ambos lados si difiere.
@@ -34,11 +36,10 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · �
 
 ## Notas
 - Lección: el CI de Windows detecta fallos que Linux no ve; probar en la rama wip/actual antes de subir a main.
-- T8: relajar el error de `-udp-rate` sin `-proto udp` en `cmd/nperf/main.go` (aceptarlo con `both`).
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
 
 ## Próximo paso
-`implementer` hace T8 (secuencia completa RTT -> TCP -> UDP al 90 %, y `-proto both`); luego `reviewer`.
+`implementer` hace T9 (retransmisiones TCP por SO); luego `reviewer`.
 
 ## Pendientes
 - T10: `both` en una sola sesión (server hace fwd y luego rev en el mismo turno).

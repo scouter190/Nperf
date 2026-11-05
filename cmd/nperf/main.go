@@ -66,7 +66,7 @@ func runClient(ctx context.Context, args []string) int {
 	port := fs.Int("port", defaultPort, "puerto del servidor")
 	secs := fs.Int("duration", 10, "duración de la prueba en segundos")
 	key := fs.String("key", "", "shared key (empty = no key; both sides must then be empty)")
-	protoName := fs.String("proto", "tcp", "protocolo: tcp o udp")
+	protoName := fs.String("proto", "both", "protocolo: tcp, udp o both (RTT, TCP y UDP)")
 	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M")
 	streams := fs.Int("streams", proto.DefaultStreams, "flujos TCP paralelos (1-64)")
 	direction := fs.String("direction", "both", "sentido: fwd, rev o both")
@@ -93,18 +93,14 @@ func runClient(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "error: sentido desconocido %q; use fwd, rev o both\n", *direction)
 		return 2
 	}
-	if *protoName == "both" {
-		fmt.Fprintln(os.Stderr, "error: -proto both aún no está disponible; use tcp o udp")
-		return 2
-	}
-	if *protoName != "tcp" && *protoName != "udp" {
-		fmt.Fprintf(os.Stderr, "error: protocolo desconocido %q; use tcp o udp\n", *protoName)
+	if *protoName != "tcp" && *protoName != "udp" && *protoName != "both" {
+		fmt.Fprintf(os.Stderr, "error: protocolo desconocido %q; use tcp, udp o both\n", *protoName)
 		return 2
 	}
 	var rate float64
 	if *rateStr != "" {
-		if *protoName != "udp" {
-			fmt.Fprintln(os.Stderr, "error: -udp-rate solo aplica con -proto udp")
+		if *protoName == "tcp" {
+			fmt.Fprintln(os.Stderr, "error: -udp-rate solo aplica con -proto udp o both")
 			return 2
 		}
 		var err error
@@ -124,9 +120,32 @@ func runClient(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
+	if *protoName == "both" {
+		if r := res.RTT; r != nil {
+			fmt.Printf("RTT: mín %s, media %s, máx %s (%d pings)\n",
+				fmtRTT(r.Min), fmtRTT(r.Avg), fmtRTT(r.Max), r.Samples)
+		}
+		printDir("tcp", "fwd", "cliente -> servidor", res.Fwd)
+		printDir("tcp", "rev", "servidor -> cliente", res.Rev)
+		printDir("udp", "fwd", "cliente -> servidor", res.UDPFwd)
+		printDir("udp", "rev", "servidor -> cliente", res.UDPRev)
+		for _, n := range res.Notes {
+			fmt.Println("nota:", n)
+		}
+		return 0
+	}
 	printDir(*protoName, "fwd", "cliente -> servidor", res.Fwd)
 	printDir(*protoName, "rev", "servidor -> cliente", res.Rev)
 	return 0
+}
+
+// fmtRTT da formato a un RTT en ms; por debajo de 1 µs (incluido 0, por la resolución del
+// reloj) muestra "<1 µs".
+func fmtRTT(d time.Duration) string {
+	if d < time.Microsecond {
+		return "<1 µs"
+	}
+	return fmt.Sprintf("%.2f ms", float64(d)/float64(time.Millisecond))
 }
 
 func printDir(proto, dir, label string, d client.Dir) {

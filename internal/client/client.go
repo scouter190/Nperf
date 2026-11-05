@@ -24,9 +24,9 @@ const margin = 10 * time.Second
 
 type Options struct {
 	Duration  time.Duration // por sentido
-	Proto     string        // "tcp" (por defecto) o "udp"
+	Proto     string        // "tcp" (por defecto), "udp" o "both" (RTT, TCP y UDP)
 	Direction string        // "fwd" (por defecto), "rev" o "both" (fwd y luego rev)
-	UDPRate   float64       // bps; 0 = DefaultUDPRate
+	UDPRate   float64       // bps; 0 = DefaultUDPRate (en "both": 90 % del TCP del mismo sentido)
 	Key       string        // clave compartida; vacía solo es válida si el servidor tampoco tiene
 	Streams   int           // flujos TCP paralelos; 0 = proto.DefaultStreams (1-proto.MaxStreams)
 	Version   string        // vacío = version.Current (se cambia solo en pruebas)
@@ -53,6 +53,31 @@ type UDPResult struct {
 	JitterMS float64
 }
 
+// UDP derivado en la secuencia completa ("both").
+const (
+	UDPFraction   = 0.9  // fracción del throughput TCP del mismo sentido
+	MaxDerivedUDP = 10e9 // tope (bps) de la tasa derivada; ver docs/decisiones.md sección 16
+	rttPings      = 10
+)
+
+// DeriveUDPRate devuelve la tasa UDP (bps) para un TCP medido en Mbps: 90 % acotado a
+// MaxDerivedUDP. Devuelve 0 si el TCP no dio una medición utilizable.
+func DeriveUDPRate(tcpMbps float64) float64 {
+	r := tcpMbps * 1e6 * UDPFraction
+	if math.IsNaN(r) || r < 8*meter.DefaultUDPSize {
+		return 0
+	}
+	return math.Min(r, MaxDerivedUDP)
+}
+
+// RTT es el tiempo de ida y vuelta medido por el canal de control antes de cualquier carga.
+// Se reportan mínimo, media y máximo de Samples pings (el mínimo es la mejor estimación de
+// la latencia de la red; la media incluye la variación).
+type RTT struct {
+	Min, Avg, Max time.Duration
+	Samples       int
+}
+
 // Dir es el resultado de un sentido. Measured=false significa "no medido" (no se pidió),
 // distinto de una medición de 0.
 type Dir struct {
@@ -65,12 +90,21 @@ type Dir struct {
 
 // Result representa ambos sentidos. Fwd es cliente -> servidor y Rev servidor -> cliente.
 // Sent, Received, Mbps y UDP repiten el primer sentido medido (atajo para pruebas de un solo sentido).
+//
+// Con Proto "both": RTT se mide primero; Fwd/Rev son TCP; UDPFwd/UDPRev son UDP (con la tasa
+// pedida en UDPRateFwd/UDPRateRev, bps). Orden de resultados: RTT, TCP fwd, TCP rev, UDP fwd,
+// UDP rev. Si el TCP de un sentido da 0 y no hay -udp-rate, su UDP queda "no medido" y se
+// explica en Notes.
 type Result struct {
-	Fwd, Rev Dir
-	Sent     meter.Result
-	Received meter.Result
-	Mbps     float64
-	UDP      *UDPResult
+	Fwd, Rev               Dir
+	RTT                    *RTT
+	UDPFwd, UDPRev         Dir
+	UDPRateFwd, UDPRateRev float64
+	Notes                  []string
+	Sent                   meter.Result
+	Received               meter.Result
+	Mbps                   float64
+	UDP                    *UDPResult
 }
 
 func (r *Result) set(dir string, d Dir) {
@@ -100,8 +134,11 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	default:
 		return res, fmt.Errorf("sentido no soportado: %q", o.Direction)
 	}
+	if o.Proto == proto.ProtoBoth {
+		return runFull(ctx, addr, o, dirs)
+	}
 	for _, dir := range dirs {
-		d, err := runDir(ctx, addr, o, dir)
+		d, err := runDir(ctx, addr, o, dir, nil)
 		if err != nil {
 			return res, err
 		}
@@ -110,7 +147,81 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	return res, nil
 }
 
-func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error) {
+// runFull hace RTT (en la primera sesión, antes de su carga), TCP en cada sentido y luego UDP
+// en cada sentido. Un error de cualquier fase TCP/UDP aborta toda la medición.
+func runFull(ctx context.Context, addr string, o Options, dirs []string) (Result, error) {
+	var res Result
+	tcp := o
+	tcp.Proto = proto.ProtoTCP
+	rtt := new(RTT)
+	for i, dir := range dirs {
+		var r *RTT
+		if i == 0 {
+			r = rtt
+		}
+		d, err := runDir(ctx, addr, tcp, dir, r)
+		if err != nil {
+			return res, err
+		}
+		res.set(dir, d)
+	}
+	res.RTT = rtt
+	udp := o
+	udp.Proto = proto.ProtoUDP
+	for _, dir := range dirs {
+		tcpDir := res.Fwd
+		if dir == proto.DirRev {
+			tcpDir = res.Rev
+		}
+		rate := o.UDPRate
+		if rate == 0 {
+			if rate = DeriveUDPRate(tcpDir.Mbps); rate == 0 {
+				res.Notes = append(res.Notes, fmt.Sprintf(
+					"UDP %s no medido: el TCP del mismo sentido no dio una tasa utilizable (%.3f Mbps); use -udp-rate", dir, tcpDir.Mbps))
+				continue
+			}
+		}
+		udp.UDPRate = rate
+		d, err := runDir(ctx, addr, udp, dir, nil)
+		if err != nil {
+			return res, err
+		}
+		if dir == proto.DirRev {
+			res.UDPRev, res.UDPRateRev = d, rate
+		} else {
+			res.UDPFwd, res.UDPRateFwd = d, rate
+		}
+	}
+	return res, nil
+}
+
+// measureRTT envía ppings por el canal de control y mide cada pong.
+func measureRTT(codec *proto.Codec) (*RTT, error) {
+	r := &RTT{}
+	var sum time.Duration
+	for i := 0; i < rttPings; i++ {
+		t0 := time.Now()
+		if err := codec.Write(proto.Message{Type: proto.TypePing}); err != nil {
+			return nil, err
+		}
+		if _, err := expect(codec, proto.TypePong); err != nil {
+			return nil, err
+		}
+		d := time.Since(t0)
+		if i == 0 || d < r.Min {
+			r.Min = d
+		}
+		if d > r.Max {
+			r.Max = d
+		}
+		sum += d
+		r.Samples++
+	}
+	r.Avg = sum / time.Duration(r.Samples)
+	return r, nil
+}
+
+func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (Dir, error) {
 	var res Dir
 	if o.Streams == 0 {
 		o.Streams = proto.DefaultStreams
@@ -137,6 +248,13 @@ func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error
 	session, err := proto.ClientHandshake(codec, o.Key, o.Version)
 	if err != nil {
 		return res, err
+	}
+	if rtt != nil { // antes de params: ni datos ni UDP han empezado
+		m, err := measureRTT(codec)
+		if err != nil {
+			return res, err
+		}
+		*rtt = *m
 	}
 	if o.Proto == "" {
 		o.Proto = proto.ProtoTCP

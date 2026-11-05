@@ -23,15 +23,18 @@ const (
 	TypeResult = "result"
 	TypeError  = "error"
 	TypeData   = "data" // primera línea de una conexión de datos
+	TypePing   = "ping" // RTT por el canal de control, antes de params
+	TypePong   = "pong"
 )
 
 // Valores de params.
 const (
-	ProtoTCP = "tcp"
-	ProtoUDP = "udp"
-	DirFwd   = "fwd"
-	DirRev   = "rev"
-	DirBoth  = "both" // solo en el cliente: dos pruebas, fwd y luego rev
+	ProtoTCP  = "tcp"
+	ProtoUDP  = "udp"
+	ProtoBoth = "both" // solo en el cliente: RTT, TCP y UDP
+	DirFwd    = "fwd"
+	DirRev    = "rev"
+	DirBoth   = "both" // solo en el cliente: dos pruebas, fwd y luego rev
 )
 
 // Flujos TCP paralelos.
@@ -97,3 +100,6 @@ func (c *Codec) Read() (Message, error) {
 	}
 	return m, nil
 }
+
+// MaxPings es el máximo de ping que el servidor atiende por sesión.
+const MaxPings = 64

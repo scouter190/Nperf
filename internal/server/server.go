@@ -151,7 +151,7 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		s.logf("aviso: " + err.Error() + " (" + c.RemoteAddr().String() + ")")
 		return
 	}
-	c.SetReadDeadline(time.Time{}) // handshake terminado
+	c.SetReadDeadline(time.Now().Add(s.hsWait)) // plazo único hasta recibir params; los ping no lo extienden
 	ss := &session{ch: make(chan dataConn, proto.MaxStreams)}
 	s.mu.Lock()
 	s.sessions[id] = ss
@@ -159,10 +159,17 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 	defer func() { s.mu.Lock(); delete(s.sessions, id); s.mu.Unlock() }()
 
 	p, err := codec.Read()
+	// Ping/pong antes de params: mide el RTT del canal de control sin carga.
+	for pings := 0; err == nil && p.Type == proto.TypePing && pings < proto.MaxPings; pings++ {
+		if err = codec.Write(proto.Message{Type: proto.TypePong}); err == nil {
+			p, err = codec.Read()
+		}
+	}
 	if err != nil || p.Type != proto.TypeParams {
 		fail("se esperaban parámetros")
 		return
 	}
+	c.SetReadDeadline(time.Time{}) // params recibido
 	if p.Direction != proto.DirFwd && p.Direction != proto.DirRev {
 		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
 		return
