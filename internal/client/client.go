@@ -24,6 +24,9 @@ const udpMagic = "NPUDP1 "
 
 const margin = 10 * time.Second
 
+// PhaseRTT es la fase de latencia (OnPhase).
+const PhaseRTT = "rtt"
+
 type Options struct {
 	Duration  time.Duration // por sentido
 	Proto     string        // "tcp" (por defecto), "udp" o "both" (RTT, TCP y UDP)
@@ -35,6 +38,8 @@ type Options struct {
 	// OnQueue se llama con la posición en cola (1 = el siguiente) cada vez que el servidor la
 	// informa; mientras espera en cola no rigen plazos de lectura.
 	OnQueue func(pos int)
+	// OnPhase se llama al empezar cada fase: PhaseRTT, "tcp_fwd", "tcp_rev", "udp_fwd" o "udp_rev".
+	OnPhase func(phase string)
 	// HandshakeWait es el plazo de conexión, handshake y obtención de turno cuando no hay cola
 	// (0 = 10 s). La espera en cola no cuenta.
 	HandshakeWait time.Duration
@@ -326,6 +331,9 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	var res Dir
 	cc, codec, session, addr, dialer := ss.cc, ss.codec, ss.id, ss.addr, &ss.dialer
 	if rtt != nil { // antes de params: ni datos ni UDP han empezado
+		if o.OnPhase != nil {
+			o.OnPhase(PhaseRTT)
+		}
 		m, err := measureRTT(codec)
 		if err != nil {
 			return res, err
@@ -334,6 +342,9 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	}
 	if o.Proto == "" {
 		o.Proto = proto.ProtoTCP
+	}
+	if o.OnPhase != nil {
+		o.OnPhase(o.Proto + "_" + dir)
 	}
 	// Plazo del canal de control en esta fase: duración + margen.
 	cc.SetDeadline(time.Now().Add(o.Duration + margin))

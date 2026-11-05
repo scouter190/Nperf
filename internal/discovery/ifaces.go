@@ -8,8 +8,9 @@ import (
 // Iface es una dirección IPv4 activa con su dirección de broadcast.
 type Iface struct {
 	Name      string
-	IP        netip.Addr // IP propia de la interfaz
-	Broadcast netip.Addr // broadcast de su subred
+	IP        netip.Addr   // IP propia de la interfaz
+	Broadcast netip.Addr   // broadcast de su subred
+	Prefix    netip.Prefix // subred de la interfaz (opcional; la usa Listener.Self para elegir IP)
 }
 
 // IfaceSource enumera las interfaces IPv4 activas. Es inyectable en tests.
@@ -67,7 +68,7 @@ func SystemIfaces(includeLoopback bool) IfaceSource {
 				if !ok {
 					continue
 				}
-				out = append(out, Iface{Name: ni.Name, IP: ip, Broadcast: bc})
+				out = append(out, Iface{Name: ni.Name, IP: ip, Broadcast: bc, Prefix: netip.PrefixFrom(ip, ones)})
 			}
 		}
 		return out, nil

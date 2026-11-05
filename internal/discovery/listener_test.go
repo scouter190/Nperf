@@ -13,7 +13,7 @@ var testFrom = netip.MustParseAddrPort("10.0.0.2:5301")
 func newTestListener(t *testing.T, count *int) *Listener {
 	self := testAnnounce(t)
 	return &Listener{
-		Self:       func() (Announce, bool) { return self, true },
+		Self:       func(netip.Addr) (Announce, bool) { return self, true },
 		OnAnnounce: func(Announce, netip.AddrPort) { *count++ },
 	}
 }
@@ -95,4 +95,16 @@ func FuzzListenerHandle(f *testing.F) {
 		l := newTestListener(t, &n)
 		l.handle(data, testFrom, time.Now())
 	})
+}
+
+func TestListenerSelfReceivesQuerier(t *testing.T) {
+	self := testAnnounce(t)
+	var got netip.Addr
+	l := &Listener{Self: func(from netip.Addr) (Announce, bool) { got = from; return self, true }}
+	if l.handle(QueryPacket(), testFrom, time.Now()) == nil {
+		t.Fatal("sin respuesta")
+	}
+	if got != testFrom.Addr() {
+		t.Fatalf("from = %v", got)
+	}
 }

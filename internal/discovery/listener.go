@@ -23,8 +23,9 @@ const (
 // con el anuncio propio y entrega los anuncios recibidos a OnAnnounce.
 type Listener struct {
 	Conn net.PacketConn
-	// Self devuelve el anuncio propio; ok=false si no hay nada que anunciar.
-	Self func() (Announce, bool)
+	// Self devuelve el anuncio propio para quien consulta desde la IP from (permite anunciar la
+	// IP de la interfaz que comparte subred con él); ok=false si no hay nada que anunciar.
+	Self func(from netip.Addr) (Announce, bool)
 	// OnAnnounce recibe cada anuncio válido recibido (puede ser nil). Se llama
 	// desde la goroutine de lectura: no debe bloquear.
 	OnAnnounce func(Announce, netip.AddrPort)
@@ -81,7 +82,7 @@ func (l *Listener) handle(data []byte, from netip.AddrPort, now time.Time) []byt
 		if l.Self == nil || !l.allow(from.Addr(), now) {
 			return nil
 		}
-		a, ok := l.Self()
+		a, ok := l.Self(from.Addr())
 		if !ok {
 			return nil
 		}

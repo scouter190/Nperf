@@ -70,7 +70,7 @@ func listen(t *testing.T) *net.UDPConn {
 func TestQueryReceivesAnnounce(t *testing.T) {
 	srv := listen(t)
 	self := testAnnounce(t)
-	l := &Listener{Conn: srv, Self: func() (Announce, bool) { return self, true }}
+	l := &Listener{Conn: srv, Self: func(netip.Addr) (Announce, bool) { return self, true }}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sdone := make(chan error, 1)
