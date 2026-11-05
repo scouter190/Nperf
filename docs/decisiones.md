@@ -88,7 +88,7 @@
 
 ## 15. Pendientes
 - [ ] Confirmar dueño y nombre del repositorio.
-- [ ] Confirmar Walk como librería de interfaz.
+- [x] ~~Confirmar Walk como librería de interfaz.~~ Reemplazado por WebView2 (§17).
 - [ ] Escribir la especificación en el repositorio.
 - [ ] Validar resultados contra iperf3.
 
@@ -113,3 +113,16 @@
 - Estado del equipo: consulta `status` (disponible / ocupado + cola) en el protocolo desde la spec 001; el indicador visual va en la spec de interfaz.
 - Consulta de estado pública en la LAN (decisión del usuario): solo expone state y queue. Sin ids de sesión, IPs, nombres, versión exacta ni detalles de la prueba; mensaje propio antes del handshake que no habilita ningún otro paso sin autenticar; no ocupa turno ni entra en la cola; el server responde en < 1 s y cierra la conexión.
 - Formato JSON v1 (`nperf client ... -json`): stdout lleva solo un objeto; avisos y cola van por stderr. Campos en inglés, snake_case, estables, con `"format_version": 1`. Raíz: `format_version`, `params` (`host`, `port`, `proto`, `direction`, `duration_s`, `streams`, `udp_rate_bps` o null si es automática, `version`), `rtt` (`status`, `min_ms`, `avg_ms`, `max_ms`, `samples`), `tcp` y `udp` (cada uno con `fwd` y `rev`), `notes` (lista). Cada sentido: `status` (`measured` | `not_measured`), `throughput_mbps` y `bytes` (medidos por el receptor), `duration_s`, `retransmissions` (solo TCP: `status` `available` | `unavailable`, `count` o null, `estimated`) y `udp` (solo UDP: `sent_mbps`, `sent_bytes`, `target_rate_bps` o null, `jitter_ms`, `loss_pct`, `datagrams_sent`, `datagrams_expected`, `datagrams_lost`). Lo "no medido" / "no disponible" se expresa con `status` y valores null, nunca con 0. Error: `{"error": "..."}` por stdout con el mismo código de salida que sin `-json`. Cambios incompatibles suben `format_version`.
+
+## 17. Spec 002 (interfaz y descubrimiento)
+- Alcance: ventana + descubrimiento + TEST!. Fuera: mapa gráfico, adaptadores/WiFi, semáforo, gráficas en vivo, pruebas programadas, alertas.
+- Interfaz: **WebView2** (incluido en Windows 10/11) con HTML/CSS/JS embebido en el `.exe`; **reemplaza a Walk** (§2 y pendiente de §15 quedan superados). Se admite **una** dependencia Go pura (sin cgo) para el puente, previa revisión de licencia y mantenimiento. Cada `.exe` es un solo archivo.
+- **Dos ejecutables** con el mismo código: `nperf.exe` (CLI de consola, sin cambios; sin argumentos muestra la ayuda) y `nperf-gui.exe` (subsistema Windows GUI, doble clic sin consola). El CI compila y publica ambos como artefactos; `scripts/build-windows.*` generan ambos.
+- Descubrimiento: anuncio UDP broadcast propio **cada 3 s** en cada interfaz IPv4, puerto propio **5301/UDP** (configurable). Público en la LAN (como `nperf status`): alias, IP, puerto, estado (disponible/ocupado) y cola. Equipo sin anunciarse **10 s** pasa a gris (no seleccionable).
+- Subredes extra a mano: IP o CIDR de **máx. /24**, consultadas por unicast en 5301/UDP.
+- Origen de la prueba: **siempre "Este equipo"**; el usuario elige solo el destino. Control remoto A → B desde un tercer equipo: spec futura, junto al mapa.
+- TEST! pasa a "Cancelar" durante la prueba o la cola. **Una sola instancia** de la app por usuario. Sin equipos en **15 s**: sugerencia de revisar el firewall.
+- Nombre mostrado: alias configurable por técnico + IP; sin alias, el nombre del equipo de Windows.
+- La app abierta actúa **siempre como server** (clave de `config.json` o la fijada en la app).
+- Bandeja incluida: cerrar la ventana deja NPerf en la bandeja (server y anuncio activos); se sale desde el menú de la bandeja.
+- Selección en la 002 desde una **lista** (el mapa vendrá después).
