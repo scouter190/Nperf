@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nperf/internal/client"
+	"nperf/internal/meter"
 	"nperf/internal/proto"
 	"nperf/internal/server"
 )
@@ -159,6 +160,17 @@ func printDir(proto, dir, label string, d client.Dir) {
 			name, dir, label, u.SentMbps, d.Mbps, u.JitterMS, u.LossPct, u.Lost, u.Expected)
 		return
 	}
-	fmt.Printf("%s %s (%s): %.1f Mbps (%d bytes en %.1f s)\n",
-		name, dir, label, d.Mbps, d.Received.Bytes, d.Received.Elapsed.Seconds())
+	fmt.Printf("%s %s (%s): %.1f Mbps (%d bytes en %.1f s), retransmisiones: %s\n",
+		name, dir, label, d.Mbps, d.Received.Bytes, d.Received.Elapsed.Seconds(), fmtRetrans(d.Sent))
+}
+
+// fmtRetrans da formato a las retransmisiones del emisor o "no disponible".
+func fmtRetrans(r meter.Result) string {
+	if !r.RetransOK {
+		return "no disponible"
+	}
+	if r.RetransEstimated {
+		return "~" + strconv.FormatUint(r.Retrans, 10) + " (estimado)"
+	}
+	return strconv.FormatUint(r.Retrans, 10)
 }

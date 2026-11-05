@@ -329,8 +329,11 @@ func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (
 		if err != nil {
 			return res, err
 		}
-		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(),
-			Sent: meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}}, nil
+		sent := meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}
+		if r.Retrans != nil { // lo informa el emisor (servidor)
+			sent.Retrans, sent.RetransOK, sent.RetransEstimated = *r.Retrans, true, r.RetransEst
+		}
+		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(), Sent: sent}, nil
 	}
 	res.Sent, err = meter.SendTCPN(ctx, conns, o.Duration)
 	if err != nil {

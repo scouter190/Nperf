@@ -9,12 +9,20 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"nperf/internal/tcpinfo"
 )
 
 // Result es lo que mide quien recibe.
 type Result struct {
 	Bytes   int64
 	Elapsed time.Duration
+	// Retransmisiones TCP vistas por el emisor (segmentos; en Windows aproximado desde bytes).
+	// Solo válido si RetransOK; si no, "no disponible".
+	Retrans   uint64
+	RetransOK bool
+	// RetransEstimated: el valor es una estimación (Windows), se muestra con ~.
+	RetransEstimated bool
 }
 
 // Mbps devuelve megabits por segundo.
@@ -51,10 +59,15 @@ func SendTCP(ctx context.Context, c net.Conn, d time.Duration) (Result, error) {
 	} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
 		err = errors.New("envío bloqueado: medición no fiable")
 	}
+	res := Result{Bytes: total, Elapsed: time.Since(start)}
 	if tc, ok := c.(*net.TCPConn); ok {
+		// Conexión nueva: el contador acumulado equivale a lo retransmitido en la prueba.
+		if n, rerr := tcpinfo.Retransmits(tc); rerr == nil {
+			res.Retrans, res.RetransOK, res.RetransEstimated = n, true, tcpinfo.Estimated
+		}
 		tc.CloseWrite()
 	}
-	return Result{Bytes: total, Elapsed: time.Since(start)}, err
+	return res, err
 }
 
 // ReceiveTCP lee hasta EOF y mide desde el primer byte hasta el último.
@@ -92,6 +105,7 @@ func SendTCPN(ctx context.Context, conns []net.Conn, d time.Duration) (Result, e
 		total    Result
 		firstErr error
 	)
+	total.RetransOK = len(conns) > 0
 	for i, c := range conns {
 		wg.Add(1)
 		go func(i int, c net.Conn) {
@@ -100,6 +114,9 @@ func SendTCPN(ctx context.Context, conns []net.Conn, d time.Duration) (Result, e
 			mu.Lock()
 			defer mu.Unlock()
 			total.Bytes += r.Bytes
+			total.Retrans += r.Retrans
+			total.RetransEstimated = total.RetransEstimated || r.RetransEstimated
+			total.RetransOK = total.RetransOK && r.RetransOK
 			if r.Elapsed > total.Elapsed {
 				total.Elapsed = r.Elapsed
 			}

@@ -2,6 +2,7 @@ package proto
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -27,5 +28,24 @@ func TestInvalid(t *testing.T) {
 	c := NewCodec(rw{bytes.NewBufferString("no es json\n")})
 	if _, err := c.Read(); err == nil || !strings.Contains(err.Error(), "inválido") {
 		t.Fatalf("se esperaba error, got %v", err)
+	}
+}
+
+func TestRetransOptional(t *testing.T) {
+	var none, some Message
+	n := uint64(0)
+	some.Retrans = &n
+	for _, tc := range []struct {
+		m    Message
+		want bool
+	}{{none, false}, {some, true}} {
+		b, _ := json.Marshal(tc.m)
+		var back Message
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Fatal(err)
+		}
+		if (back.Retrans != nil) != tc.want {
+			t.Errorf("%s: presente=%v, quería %v", b, back.Retrans != nil, tc.want)
+		}
 	}
 }

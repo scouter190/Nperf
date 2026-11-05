@@ -79,3 +79,27 @@ func TestCancelMidRev(t *testing.T) {
 		<-done
 	}
 }
+
+// En TCP rev el emisor es el servidor: su contador viaja en el mensaje de resultado. En
+// plataformas sin soporte llega "no disponible" (RetransOK false), también válido.
+func TestRetransReported(t *testing.T) {
+	addr, cancel, done := start(t)
+	defer func() { cancel(); <-done }()
+	for _, dir := range []string{"fwd", "rev"} {
+		res, err := client.Run(context.Background(), addr,
+			client.Options{Duration: 300 * time.Millisecond, Proto: "tcp", Direction: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := res.Fwd
+		if dir == "rev" {
+			d = res.Rev
+		}
+		if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") && !d.Sent.RetransOK {
+			t.Errorf("%s: retransmisiones no disponibles en Linux", dir)
+		}
+		if !d.Sent.RetransOK && d.Sent.Retrans != 0 {
+			t.Errorf("%s: valor con no disponible", dir)
+		}
+	}
+}

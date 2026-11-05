@@ -232,8 +232,13 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 			fail("error de envío: " + err.Error())
 			return
 		}
-		codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
-			DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
+		msg := proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
+			DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()}
+		if res.RetransOK {
+			msg.Retrans = &res.Retrans
+			msg.RetransEst = res.RetransEstimated
+		}
+		codec.Write(msg)
 		return
 	}
 	rs := make([]io.Reader, len(dcs))

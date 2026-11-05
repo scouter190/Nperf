@@ -1,6 +1,7 @@
 package main
 
 import (
+	"nperf/internal/meter"
 	"testing"
 	"time"
 )
@@ -23,5 +24,17 @@ func TestFmtRTT(t *testing.T) {
 		if got := fmtRTT(d); got != want {
 			t.Errorf("%v -> %q, quería %q", d, got, want)
 		}
+	}
+}
+
+func TestFmtRetrans(t *testing.T) {
+	if got := fmtRetrans(meter.Result{}); got != "no disponible" {
+		t.Errorf("sin datos: %q", got)
+	}
+	if got := fmtRetrans(meter.Result{Retrans: 7, RetransOK: true, RetransEstimated: true}); got != "~7 (estimado)" {
+		t.Errorf("estimado: %q", got)
+	}
+	if got := fmtRetrans(meter.Result{Retrans: 7, RetransOK: true}); got != "7" {
+		t.Errorf("con datos: %q", got)
 	}
 }
