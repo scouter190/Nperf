@@ -1,7 +1,7 @@
 # 001 - Tareas
 
 - [x] T1 Esqueleto de punta a punta: `go.mod` (módulo `nperf`), `server` y `client` conectan por el canal de control (`hello` → `params` → `start` → `result`) y miden 1 flujo TCP `fwd` (cmd/nperf, internal/proto, internal/server, internal/client, internal/meter/tcp.go) — `go test ./...` con un test de integración en loopback que obtiene throughput > 0; `go run ./cmd/nperf server` y `client 127.0.0.1` imprimen Mbps.
-- [ ] T2 Medidor UDP: ritmo de envío por bytes adeudados, secuencia y hora de envío, jitter RFC 3550, pérdida; envoltura de pruebas que descarta paquetes (internal/meter/udp.go) — test en loopback: 50 Mbps ±5 % durante 2 s; con 10 % descartado, pérdida reportada 10 ±1 puntos.
+- [x] T2 Medidor UDP: ritmo de envío por bytes adeudados, secuencia y hora de envío, jitter RFC 3550, pérdida; envoltura de pruebas que descarta paquetes (internal/meter/udp.go) — test en loopback: 50 Mbps ±5 % durante 2 s; con 10 % descartado, pérdida reportada 10 ±1 puntos.
 - [ ] T3 Compilación cruzada: `scripts/build-windows.sh` (GOOS=windows GOARCH=amd64) — `GOOS=windows go vet ./...` y el script producen `nperf.exe` sin errores.
 - [ ] T4 UDP en la sesión: `-proto udp`, `-udp-rate` (acepta `50M`, `1G`), 100 Mbps por defecto sin TCP previo, saludo UDP en el puerto 5300 (internal/client, internal/server, cmd/nperf) — test de integración: `-udp-rate 50M` envía 50 Mbps ±5 %; sin la flag, 100 Mbps ±5 %.
 - [ ] T5 Autenticación y versión: HMAC con nonce, regla de versión mayor (internal/auth, internal/version, internal/proto) — tests: clave errónea da "clave incorrecta" y código ≠ 0 sin carga; un proxy de prueba no ve la clave en los bytes del canal de control; versión mayor distinta da aviso en ambos lados.
