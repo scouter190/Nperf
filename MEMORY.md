@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - Implementando spec 001.** T1-T6 y T14 hechas y aprobadas.
+**Fase 3 - Implementando spec 001.** T1-T7 y T14 hechas y aprobadas.
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T6 y T14 hechas; T7-T13 y T15 pendientes).
+`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T7 y T14 hechas; T8-T13 y T15 pendientes).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar).
@@ -15,6 +15,7 @@
 - UDP integrado en la sesión: `-proto udp`, `-udp-rate` acepta k/M/G o bps (base 1000), 100 Mbps por defecto sin TCP previo.
 - Saludo UDP `NPUDP1 <session>` en el puerto 5300: el server responde `ok`; solo el primer saludo asocia la dirección, los de otra dirección se ignoran.
 - T6: el cliente siempre abre las conexiones; en rev mide el cliente. "No medido" con `Result{Fwd,Rev}` y `Measured`. `both` = dos sesiones (fwd y rev); sesión única pendiente en T10.
+- T7: `-streams` 1-64 (default 4) en TCP fwd/rev; throughput = suma medida por el receptor en ventana común (primer byte del primer flujo al último del último); un flujo que falla = error, sin suma parcial; el server limita las conexiones de datos al número negociado (0 = 1 por compatibilidad).
 - `-proto both` sigue dando error claro (pendiente de T8).
 - Tests con `-race`: integración TCP y UDP en loopback, errores, cancelación, saludo UDP, unitarios de proto y meter.
 - Auth (T5): HMAC-SHA256 mutua (rol + ambos nonces + id de sesión firmado); la clave nunca viaja; id de sesión solo tras auth; deadline de handshake 10 s; aviso en stderr si no hay clave.
@@ -33,7 +34,7 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · �
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
 
 ## Próximo paso
-`implementer` hace T7 (flujos paralelos `-streams`); luego `reviewer`.
+`implementer` hace T8 (secuencia completa RTT -> TCP -> UDP al 90 %, y `-proto both`); luego `reviewer`.
 
 ## Pendientes
 - T10: `both` en una sola sesión (Direction=both; server hace fwd y luego rev en el mismo turno).

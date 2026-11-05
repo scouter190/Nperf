@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nperf/internal/meter"
@@ -17,7 +18,7 @@ import (
 
 type Server struct {
 	mu       sync.Mutex
-	sessions map[string]chan dataConn
+	sessions map[string]*session
 	conns    map[net.Conn]struct{}
 	wg       sync.WaitGroup
 	udp      udpState
@@ -45,6 +46,14 @@ func WithVersion(v string) Option { return func(s *Server) { s.ver = v } }
 // margin es la holgura sobre la duración antes de abortar una lectura.
 const margin = 10 * time.Second
 
+// session liga las conexiones de datos a una sesión autenticada; limit es el número de
+// flujos negociado (0 hasta que llegan los params: las conexiones antes de eso se rechazan).
+type session struct {
+	ch    chan dataConn
+	limit atomic.Int64
+	n     atomic.Int64
+}
+
 type dataConn struct {
 	r    io.Reader
 	conn net.Conn
@@ -52,7 +61,7 @@ type dataConn struct {
 }
 
 func New(opts ...Option) *Server {
-	s := &Server{ver: version.Current, hsWait: 10 * time.Second, logf: func(string) {}, sessions: map[string]chan dataConn{}, conns: map[net.Conn]struct{}{},
+	s := &Server{ver: version.Current, hsWait: 10 * time.Second, logf: func(string) {}, sessions: map[string]*session{}, conns: map[net.Conn]struct{}{},
 		udp: udpState{byID: map[string]*udpSession{}, byAddr: map[netip.AddrPort]*udpSession{}}}
 	for _, o := range opts {
 		o(s)
@@ -116,11 +125,12 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 	case proto.TypeData:
 		c.SetReadDeadline(time.Time{})
 		s.mu.Lock()
-		ch := s.sessions[first.Session]
+		ss := s.sessions[first.Session]
 		s.mu.Unlock()
-		if ch == nil {
-			return
+		if ss == nil || ss.n.Add(1) > ss.limit.Load() {
+			return // sesión desconocida o más conexiones de las negociadas
 		}
+		ch := ss.ch
 		done := make(chan struct{})
 		select {
 		case ch <- dataConn{r: codec.Reader(), conn: c, done: done}:
@@ -142,9 +152,9 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		return
 	}
 	c.SetReadDeadline(time.Time{}) // handshake terminado
-	ch := make(chan dataConn, 1)
+	ss := &session{ch: make(chan dataConn, proto.MaxStreams)}
 	s.mu.Lock()
-	s.sessions[id] = ch
+	s.sessions[id] = ss
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.sessions, id); s.mu.Unlock() }()
 
@@ -165,42 +175,76 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
 		return
 	}
+	streams := p.Streams
+	if streams == 0 {
+		streams = 1
+	}
+	if streams < 1 || streams > proto.MaxStreams {
+		fail(fmt.Sprintf("número de flujos fuera de rango: %d (permitido 1-%d)", p.Streams, proto.MaxStreams))
+		return
+	}
+	ss.limit.Store(int64(streams))
 	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
 		return
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
-	select {
-	case dc := <-ch:
-		if p.Direction == proto.DirRev {
-			sctx, stopWatch := s.watchControl(ctx, codec)
-			res, err := meter.SendTCP(sctx, dc.conn, d)
-			cancelled := sctx.Err() != nil
-			stopWatch()
+	timeout := time.After(d + margin)
+	dcs := make([]dataConn, 0, streams)
+	release := func() {
+		for _, dc := range dcs {
 			close(dc.done)
-			if cancelled {
-				return // servidor cancelado o cliente desconectado
-			}
-			if err != nil {
-				fail("error de envío: " + err.Error())
-				return
-			}
-			codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
-				DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
+		}
+	}
+	for len(dcs) < streams {
+		select {
+		case dc := <-ss.ch:
+			dcs = append(dcs, dc)
+		case <-timeout:
+			release()
+			fail(fmt.Sprintf("llegaron %d de %d conexiones de datos", len(dcs), streams))
+			return
+		case <-ctx.Done():
+			release()
 			return
 		}
-		dc.conn.SetReadDeadline(time.Now().Add(d + margin))
-		res, err := meter.ReceiveTCP(dc.r)
-		close(dc.done)
+	}
+	defer release()
+	conns := make([]net.Conn, len(dcs))
+	for i, dc := range dcs {
+		conns[i] = dc.conn
+	}
+	if p.Direction == proto.DirRev {
+		sctx, stopWatch := s.watchControl(ctx, codec)
+		res, err := meter.SendTCPN(sctx, conns, d)
+		cancelled := sctx.Err() != nil
+		stopWatch()
+		if cancelled {
+			return // servidor cancelado o cliente desconectado
+		}
 		if err != nil {
-			fail("error de medición: " + err.Error())
+			fail("error de envío: " + err.Error())
 			return
 		}
 		codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
 			DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
-	case <-time.After(d + margin):
-		fail("no llegó la conexión de datos")
-	case <-ctx.Done():
+		return
 	}
+	rs := make([]io.Reader, len(dcs))
+	for i, dc := range dcs {
+		dc.conn.SetReadDeadline(time.Now().Add(d + margin))
+		rs[i] = dc.r
+	}
+	res, err := meter.ReceiveTCPN(rs, func() {
+		for _, c := range conns {
+			c.Close()
+		}
+	})
+	if err != nil {
+		fail("error de medición: " + err.Error())
+		return
+	}
+	codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
+		DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
 }
 
 // watchControl devuelve un contexto que se cancela si ctx se cancela o el cliente cierra el

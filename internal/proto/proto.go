@@ -34,6 +34,12 @@ const (
 	DirBoth  = "both" // solo en el cliente: dos pruebas, fwd y luego rev
 )
 
+// Flujos TCP paralelos.
+const (
+	DefaultStreams = 4
+	MaxStreams     = 64
+)
+
 // Message es el mensaje único del canal; cada tipo usa solo sus campos.
 type Message struct {
 	Type       string  `json:"type"`

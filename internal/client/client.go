@@ -4,10 +4,12 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"nperf/internal/meter"
@@ -26,7 +28,16 @@ type Options struct {
 	Direction string        // "fwd" (por defecto), "rev" o "both" (fwd y luego rev)
 	UDPRate   float64       // bps; 0 = DefaultUDPRate
 	Key       string        // clave compartida; vacía solo es válida si el servidor tampoco tiene
+	Streams   int           // flujos TCP paralelos; 0 = proto.DefaultStreams (1-proto.MaxStreams)
 	Version   string        // vacío = version.Current (se cambia solo en pruebas)
+}
+
+// ValidateStreams comprueba el número de flujos (1-proto.MaxStreams).
+func ValidateStreams(n int) error {
+	if n < 1 || n > proto.MaxStreams {
+		return fmt.Errorf("-streams debe estar entre 1 y %d (se pidió %d)", proto.MaxStreams, n)
+	}
+	return nil
 }
 
 // DefaultUDPRate es la tasa UDP cuando no hay TCP previo: 100 Mbps.
@@ -101,6 +112,12 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 
 func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error) {
 	var res Dir
+	if o.Streams == 0 {
+		o.Streams = proto.DefaultStreams
+	}
+	if err := ValidateStreams(o.Streams); err != nil {
+		return res, err
+	}
 	var dialer net.Dialer
 	cc, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -133,6 +150,9 @@ func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error
 	}
 	params := proto.Message{Type: proto.TypeParams, Proto: o.Proto,
 		Direction: dir, DurationMS: o.Duration.Milliseconds(), Streams: 1}
+	if o.Proto == proto.ProtoTCP {
+		params.Streams = o.Streams
+	}
 	if o.Proto == proto.ProtoUDP && dir == proto.DirRev {
 		params.RateBps = rate
 	}
@@ -146,19 +166,40 @@ func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error
 	if o.Proto == proto.ProtoUDP {
 		return runUDP(ctx, &dialer, addr, codec, session, o, rate, dir)
 	}
-	dc, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return res, fmt.Errorf("no se pudo abrir el flujo de datos: %w", err)
+	conns := make([]net.Conn, 0, o.Streams)
+	var connsMu sync.Mutex // closeAll puede correr desde AfterFunc mientras se abren flujos
+	closeAll := func() {
+		connsMu.Lock()
+		defer connsMu.Unlock()
+		for _, c := range conns {
+			c.Close()
+		}
 	}
-	defer dc.Close()
-	stopData := context.AfterFunc(ctx, func() { dc.Close() })
+	defer closeAll()
+	stopData := context.AfterFunc(ctx, closeAll)
 	defer stopData()
-	if err := proto.NewCodec(dc).Write(proto.Message{Type: proto.TypeData, Session: session}); err != nil {
-		return res, err
+	for i := 0; i < o.Streams; i++ {
+		dc, err := dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			if ctx.Err() != nil {
+				return res, ctx.Err()
+			}
+			return res, fmt.Errorf("no se pudo abrir el flujo de datos %d de %d: %w", i+1, o.Streams, err)
+		}
+		connsMu.Lock()
+		conns = append(conns, dc)
+		connsMu.Unlock()
+		if err := proto.NewCodec(dc).Write(proto.Message{Type: proto.TypeData, Session: session}); err != nil {
+			return res, err
+		}
 	}
 	if dir == proto.DirRev {
-		dc.SetReadDeadline(time.Now().Add(o.Duration + margin))
-		rr, err := meter.ReceiveTCP(dc)
+		rs := make([]io.Reader, len(conns))
+		for i, c := range conns {
+			c.SetReadDeadline(time.Now().Add(o.Duration + margin))
+			rs[i] = c
+		}
+		rr, err := meter.ReceiveTCPN(rs, closeAll)
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
@@ -172,7 +213,7 @@ func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error
 		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(),
 			Sent: meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}}, nil
 	}
-	res.Sent, err = meter.SendTCP(ctx, dc, o.Duration)
+	res.Sent, err = meter.SendTCPN(ctx, conns, o.Duration)
 	if err != nil {
 		return res, err
 	}

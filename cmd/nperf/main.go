@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nperf/internal/client"
+	"nperf/internal/proto"
 	"nperf/internal/server"
 )
 
@@ -67,6 +68,7 @@ func runClient(ctx context.Context, args []string) int {
 	key := fs.String("key", "", "shared key (empty = no key; both sides must then be empty)")
 	protoName := fs.String("proto", "tcp", "protocolo: tcp o udp")
 	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M")
+	streams := fs.Int("streams", proto.DefaultStreams, "flujos TCP paralelos (1-64)")
 	direction := fs.String("direction", "both", "sentido: fwd, rev o both")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
@@ -81,6 +83,10 @@ func runClient(ctx context.Context, args []string) int {
 	}
 	if host == "" {
 		fmt.Fprintln(os.Stderr, "error: falta el host. Uso: nperf client <host>")
+		return 2
+	}
+	if err := client.ValidateStreams(*streams); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		return 2
 	}
 	if *direction != "fwd" && *direction != "rev" && *direction != "both" {
@@ -113,7 +119,7 @@ func runClient(ctx context.Context, args []string) int {
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
 	fmt.Printf("Midiendo %s hacia %s durante %d s...\n", strings.ToUpper(*protoName), addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: *key})
+	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: *key, Streams: *streams})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1

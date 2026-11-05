@@ -105,3 +105,4 @@
 - Autenticación por desafío y respuesta HMAC-SHA256.
 - Módulo Go `nperf` hasta confirmar el repositorio.
 - Desarrollo y tests en Linux; lo específico de Windows con build tags; CI en `windows-latest`.
+- Streams: el cliente envía siempre el número explícito (default 4, rango 1–64); el server trata 0 como 1 solo por compatibilidad.
