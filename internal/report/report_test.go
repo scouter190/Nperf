@@ -184,7 +184,7 @@ func TestRateNote(t *testing.T) {
 	mk := func(sent float64) client.Dir {
 		return client.Dir{Measured: true, UDP: &client.UDPResult{SentMbps: sent}}
 	}
-	if got, want := report.RateNote("fwd", mk(50), 100e6), "UDP fwd: no se alcanzó la tasa objetivo (enviado 50.0 de 100.0 Mbps)"; got != want {
+	if got, want := report.RateNote("fwd", mk(50), 100e6), "UDP ida: no se alcanzó la tasa objetivo (enviado 50.0 de 100.0 Mbps)"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 	if got := report.RateNote("rev", mk(90), 100e6); got != "" {

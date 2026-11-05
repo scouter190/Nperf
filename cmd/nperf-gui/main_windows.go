@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"nperf/internal/app"
 	"nperf/internal/gui"
@@ -34,7 +33,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("no se encontró el directorio de configuración: %w", err)
 	}
-	dir := filepath.Join(cfgRoot, "NPerf")
+	dir, webviewDir := gui.Paths(cfgRoot)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -55,5 +54,5 @@ func run() error {
 	defer closeUI()
 
 	b := &gui.Bridge{Secret: secret, B: svc.Backend(), OnConfigChange: func() { svc.RestartAsync() }}
-	return gui.RunWindow(url, filepath.Join(dir, "webview2"), b.Call)
+	return gui.RunWindow(url, webviewDir, b.Call)
 }

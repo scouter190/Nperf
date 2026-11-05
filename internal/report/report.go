@@ -217,7 +217,11 @@ func RateNote(dir string, d client.Dir, targetBps float64) string {
 	if d.UDP.SentMbps >= 0.9*target {
 		return ""
 	}
-	return fmt.Sprintf("UDP %s: no se alcanzó la tasa objetivo (enviado %.1f de %.1f Mbps)", dir, d.UDP.SentMbps, target)
+	name := map[string]string{"fwd": "ida", "rev": "vuelta"}[dir]
+	if name == "" {
+		name = dir
+	}
+	return fmt.Sprintf("UDP %s: no se alcanzó la tasa objetivo (enviado %.1f de %.1f Mbps)", name, d.UDP.SentMbps, target)
 }
 
 // Text escribe el resultado legible: RTT, TCP fwd, TCP rev, UDP fwd, UDP rev y las notas.
