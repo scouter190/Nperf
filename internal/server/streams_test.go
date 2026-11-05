@@ -46,18 +46,20 @@ func params(t *testing.T, addr string, dir string, streams int) (net.Conn, *prot
 	t.Helper()
 	cc, err := net.Dial("tcp", addr)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("paso dial (streams=%d, dir=%s): %v", streams, dir, err)
 	}
 	cc.SetDeadline(time.Now().Add(20 * time.Second))
 	codec := proto.NewCodec(cc)
 	session, err := proto.ClientHandshake(codec, "", version.Current)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("paso handshake (streams=%d, dir=%s): %v", streams, dir, err)
 	}
-	codec.Write(proto.Message{Type: proto.TypeParams, Proto: proto.ProtoTCP, Direction: dir, DurationMS: 300, Streams: streams})
+	if err := codec.Write(proto.Message{Type: proto.TypeParams, Proto: proto.ProtoTCP, Direction: dir, DurationMS: 300, Streams: streams}); err != nil {
+		t.Fatalf("paso write de params (streams=%d, dir=%s): %v", streams, dir, err)
+	}
 	m, err := codec.Read()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("paso read de la respuesta (streams=%d, dir=%s): %v", streams, dir, err)
 	}
 	return cc, codec, session, m
 }

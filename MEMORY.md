@@ -38,3 +38,4 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · �
 - T11: acotar RateBps máximo del server en UDP rev (`sendUDPRev`, internal/server/udp.go); validar `-duration` 3-300 s; config local.
 - T12: retirar de `client.Result` los campos duplicados Sent/Received/Mbps/UDP (usar Fwd/Rev).
 - Confirmar Walk como librería de interfaz.
+- Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"): causa no encontrada (no hay datos pendientes en ese camino); no reproducido en 500+ corridas; el test ahora reporta el paso exacto. Si reaparece, analizar ese mensaje.

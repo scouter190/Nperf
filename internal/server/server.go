@@ -111,6 +111,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
+// drainWait acota el drenado tras un cierre del canal de control.
+const drainWait = time.Second
+
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer c.Close()
 	c.SetReadDeadline(time.Now().Add(s.hsWait)) // cubre hello y todo el handshake
@@ -145,6 +148,19 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 
 func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, first proto.Message) {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
+	// Robustez ante RST con datos pendientes (no es el arreglo de ningún test).
+	// Cierre ordenado: half-close y drenado breve para que el SO envíe FIN y no RST
+	// (RST por datos sin leer haría perder al cliente el mensaje de error).
+	defer func() {
+		if ctx.Err() != nil {
+			return
+		}
+		if tc, ok := c.(interface{ CloseWrite() error }); ok {
+			tc.CloseWrite()
+		}
+		c.SetReadDeadline(time.Now().Add(drainWait))
+		io.Copy(io.Discard, io.LimitReader(c, 1<<20))
+	}()
 	// El id de sesión solo se emite tras autenticar; hasta entonces no existe en s.sessions.
 	id, err := proto.ServerHandshake(codec, first, s.key, s.ver)
 	if err != nil {
