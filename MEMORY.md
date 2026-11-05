@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - spec 001 completa a falta de la validación manual del usuario (T15).** T1-T16 hechas.
+**Fase 4 - Implementando spec 002 (interfaz y descubrimiento).** Spec 001 completa a falta de la validación manual del usuario (docs/validacion-iperf3.md).
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T16 hechas).
+`specs/002-interfaz-descubrimiento/` (T1-T3 hechas de T1-T18). Spec 001: `specs/001-medidor-par/` (cerrada).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar). Repo: https://github.com/scouter190/Nperf (rama `main`).
@@ -30,6 +30,8 @@
 - T16: `nperf status <host>` [-port] [-json], pública sin clave, solo state y queue, antes del handshake, cierra tras responder; server viejo → error claro.
 - T15: docs/validacion-iperf3.md (procedimiento manual para criterios 12 y 13).
 
+- Spec 002: dos binarios (cmd/nperf consola, cmd/nperf-gui subsistema GUI, test de cabecera PE); puente WebView2 elegido: jchv/go-webview2 + go-winloader (se integra en T15; validar Defender ahí).
+
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI: comandos y flags en inglés, mensajes en español.
 
@@ -39,7 +41,7 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 �
 - CI Windows: tests con -p 1 (paquetes en serie) para evitar contención de CPU en tests de tiempo real.
 
 ## Próximo paso
-El usuario ejecuta docs/validacion-iperf3.md en su red; luego, spec 002 (interfaz y descubrimiento).
+T4 (formato del anuncio NPDISC1). El usuario ejecuta docs/validacion-iperf3.md cuando pueda.
 
 ## Pendientes
 - Confirmar Walk como librería de interfaz.
