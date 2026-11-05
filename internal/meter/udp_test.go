@@ -216,8 +216,8 @@ func (c *countWriter) Write(p []byte) (int, error) {
 }
 
 func TestUDPCatchUpIsBounded(t *testing.T) {
-	// Cada sleep se atrasa 100 ms (temporizador grueso). La ráfaga por ciclo es acotada
-	// y el total no supera la tasa objetivo.
+	// Cada sleep se atrasa 100 ms (> debtWindow): la deuda que excede 20 ms se perdona,
+	// así que el total queda bajo el objetivo y la ráfaga entre sleeps no supera la ventana.
 	f := &fakeClock{t: time.Unix(1000, 0)}
 	w := &countWriter{}
 	clk := f.clock(func(time.Duration) { w.run = 0 }, 100*time.Millisecond)
@@ -227,12 +227,27 @@ func TestUDPCatchUpIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	burst := int(math.Max(burstPackets*size, 0.005*rate/8) / size)
-	if w.maxRun > burst+finCopies {
-		t.Fatalf("ráfaga %d > %d", w.maxRun, burst)
+	window := int(debtWindow.Seconds() * rate / 8 / size)
+	if w.maxRun > window+burstPackets+finCopies {
+		t.Fatalf("ráfaga %d > %d", w.maxRun, window)
 	}
-	if max := int64(rate / 8 * d.Seconds()); st.Bytes > max {
-		t.Fatalf("enviado %d > objetivo %d", st.Bytes, max)
+	max := int64(rate / 8 * d.Seconds())
+	if st.Bytes > max*3/4 {
+		t.Fatalf("enviado %d > 75%% del objetivo %d: la deuda > 20 ms debía perdonarse", st.Bytes, max)
+	}
+}
+
+func TestUDPRateWithCoarseTimer(t *testing.T) {
+	// Sleeps que se atrasan 16 ms (resolución típica de Windows): la tasa media se mantiene.
+	f := &fakeClock{t: time.Unix(1000, 0)}
+	w := &countWriter{}
+	const rate, size = 50e6, 1200
+	st, err := sendUDP(context.Background(), w, rate, size, 3*time.Second, f.clock(nil, 16*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Mbps(); math.Abs(got-50) > 1 {
+		t.Fatalf("%.2f Mbps, quería 50 ±2%%", got)
 	}
 }
 

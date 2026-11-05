@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -67,12 +68,15 @@ var realClock = clock{
 	},
 }
 
-const burstPackets = 10 // tope de datagramas por ciclo tras un atraso
+const (
+	burstPackets = 10                    // tope de datagramas por iteración tras un atraso
+	debtWindow   = 20 * time.Millisecond // deuda máxima conservada; lo que exceda se perdona
+)
 
 // SendUDP envía datagramas de size bytes a rateBps (bits por segundo) durante d.
 // El ritmo sale de los bytes adeudados según el tiempo transcurrido, no de un sleep por paquete.
-// Tras un atraso se recupera como máximo una ráfaga acotada; el resto de la deuda se descarta
-// para que el ritmo medio no se dispare.
+// Cada iteración envía como máximo burstPackets datagramas. La deuda por atraso se conserva
+// hasta debtWindow (20 ms, cubre sleeps de 16 ms); solo lo que la excede (pausas largas reales) se descarta.
 func SendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time.Duration) (UDPSendStats, error) {
 	return sendUDP(ctx, w, rateBps, size, d, realClock)
 }
@@ -86,7 +90,7 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 	}
 	buf := make([]byte, size)
 	bytesPerSec := rateBps / 8
-	maxBurst := math.Max(float64(burstPackets*size), 0.005*bytesPerSec)
+	maxDebt := math.Max(float64(burstPackets*size), debtWindow.Seconds()*bytesPerSec)
 	var seq uint64
 	var sentBytes int64
 	var forgiven float64 // deuda descartada
@@ -106,11 +110,11 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 			clk.sleep(ctx, wait)
 			continue
 		}
-		if owed > maxBurst {
-			forgiven += owed - maxBurst
-			owed = maxBurst
+		if owed > maxDebt {
+			forgiven += owed - maxDebt
+			owed = maxDebt
 		}
-		for owed >= float64(size) {
+		for i := 0; i < burstPackets && owed >= float64(size); i++ {
 			putHeader(buf, seq, 0, clk.now())
 			if _, err = w.Write(buf); err != nil {
 				break
@@ -119,6 +123,7 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 			sentBytes += int64(size)
 			owed -= float64(size)
 		}
+		runtime.Gosched() // cede entre iteraciones; la ráfaga total queda acotada por debtWindow
 		if err != nil {
 			break
 		}

@@ -3,6 +3,7 @@ package meter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -24,6 +25,8 @@ func (r Result) Mbps() float64 {
 	return float64(r.Bytes) * 8 / r.Elapsed.Seconds() / 1e6
 }
 
+const writeGrace = 2 * time.Second
+
 // SendTCP escribe en c durante d (o hasta cancelar ctx) y cierra la escritura.
 func SendTCP(ctx context.Context, c net.Conn, d time.Duration) (Result, error) {
 	buf := make([]byte, 128*1024)
@@ -33,8 +36,9 @@ func SendTCP(ctx context.Context, c net.Conn, d time.Duration) (Result, error) {
 	defer stop()
 	var total int64
 	var err error
+	// Un solo deadline (antes del bucle) para no pisar el de la cancelación.
+	c.SetWriteDeadline(end.Add(writeGrace))
 	for time.Now().Before(end) && ctx.Err() == nil {
-		c.SetWriteDeadline(end)
 		var n int
 		n, err = c.Write(buf)
 		total += int64(n)
@@ -42,14 +46,13 @@ func SendTCP(ctx context.Context, c net.Conn, d time.Duration) (Result, error) {
 			break
 		}
 	}
-	if ne, ok := err.(net.Error); ok && ne.Timeout() {
-		err = nil // fin normal por plazo
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		err = errors.New("envío bloqueado: medición no fiable")
 	}
 	if tc, ok := c.(*net.TCPConn); ok {
 		tc.CloseWrite()
-	}
-	if err == nil {
-		err = ctx.Err()
 	}
 	return Result{Bytes: total, Elapsed: time.Since(start)}, err
 }
