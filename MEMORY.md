@@ -13,13 +13,16 @@
 - Esqueleto TCP `fwd` de punta a punta: `cmd/nperf` (`server`, `client <host>`, `-port` 5300, `-duration` en segundos enteros), `internal/proto`, `internal/meter/tcp.go`, `internal/server`, `internal/client`.
 - Tests con `-race`: integración en loopback, errores, segunda prueba, cancelación, unitarios de proto y meter.
 - El rango 3-300 s de `-duration` se valida en T11.
+- CI escrito (`.github/workflows/ci.yml`): windows-latest vet/test/build + artefacto `nperf.exe`; ubuntu `-race`. Pendiente de verificar en verde tras crear el repo (T14 sin marcar).
+- Guía de entorno para Windows: `docs/entorno-local.md`.
 
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · ±10 % vs iperf3 · CLI en inglés.
 
 ## Próximo paso
-1. `implementer` hace T2 (medidor UDP, la tarea más riesgosa: ritmo ±5 %); luego `reviewer`.
-2. T14 (CI Windows) espera al repositorio en GitHub.
+1. El usuario crea el repo vacío `scouter190/Nperf`; se sube el proyecto y se verifica el CI.
+2. Clonar en Documentos según `docs/entorno-local.md`.
+3. `implementer` hace T2 (medidor UDP, la más riesgosa: ritmo ±5 %); luego `reviewer`.
 
 ## Pendientes
 - Crear repo `Nperf` en GitHub (lo crea el usuario) y subir el proyecto.
