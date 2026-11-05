@@ -273,3 +273,20 @@ func FmtRetrans(r meter.Result) string {
 	}
 	return strconv.FormatUint(r.Retrans, 10)
 }
+
+// StatusText describe el estado en una línea: "disponible" u "ocupado (N en cola)".
+func StatusText(state string, queue int) string {
+	if state == "busy" {
+		return fmt.Sprintf("ocupado (%d en cola)", queue)
+	}
+	return "disponible"
+}
+
+// StatusJSON escribe {"format_version":1,"state":...,"queue":N}.
+func StatusJSON(w io.Writer, state string, queue int) error {
+	return encode(w, struct {
+		FormatVersion int    `json:"format_version"`
+		State         string `json:"state"`
+		Queue         int    `json:"queue"`
+	}{FormatVersion, state, queue})
+}

@@ -542,3 +542,31 @@ func ParseRate(s string) (float64, error) {
 	}
 	return v, nil
 }
+
+// statusWait acota la lectura de la respuesta de estado.
+const statusWait = 3 * time.Second
+
+// Status consulta el estado público del servidor (sin clave ni turno): disponible/ocupado y
+// cuántos esperan. Usa DialTimeout y DialContext de o.
+func Status(ctx context.Context, addr string, o Options) (proto.StatusReply, error) {
+	c, err := dialTCP(ctx, &o, addr)
+	if err != nil {
+		return proto.StatusReply{}, err
+	}
+	defer c.Close()
+	stop := context.AfterFunc(ctx, func() { c.Close() })
+	defer stop()
+	c.SetDeadline(time.Now().Add(statusWait))
+	codec := proto.NewCodec(c)
+	if err := codec.Write(proto.Message{Type: proto.TypeStatus}); err != nil {
+		return proto.StatusReply{}, fmt.Errorf("consulta de estado: %w", err)
+	}
+	r, err := codec.ReadStatus()
+	if err != nil {
+		if ctx.Err() != nil {
+			return r, ctx.Err()
+		}
+		return r, errors.New("el servidor no admite la consulta de estado o no respondió a tiempo")
+	}
+	return r, nil
+}

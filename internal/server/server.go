@@ -161,6 +161,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 // drainWait acota el drenado tras un cierre del canal de control.
 const drainWait = time.Second
 
+// statusWait acota la escritura de la respuesta de estado (debe responder en < 1 s).
+const statusWait = 500 * time.Millisecond
+
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer c.Close()
 	c.SetReadDeadline(time.Now().Add(s.hsWait)) // cubre hello y todo el handshake
@@ -170,6 +173,15 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 		return
 	}
 	switch first.Type {
+	case proto.TypeStatus:
+		// Consulta pública: responde solo state y queue y cierra; no da paso al resto del protocolo.
+		busy, waiting := s.q.snapshot()
+		r := proto.StatusReply{State: proto.StateAvailable, Queue: waiting}
+		if busy {
+			r.State = proto.StateBusy
+		}
+		c.SetWriteDeadline(time.Now().Add(statusWait))
+		codec.WriteStatus(r)
 	case proto.TypeHello:
 		s.control(ctx, c, codec, first)
 	case proto.TypeData:

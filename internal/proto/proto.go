@@ -27,9 +27,10 @@ const (
 	TypeData   = "data" // primera línea de una conexión de datos
 	TypePing   = "ping" // RTT por el canal de control, antes de params
 	TypePong   = "pong"
-	TypeTurn   = "turn"  // cliente: pide turno tras autenticar
-	TypeQueue  = "queue" // servidor: en cola, con Position (1 = el siguiente)
-	TypeReady  = "ready" // servidor: turno concedido; ya se puede medir
+	TypeTurn   = "turn"   // cliente: pide turno tras autenticar
+	TypeQueue  = "queue"  // servidor: en cola, con Position (1 = el siguiente)
+	TypeReady  = "ready"  // servidor: turno concedido; ya se puede medir
+	TypeStatus = "status" // cliente: consulta pública de estado, primer mensaje, antes del handshake
 )
 
 // Valores de params.
@@ -137,4 +138,43 @@ func ClientTurn(c *Codec, onQueue func(pos int)) error {
 			return fmt.Errorf("mensaje inesperado %q (se esperaba %q)", m.Type, TypeReady)
 		}
 	}
+}
+
+// Estados de la consulta pública.
+const (
+	StateAvailable = "available"
+	StateBusy      = "busy"
+)
+
+// StatusReply es la respuesta a "status": expone solo state y queue (nada de sesiones, IPs,
+// nombres, versión ni detalles de la prueba en curso).
+type StatusReply struct {
+	State string `json:"state"`
+	Queue int    `json:"queue"`
+}
+
+// WriteStatus envía la respuesta de estado (una línea JSON con exactamente state y queue).
+func (c *Codec) WriteStatus(r StatusReply) error {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	_, err = c.w.Write(append(b, '\n'))
+	return err
+}
+
+// ReadStatus lee la respuesta de estado y valida que el estado sea conocido.
+func (c *Codec) ReadStatus() (StatusReply, error) {
+	var r StatusReply
+	line, err := c.r.ReadBytes('\n')
+	if err != nil {
+		return r, err
+	}
+	if err := json.Unmarshal(line, &r); err != nil {
+		return r, fmt.Errorf("respuesta de estado inválida: %w", err)
+	}
+	if r.State != StateAvailable && r.State != StateBusy {
+		return r, fmt.Errorf("respuesta de estado inválida: estado %q", r.State)
+	}
+	return r, nil
 }

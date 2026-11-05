@@ -236,12 +236,27 @@ func TestE2EAcceptance(t *testing.T) {
 		}
 	})
 
+	t.Run("criterio_14_status", func(t *testing.T) {
+		r := runCmd(t, bin, cfg, "status", addr, "-port", port)
+		if r.code != 0 || strings.TrimSpace(r.stdout) != "disponible" {
+			t.Fatalf("código %d\nstdout:%s\nstderr:%s", r.code, r.stdout, r.stderr)
+		}
+		r = runCmd(t, bin, cfg, "status", addr, "-port", port, "-json")
+		var v map[string]any
+		if err := json.Unmarshal([]byte(r.stdout), &v); err != nil || r.code != 0 {
+			t.Fatalf("JSON inválido (código %d): %v\n%s", r.code, err, r.stdout)
+		}
+		if len(v) != 3 || v["state"] != "available" || v["queue"] != float64(0) {
+			t.Errorf("campos inesperados: %v", v)
+		}
+	})
+
 	t.Run("ayuda_y_comando_desconocido", func(t *testing.T) {
 		r := runCmd(t, bin, cfg, "-h")
 		if r.code != 0 {
 			t.Errorf("-h: código %d", r.code)
 		}
-		mustContain(t, r.stdout, "Uso:", "medidor de red")
+		mustContain(t, r.stdout, "Uso:", "medidor de red", "nperf status")
 		r = runCmd(t, bin, cfg, "bogus")
 		if r.code != 2 {
 			t.Errorf("comando desconocido: código %d, se esperaba 2", r.code)

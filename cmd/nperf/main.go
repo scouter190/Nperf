@@ -48,9 +48,12 @@ const generalHelp = `NPerf: medidor de red en par (RTT, TCP y UDP) entre dos equ
 Uso:
   nperf server [opciones]          inicia el servidor de medición
   nperf client <host> [opciones]   mide contra un servidor
+  nperf status <host> [opciones]   consulta si el servidor está disponible u ocupado
   nperf help                       muestra esta ayuda
 
-Use "nperf server -h" o "nperf client -h" para ver las opciones de cada comando.
+Use "nperf server -h", "nperf client -h" o "nperf status -h" para ver las opciones de cada comando.
+La consulta de estado es pública en la red local: no usa clave y solo informa
+disponible/ocupado y cuántos clientes esperan.
 
 Clave compartida: opción -key o, si falta, el campo "key" de
 config.json en el directorio de configuración del usuario, carpeta NPerf
@@ -72,7 +75,7 @@ func run(args []string) int {
 	case "-h", "-help", "--help", "help":
 		fmt.Fprint(stdout, generalHelp)
 		return exitOK
-	case "server", "client":
+	case "server", "client", "status":
 	default:
 		fmt.Fprintf(stderr, "comando desconocido: %s\n\n%s", args[0], generalHelp)
 		return exitUsage
@@ -82,7 +85,50 @@ func run(args []string) int {
 	if args[0] == "server" {
 		return runServer(ctx, args[1:])
 	}
+	if args[0] == "status" {
+		return runStatus(ctx, args[1:])
+	}
 	return runClient(ctx, args[1:])
+}
+
+func runStatus(ctx context.Context, args []string) int {
+	fs := newFlagSet("status", "nperf status <host> [opciones]")
+	port := fs.Int("port", defaultPort, fmt.Sprintf("puerto del servidor (por defecto: %d)", defaultPort))
+	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON con state y queue por la salida estándar; los errores salen como {\"error\": \"...\"}")
+	var host string
+	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
+		host, args = args[0], args[1:]
+	}
+	if code, done := parse(fs, args); done {
+		return code
+	}
+	fail := func(code int, err error) int {
+		if *jsonOut {
+			report.JSONError(stdout, err)
+		} else {
+			fmt.Fprintln(stderr, "error:", err)
+		}
+		return code
+	}
+	if host == "" && fs.NArg() > 0 {
+		host = fs.Arg(0)
+	}
+	if host == "" {
+		return fail(exitUsage, errors.New("falta el host. Uso: nperf status <host>"))
+	}
+	r, err := client.Status(ctx, net.JoinHostPort(host, strconv.Itoa(*port)), client.Options{})
+	if err != nil {
+		return fail(exitError, err)
+	}
+	if *jsonOut {
+		if err := report.StatusJSON(stdout, r.State, r.Queue); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return exitError
+		}
+		return exitOK
+	}
+	fmt.Fprintln(stdout, report.StatusText(r.State, r.Queue))
+	return exitOK
 }
 
 // newFlagSet crea un FlagSet cuya ayuda y errores salen en español.

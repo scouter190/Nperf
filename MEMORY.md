@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - Implementando spec 001.** T1-T14 hechas y aprobadas, excepto T15 y T16.
+**Fase 3 - spec 001 completa a falta de la validación manual del usuario (T15).** T1-T16 hechas.
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T15 pendiente; T16 aprobada como diseño, sin implementar).
+`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1-T16 hechas).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar). Repo: https://github.com/scouter190/Nperf (rama `main`).
@@ -27,6 +27,8 @@
 - Tests: `-race`, loopback TCP/UDP, cola, errores; `server.WithUDPConn` e `internal/testutil`.
 - T13: cmd/nperf/e2e_test.go prueba el binario real como proceso (criterios 1, 2, 4, 5, 6, 10, 11 y ayuda); config aislada; -short lo salta.
 - CI (`.github/workflows/ci.yml`): windows-latest vet/test/build + ubuntu `-race`. Guía Windows: `docs/entorno-local.md`.
+- T16: `nperf status <host>` [-port] [-json], pública sin clave, solo state y queue, antes del handshake, cierra tras responder; server viejo → error claro.
+- T15: docs/validacion-iperf3.md (procedimiento manual para criterios 12 y 13).
 
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI: comandos y flags en inglés, mensajes en español.
@@ -37,9 +39,8 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 �
 - CI Windows: tests con -p 1 (paquetes en serie) para evitar contención de CPU en tests de tiempo real.
 
 ## Próximo paso
-T15 (procedimiento manual iperf3) y T16 (`nperf status`).
+El usuario ejecuta docs/validacion-iperf3.md en su red; luego, spec 002 (interfaz y descubrimiento).
 
 ## Pendientes
-- T16 (`nperf status`, criterio 14): consulta pública en la LAN, sin clave; solo expone `state` y `queue`, antes del handshake. Añadirlo a la ayuda general al implementarlo.
 - Confirmar Walk como librería de interfaz.
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

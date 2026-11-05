@@ -191,3 +191,11 @@ func (s *Server) leaveQueue(c net.Conn, w *waiter, ip string, gone chan error) {
 	c.SetReadDeadline(time.Now())
 	<-gone
 }
+
+// snapshot devuelve cuántos clientes esperan y si hay una prueba en curso (solo lectura: no
+// ocupa turno ni entra en la cola).
+func (q *turnQueue) snapshot() (busy bool, waiting int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.busy, len(q.waiters)
+}

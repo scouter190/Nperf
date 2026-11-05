@@ -128,7 +128,7 @@ func TestInvalidConfigFileIsClearError(t *testing.T) {
 }
 
 func TestHelpIsSpanish(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"-h"}, {"client", "-h"}, {"server", "-h"}} {
+	for _, args := range [][]string{{"help"}, {"-h"}, {"client", "-h"}, {"server", "-h"}, {"status", "-h"}} {
 		out, _ := capture(t, t.TempDir())
 		if code := run(args); code != 0 {
 			t.Errorf("%v: código %d", args, code)
@@ -143,8 +143,9 @@ func TestHelpIsSpanish(t *testing.T) {
 				t.Errorf("%v: texto en inglés %q en %q", args, m, l)
 			}
 		}
-		if strings.Contains(txt, "status") {
-			t.Errorf("%v: la ayuda menciona status (T16 pendiente)", args)
+		general := args[0] == "help" || args[0] == "-h"
+		if general && !strings.Contains(txt, "nperf status") {
+			t.Errorf("%v: la ayuda general no menciona status", args)
 		}
 	}
 	out, _ := capture(t, t.TempDir())

@@ -71,3 +71,32 @@ func TestJSONFlagParseError(t *testing.T) {
 		t.Errorf("-json=false debía dar texto por stderr: out %q err %q", out, errb)
 	}
 }
+
+func TestStatusCommand(t *testing.T) {
+	out, errb := capture(t, t.TempDir())
+	port := startServer(t, "")
+	if code := run([]string{"status", "127.0.0.1", "-port", port}); code != 0 || strings.TrimSpace(out.String()) != "disponible" {
+		t.Fatalf("texto: código %d, %q %q", code, out, errb)
+	}
+	out.Reset()
+	if code := run([]string{"status", "127.0.0.1", "-port", port, "-json"}); code != 0 {
+		t.Fatalf("json: código %d, %s", code, out)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out.Bytes(), &m); err != nil {
+		t.Fatalf("no es JSON: %v\n%s", err, out)
+	}
+	if len(m) != 3 || m["format_version"] != float64(1) || m["state"] != "available" || m["queue"] != float64(0) {
+		t.Errorf("JSON inesperado: %v", m)
+	}
+	if code := run([]string{"status"}); code != 2 {
+		t.Errorf("sin host: código %d", code)
+	}
+	if code := run([]string{"status", "127.0.0.1", "-port", "1"}); code != 1 {
+		t.Errorf("sin servidor: código %d", code)
+	}
+	out.Reset()
+	if code := run([]string{"status", "-h"}); code != 0 || !strings.Contains(out.String(), "nperf status") {
+		t.Errorf("ayuda: código %d %q", code, out)
+	}
+}
