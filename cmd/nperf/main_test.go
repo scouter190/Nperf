@@ -14,7 +14,7 @@ func TestUDPRateWithTCPIsUsageError(t *testing.T) {
 
 func TestUDPRateAcceptedWithBoth(t *testing.T) {
 	// Puerto cerrado: llega a conectar (código 1), no es error de uso (2).
-	if code := run([]string{"client", "127.0.0.1", "-port", "1", "-udp-rate", "50M", "-duration", "1"}); code != 1 {
+	if code := run([]string{"client", "127.0.0.1", "-port", "1", "-udp-rate", "50M", "-duration", "3"}); code != 1 {
 		t.Fatalf("código %d, quería 1", code)
 	}
 }

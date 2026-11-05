@@ -12,7 +12,7 @@
 - [x] T9 Retransmisiones por SO con build tags (internal/tcpinfo) — test en Linux que lee TCP_INFO de un socket real; `GOOS=windows go build ./...` compila; sin soporte se reporta "no disponible".
 - [x] T10 Cola: máximo 5 en espera, posiciones, "cola llena" al 6.º, cancelación al cerrar la conexión (internal/server, internal/client) — test con 7 clientes y sesiones lentas: posiciones 1–5, el 7.º rechazado con código ≠ 0, cancelar el 2.º hace avanzar a los demás; test de Ctrl+C con cancelación por contexto.
   - Nota: Diseño `both`: hoy son dos sesiones (fwd y rev); con la cola, otro cliente podría intercalarse. Preferido: una sola sesión con Direction=both donde el server hace fwd y luego rev en el mismo turno.
-- [ ] T11 CLI completa: `-port` 5300, `-key` o config, `-duration` 3–300 (default 10), validación antes de conectar, códigos de salida (cmd/nperf, internal/config) — tests: `-duration 2` y `-duration 301` fallan sin conectar; con `-duration 3` en loopback, cada fase dura 3 s ±0,5 s.
+- [x] T11 CLI completa: `-port` 5300, `-key` o config, `-duration` 3–300 (default 10), validación antes de conectar, códigos de salida (cmd/nperf, internal/config) — tests: `-duration 2` y `-duration 301` fallan sin conectar; con `-duration 3` en loopback, cada fase dura 3 s ±0,5 s.
   - Nota: Acotar RateBps máximo aceptado por el server en UDP rev (internal/server/udp.go sendUDPRev).
 - [ ] T12 Salida en texto y `-json` (internal/report, cmd/nperf) — test con golden file: el JSON es válido y trae todas las métricas, sentidos, protocolos y "no medido" / "no disponible".
   - Nota: Retirar de client.Result los campos duplicados Sent/Received/Mbps/UDP (usar solo Fwd/Rev con Measured).

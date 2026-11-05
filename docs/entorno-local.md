@@ -50,7 +50,7 @@ Opciones: `-port` (ambos) y `-duration` (cliente, segundos, por defecto 10).
 
 ## 5. Firewall de Windows
 
-Al abrir el puerto 5300 con `nperf.exe server`, Windows mostrará un aviso del Firewall. Marca **Redes privadas** y pulsa **Permitir acceso**. Para probar entre dos PC, hazlo en el PC servidor y usa su IP en el cliente (`.\nperf.exe client <IP-del-servidor>`). En loopback (127.0.0.1) normalmente no hace falta.
+Al abrir el puerto 5300 con `nperf.exe server`, Windows mostrará un aviso del Firewall. Marca **Redes privadas** y pulsa **Permitir acceso**. Para probar entre dos PC, hazlo en el PC servidor y usa su IP en el cliente (`.\nperf.exe client <IP-del-servidor>`). En loopback (127.0.0.1) normalmente no hace falta. Clave: `-key` o `%APPDATA%\NPerf\config.json` con `{"key":"..."}` (el flag manda); queda en texto plano, protege el archivo.
 
 ## 6. Trabajar con Claude Code
 

@@ -172,6 +172,9 @@ type udpWriter struct {
 
 func (w udpWriter) Write(b []byte) (int, error) { return w.c.WriteToUDPAddrPort(b, w.a) }
 
+// MaxUDPRate es la tasa UDP máxima (bps) que el servidor acepta enviar en UDP rev.
+const MaxUDPRate = 10e9
+
 // sendUDPRev envía a la tasa pedida una vez que el saludo UDP del cliente asoció su dirección.
 func (s *Server) sendUDPRev(ctx context.Context, c net.Conn, codec *proto.Codec, sess *udpSession, p proto.Message, d time.Duration) bool {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
@@ -181,6 +184,10 @@ func (s *Server) sendUDPRev(ctx context.Context, c net.Conn, codec *proto.Codec,
 	}
 	if rate < 8*meter.DefaultUDPSize {
 		fail("tasa UDP inválida")
+		return false
+	}
+	if rate > MaxUDPRate {
+		fail("tasa UDP demasiado alta: el máximo aceptado es 10 Gbps")
 		return false
 	}
 	sctx, stopWatch := s.watchControl(ctx, c, codec)
