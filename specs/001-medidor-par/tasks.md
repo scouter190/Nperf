@@ -5,6 +5,7 @@
 - [x] T3 Compilación cruzada: `scripts/build-windows.sh` (GOOS=windows GOARCH=amd64) — `GOOS=windows go vet ./...` y el script producen `nperf.exe` sin errores.
 - [x] T4 UDP en la sesión: `-proto udp`, `-udp-rate` (acepta `50M`, `1G`), 100 Mbps por defecto sin TCP previo, saludo UDP en el puerto 5300 (internal/client, internal/server, cmd/nperf) — test de integración: `-udp-rate 50M` envía 50 Mbps ±5 %; sin la flag, 100 Mbps ±5 %.
 - [x] T5 Autenticación y versión: HMAC con nonce, regla de versión mayor (internal/auth, internal/version, internal/proto) — tests: clave errónea da "clave incorrecta" y código ≠ 0 sin carga; un proxy de prueba no ve la clave en los bytes del canal de control; versión mayor distinta da aviso en ambos lados.
+  Opcional: en auth.Sum usar prefijo de longitud por parte en vez de separador \0 (hoy no explotable).
 - [x] T6 Sentidos `rev` y `both`, con "no medido" (internal/client, internal/server, internal/meter) — tests: `rev` mide B → A; `-direction fwd` reporta rev como "no medido" y viceversa.
 - [x] T7 Flujos paralelos `-streams` con suma (internal/meter/tcp.go) — test: con 8 flujos el servidor acepta 8 conexiones de datos y el total es la suma de los parciales.
 - [x] T8 Secuencia completa por defecto: RTT por el canal de control, luego TCP y UDP al 90 % del TCP del mismo sentido (internal/client) — test: el orden de resultados es RTT, TCP fwd, TCP rev, UDP fwd, UDP rev; la tasa UDP es 90 % ±5 % del TCP. Relajar en cmd/nperf/main.go el error de -udp-rate sin -proto udp: aceptarlo con both.

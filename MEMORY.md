@@ -31,6 +31,8 @@
 - TCP (`meter/tcp.go`): el fin lo decide el reloj entre escrituras; deadline único end+2 s solo como protección; si salta sin cancelación -> error "envío bloqueado: medición no fiable". Motivo: en Windows una escritura cancelada por deadline devuelve n=0 aunque los datos salieron.
 - UDP (`meter/udp.go`): ráfaga por iteración acotada (`burstPackets`) + Gosched; se conserva hasta 20 ms de deuda (`debtWindow`) por atrasos del timer de Windows (~16 ms); el exceso se perdona. Ráfaga máx. ~2,5 MB a 1 Gbps.
 
+- Reloj: RTT (client) y marcas/jitter UDP (meter, clock.now) usan `internal/hrtime` (QPC en Windows, time.Since de origen fijo en otros SO) porque el reloj de Go en Windows tiene resolución gruesa y cuantizaba RTT a 0. La cabecera UDP lleva ns desde el origen del emisor; el jitter solo usa diferencias.
+
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · ±10 % vs iperf3 · CLI en inglés.
 
@@ -45,5 +47,4 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · �
 - T10: `both` en una sola sesión (server hace fwd y luego rev en el mismo turno).
 - T11: acotar RateBps máximo del server en UDP rev (`sendUDPRev`, internal/server/udp.go).
 - T12: retirar de `client.Result` los campos duplicados Sent/Received/Mbps/UDP (usar Fwd/Rev).
-- Opcional en `auth.Sum`: prefijo de longitud por parte en vez de separador \0 (hoy no explotable).
 - Confirmar Walk como librería de interfaz.

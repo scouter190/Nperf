@@ -10,9 +10,11 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"nperf/internal/hrtime"
 )
 
-// Formato del datagrama: seq uint64 | hora de envío (ns Unix) int64 | flags byte | relleno.
+// Formato del datagrama: seq uint64 | hora de envío (ns, origen del emisor) int64 | flags byte | relleno.
 const (
 	UDPHeaderLen   = 17
 	DefaultUDPSize = 1200
@@ -50,14 +52,16 @@ func (s UDPRecvStats) LossPercent() float64 {
 	return float64(s.Lost) * 100 / float64(s.Expected)
 }
 
-// clock permite probar sin tiempos reales.
+// clock permite probar sin tiempos reales. El reloj real usa hrtime (QPC en Windows);
+// su time.Time es ns desde un origen propio del proceso: la cabecera lleva esa hora de
+// envío y el jitter solo usa diferencias de tránsito, así que el origen de cada lado se cancela.
 type clock struct {
 	now   func() time.Time
 	sleep func(ctx context.Context, d time.Duration)
 }
 
 var realClock = clock{
-	now: time.Now,
+	now: func() time.Time { return time.Unix(0, hrtime.Now()) },
 	sleep: func(ctx context.Context, d time.Duration) {
 		t := time.NewTimer(d)
 		defer t.Stop()

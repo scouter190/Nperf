@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"nperf/internal/hrtime"
 	"nperf/internal/meter"
 	"nperf/internal/proto"
 	"nperf/internal/version"
@@ -200,14 +201,14 @@ func measureRTT(codec *proto.Codec) (*RTT, error) {
 	r := &RTT{}
 	var sum time.Duration
 	for i := 0; i < rttPings; i++ {
-		t0 := time.Now()
+		t0 := hrtime.Now()
 		if err := codec.Write(proto.Message{Type: proto.TypePing}); err != nil {
 			return nil, err
 		}
 		if _, err := expect(codec, proto.TypePong); err != nil {
 			return nil, err
 		}
-		d := time.Since(t0)
+		d := hrtime.Since(t0)
 		if i == 0 || d < r.Min {
 			r.Min = d
 		}
