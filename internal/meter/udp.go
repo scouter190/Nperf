@@ -27,6 +27,11 @@ type UDPSendStats struct {
 	Packets int64
 	Bytes   int64
 	Elapsed time.Duration
+
+	// Diagnóstico del ritmo.
+	Forgiven     int64         // bytes de deuda perdonados por exceder debtWindow
+	Iterations   int64         // iteraciones del bucle de envío
+	MaxOvershoot time.Duration // mayor exceso de una espera real sobre la pedida
 }
 
 // Mbps devuelve la tasa enviada en megabits por segundo.
@@ -99,8 +104,11 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 	var sentBytes int64
 	var forgiven float64 // deuda descartada
 	start := clk.now()
+	var iters int64
+	var maxOver time.Duration
 	var err error
 	for ctx.Err() == nil {
+		iters++
 		elapsed := clk.now().Sub(start)
 		if elapsed >= d {
 			break
@@ -111,7 +119,11 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 			if wait > d-elapsed {
 				wait = d - elapsed
 			}
+			t0 := clk.now()
 			clk.sleep(ctx, wait)
+			if over := clk.now().Sub(t0) - wait; over > maxOver {
+				maxOver = over
+			}
 			continue
 		}
 		if owed > maxDebt {
@@ -132,7 +144,8 @@ func sendUDP(ctx context.Context, w io.Writer, rateBps float64, size int, d time
 			break
 		}
 	}
-	stats := UDPSendStats{Packets: int64(seq), Bytes: sentBytes, Elapsed: clk.now().Sub(start)}
+	stats := UDPSendStats{Packets: int64(seq), Bytes: sentBytes, Elapsed: clk.now().Sub(start),
+		Forgiven: int64(forgiven), Iterations: iters, MaxOvershoot: maxOver}
 	if err != nil {
 		return stats, err
 	}

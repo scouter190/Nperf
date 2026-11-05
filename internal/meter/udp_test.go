@@ -51,11 +51,13 @@ func TestUDPRate50Mbps(t *testing.T) {
 	ss, rs := runUDP(t, 2*time.Second, 0)
 	// Se mide la tasa enviada por el emisor: no depende de la carga del receptor.
 	if got := ss.Mbps(); math.Abs(got-50) > 2.5 {
-		t.Fatalf("tasa enviada %.2f Mbps, quería 50 ±5%%", got)
+		t.Fatalf("tasa enviada %.2f Mbps, quería 50 ±5%%; perdonados %d B, iteraciones %d, mayor exceso de espera %v, transcurrido %v",
+			got, ss.Forgiven, ss.Iterations, ss.MaxOvershoot, ss.Elapsed)
 	}
 	if rs.Received == 0 || rs.Expected == 0 {
 		t.Fatalf("receptor sin datos: %+v", rs)
 	}
+	t.Logf("perdonados %d B, iteraciones %d, mayor exceso %v", ss.Forgiven, ss.Iterations, ss.MaxOvershoot)
 	t.Logf("enviado %.2f Mbps, recibido %d/%d, pérdida %.2f%%, jitter %v",
 		ss.Mbps(), rs.Received, rs.Expected, rs.LossPercent(), rs.Jitter)
 }
