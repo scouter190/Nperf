@@ -259,6 +259,9 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 	d := time.Duration(p.DurationMS) * time.Millisecond
 	timeout := time.After(d + margin)
 	dcs := make([]dataConn, 0, streams)
+	// Mientras esperan los flujos de datos, un cierre del canal de control libera el turno al
+	// instante (no hay que esperar el plazo de la fase).
+	wctx, stopWait := s.watchControl(ctx, c, codec)
 	release := func() {
 		for _, dc := range dcs {
 			close(dc.done)
@@ -269,14 +272,17 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		case dc := <-ss.ch:
 			dcs = append(dcs, dc)
 		case <-timeout:
+			stopWait()
 			release()
 			fail(fmt.Sprintf("llegaron %d de %d conexiones de datos", len(dcs), streams))
 			return false
-		case <-ctx.Done():
+		case <-wctx.Done():
+			stopWait()
 			release()
 			return false
 		}
 	}
+	stopWait()
 	defer release()
 	conns := make([]net.Conn, len(dcs))
 	for i, dc := range dcs {
