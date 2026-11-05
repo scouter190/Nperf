@@ -100,3 +100,7 @@
 - Puerto por defecto 5300 (no 5201, para convivir con iperf3).
 - UDP sin TCP previo (`-proto udp` sin `-udp-rate`): 100 Mbps.
 - Cola: máximo 5 en espera; el siguiente se rechaza con "cola llena"; el cliente cancela con Ctrl+C.
+- Control: JSON por línea; TCP y UDP en el mismo puerto; el cliente abre todas las conexiones (también en `rev`).
+- Autenticación por desafío y respuesta HMAC-SHA256.
+- Módulo Go `nperf` hasta confirmar el repositorio.
+- Desarrollo y tests en Linux; lo específico de Windows con build tags; CI en `windows-latest`.
