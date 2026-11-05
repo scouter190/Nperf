@@ -35,9 +35,6 @@ func TestDirections(t *testing.T) {
 					t.Errorf("%s/%s %s: UDP inconsistente", p, dir, name)
 				}
 			}
-			if res.Mbps <= 0 {
-				t.Errorf("%s/%s: atajo Mbps vacío", p, dir)
-			}
 			t.Logf("%s/%s fwd=%.0f rev=%.0f Mbps", p, dir, res.Fwd.Mbps, res.Rev.Mbps)
 		}
 	}

@@ -14,7 +14,7 @@
   - Nota: Diseño `both`: hoy son dos sesiones (fwd y rev); con la cola, otro cliente podría intercalarse. Preferido: una sola sesión con Direction=both donde el server hace fwd y luego rev en el mismo turno.
 - [x] T11 CLI completa: `-port` 5300, `-key` o config, `-duration` 3–300 (default 10), validación antes de conectar, códigos de salida (cmd/nperf, internal/config) — tests: `-duration 2` y `-duration 301` fallan sin conectar; con `-duration 3` en loopback, cada fase dura 3 s ±0,5 s.
   - Nota: Acotar RateBps máximo aceptado por el server en UDP rev (internal/server/udp.go sendUDPRev).
-- [ ] T12 Salida en texto y `-json` (internal/report, cmd/nperf) — test con golden file: el JSON es válido y trae todas las métricas, sentidos, protocolos y "no medido" / "no disponible".
+- [x] T12 Salida en texto y `-json` (internal/report, cmd/nperf) — test con golden file: el JSON es válido y trae todas las métricas, sentidos, protocolos y "no medido" / "no disponible".
   - Nota: Retirar de client.Result los campos duplicados Sent/Received/Mbps/UDP (usar solo Fwd/Rev con Measured).
 - [ ] T13 Prueba de aceptación en loopback con valores por defecto, criterio 1 (cmd/nperf/e2e_test.go) — `go test ./cmd/nperf -run E2E` compila el binario, levanta `server` y `client`, y el cliente termina con código 0.
 - [x] T14 CI en GitHub Actions, runner `windows-latest`: vet, test y build del `.exe` como artefacto (.github/workflows/ci.yml). **Depende de que exista el repositorio.** — el workflow pasa en verde en un push. Workflow escrito; verificado en verde (run 41970464834).

@@ -35,20 +35,20 @@ func TestUDPRate(t *testing.T) {
 	}{{"50M", 50e6, 50}, {"default", 0, 100}} {
 		res, err := client.Run(context.Background(), addr,
 			client.Options{Duration: 2 * time.Second, Proto: "udp", UDPRate: c.rate})
-		if err != nil || res.UDP == nil {
+		if err != nil || res.Fwd.UDP == nil {
 			t.Fatalf("%s: %+v %v", c.name, res, err)
 		}
-		if math.Abs(res.UDP.SentMbps-c.want) > c.want*0.05 {
-			t.Errorf("%s: enviado %.1f Mbps, quería %.0f ±5 %%", c.name, res.UDP.SentMbps, c.want)
+		if math.Abs(res.Fwd.UDP.SentMbps-c.want) > c.want*0.05 {
+			t.Errorf("%s: enviado %.1f Mbps, quería %.0f ±5 %%", c.name, res.Fwd.UDP.SentMbps, c.want)
 		}
-		if res.Received.Bytes <= 0 || res.Mbps <= 0 {
+		if res.Fwd.Received.Bytes <= 0 || res.Fwd.Mbps <= 0 {
 			t.Errorf("%s: el servidor no midió nada: %+v", c.name, res)
 		}
 		t.Logf("%s: enviado %.1f Mbps, recibido %.1f, jitter %.3f ms, pérdida %.2f %%",
-			c.name, res.UDP.SentMbps, res.Mbps, res.UDP.JitterMS, res.UDP.LossPct)
+			c.name, res.Fwd.UDP.SentMbps, res.Fwd.Mbps, res.Fwd.UDP.JitterMS, res.Fwd.UDP.LossPct)
 	}
 	// TCP sigue funcionando en el mismo servidor.
-	if res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond}); err != nil || res.Mbps <= 0 {
+	if res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond}); err != nil || res.Fwd.Mbps <= 0 {
 		t.Fatalf("TCP tras UDP: %+v %v", res, err)
 	}
 }

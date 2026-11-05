@@ -20,8 +20,8 @@ func TestLoopbackTCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Mbps <= 0 || res.Received.Bytes <= 0 {
+	if res.Fwd.Mbps <= 0 || res.Fwd.Received.Bytes <= 0 {
 		t.Fatalf("throughput inválido: %+v", res)
 	}
-	t.Logf("%.0f Mbps", res.Mbps)
+	t.Logf("%.0f Mbps", res.Fwd.Mbps)
 }

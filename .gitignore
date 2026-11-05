@@ -1,3 +1,5 @@
 nperf.exe
 *.exe
 nperf.bundle
+/cmd/nperf/nperf
+/nperf

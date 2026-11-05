@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "params": {
+    "host": "192.168.1.10",
+    "port": 5300,
+    "proto": "both",
+    "direction": "both",
+    "duration_s": 10,
+    "streams": 4,
+    "udp_rate_bps": null,
+    "version": "0.1.0"
+  },
+  "rtt": {
+    "status": "measured",
+    "min_ms": 0.5,
+    "avg_ms": 1,
+    "max_ms": 2,
+    "samples": 10
+  },
+  "tcp": {
+    "fwd": {
+      "status": "measured",
+      "throughput_mbps": 1000,
+      "bytes": 1250000000,
+      "duration_s": 10,
+      "retransmissions": {
+        "status": "available",
+        "count": 12,
+        "estimated": false
+      },
+      "udp": null
+    },
+    "rev": {
+      "status": "measured",
+      "throughput_mbps": 900,
+      "bytes": 1250000000,
+      "duration_s": 10,
+      "retransmissions": {
+        "status": "unavailable",
+        "count": null,
+        "estimated": false
+      },
+      "udp": null
+    }
+  },
+  "udp": {
+    "fwd": {
+      "status": "measured",
+      "throughput_mbps": 890,
+      "bytes": 111000000,
+      "duration_s": 10,
+      "retransmissions": null,
+      "udp": {
+        "sent_mbps": 900,
+        "sent_bytes": 112500000,
+        "target_rate_bps": 900000000,
+        "jitter_ms": 0.125,
+        "loss_pct": 1,
+        "datagrams_sent": 80000,
+        "datagrams_expected": 80000,
+        "datagrams_lost": 800
+      }
+    },
+    "rev": {
+      "status": "not_measured",
+      "throughput_mbps": null,
+      "bytes": null,
+      "duration_s": null,
+      "retransmissions": null,
+      "udp": null
+    }
+  },
+  "notes": [
+    "UDP rev no medido: prueba"
+  ]
+}

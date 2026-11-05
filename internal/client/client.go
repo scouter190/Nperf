@@ -129,7 +129,6 @@ type Dir struct {
 }
 
 // Result representa ambos sentidos. Fwd es cliente -> servidor y Rev servidor -> cliente.
-// Sent, Received, Mbps y UDP repiten el primer sentido medido (atajo para pruebas de un solo sentido).
 //
 // Con Proto "both": RTT se mide primero; Fwd/Rev son TCP; UDPFwd/UDPRev son UDP (con la tasa
 // pedida en UDPRateFwd/UDPRateRev, bps). Orden de resultados: RTT, TCP fwd, TCP rev, UDP fwd,
@@ -141,21 +140,13 @@ type Result struct {
 	UDPFwd, UDPRev         Dir
 	UDPRateFwd, UDPRateRev float64
 	Notes                  []string
-	Sent                   meter.Result
-	Received               meter.Result
-	Mbps                   float64
-	UDP                    *UDPResult
 }
 
 func (r *Result) set(dir string, d Dir) {
-	first := !r.Fwd.Measured && !r.Rev.Measured
 	if dir == proto.DirRev {
 		r.Rev = d
 	} else {
 		r.Fwd = d
-	}
-	if first {
-		r.Sent, r.Received, r.Mbps, r.UDP = d.Sent, d.Received, d.Mbps, d.UDP
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"nperf/internal/client"
 	"nperf/internal/config"
 	"nperf/internal/server"
 	"nperf/internal/testutil"
@@ -164,24 +163,6 @@ func TestNoArgsAndUnknownCommand(t *testing.T) {
 	}
 	if code := run([]string{"frobnicar"}); code != 2 || !strings.Contains(errb.String(), "desconocido") || !strings.Contains(errb.String(), "Uso") {
 		t.Errorf("desconocido: código %d, stderr %q", code, errb)
-	}
-}
-
-func TestRateNote(t *testing.T) {
-	mk := func(sent float64) client.Dir {
-		return client.Dir{Measured: true, UDP: &client.UDPResult{SentMbps: sent}}
-	}
-	if got, want := rateNote("fwd", mk(50), 100e6), "UDP fwd: no se alcanzó la tasa objetivo (enviado 50.0 de 100.0 Mbps)"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if got := rateNote("rev", mk(90), 100e6); got != "" {
-		t.Errorf("90 %% exacto no debe avisar: %q", got)
-	}
-	if got := rateNote("rev", client.Dir{}, 100e6); got != "" {
-		t.Errorf("no medido: %q", got)
-	}
-	if got := rateNote("rev", mk(1), 0); got != "" {
-		t.Errorf("sin objetivo: %q", got)
 	}
 }
 

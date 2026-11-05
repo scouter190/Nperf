@@ -11,14 +11,14 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"time"
 
 	"nperf/internal/client"
 	"nperf/internal/config"
-	"nperf/internal/meter"
 	"nperf/internal/proto"
+	"nperf/internal/report"
 	"nperf/internal/server"
+	"nperf/internal/version"
 )
 
 const (
@@ -102,15 +102,41 @@ func newFlagSet(name, usage string) *flag.FlagSet {
 
 // parse analiza los argumentos; devuelve (código, true) si hay que terminar.
 func parse(fs *flag.FlagSet, args []string) (int, bool) {
+	asJSON := fs.Lookup("json") != nil && wantsJSON(args)
+	usage := fs.Usage
+	if asJSON { // con -json, stdout no debe llevar la ayuda que flag imprime ante un error
+		fs.Usage = func() {}
+	}
 	err := fs.Parse(args)
 	switch {
 	case err == nil:
 		return 0, false
 	case errors.Is(err, flag.ErrHelp):
+		if asJSON {
+			usage()
+		}
 		return exitOK, true
 	}
-	fmt.Fprintf(stderr, "error: argumentos inválidos (%v). Use -h para ver la ayuda\n", err)
+	msg := fmt.Errorf("argumentos inválidos (%v). Use -h para ver la ayuda", err)
+	if asJSON {
+		report.JSONError(stdout, msg)
+	} else {
+		fmt.Fprintln(stderr, "error:", msg)
+	}
 	return exitUsage, true
+}
+
+// wantsJSON dice si los argumentos piden -json (sin analizar los demás); se detiene ante "--".
+func wantsJSON(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "--":
+			return false
+		case "-json", "--json", "-json=true", "--json=true":
+			return true
+		}
+	}
+	return false
 }
 
 const keyHelp = "clave compartida; si falta se lee config.json (campo \"key\") del directorio de configuración del usuario; vacía = sin clave"
@@ -185,19 +211,6 @@ func modeText(protoName string) string {
 	return "Medición completa (RTT, TCP y UDP)"
 }
 
-// rateNote devuelve la nota de "tasa no alcanzada" si lo enviado queda por debajo del 90 %
-// de la objetivo (bps); "" si no aplica.
-func rateNote(dir string, d client.Dir, targetBps float64) string {
-	if !d.Measured || d.UDP == nil || targetBps <= 0 {
-		return ""
-	}
-	target := targetBps / 1e6
-	if d.UDP.SentMbps >= 0.9*target {
-		return ""
-	}
-	return fmt.Sprintf("UDP %s: no se alcanzó la tasa objetivo (enviado %.1f de %.1f Mbps)", dir, d.UDP.SentMbps, target)
-}
-
 func runClient(ctx context.Context, args []string) int {
 	fs := newFlagSet("client", "nperf client <host> [opciones]")
 	port := fs.Int("port", defaultPort, fmt.Sprintf("puerto del servidor (por defecto: %d)", defaultPort))
@@ -207,6 +220,7 @@ func runClient(ctx context.Context, args []string) int {
 	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M, o 90 % del TCP con -proto both (por defecto: both)")
 	streams := fs.Int("streams", proto.DefaultStreams, fmt.Sprintf("flujos TCP paralelos, de 1 a 64 (por defecto: %d)", proto.DefaultStreams))
 	direction := fs.String("direction", "both", "sentido: fwd (cliente a servidor), rev (servidor a cliente) o both (por defecto: both)")
+	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1) por la salida estándar; los errores salen como {\"error\": \"...\"}")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -215,120 +229,71 @@ func runClient(ctx context.Context, args []string) int {
 	if code, done := parse(fs, args); done {
 		return code
 	}
+	fail := func(code int, err error) int {
+		if *jsonOut {
+			report.JSONError(stdout, err)
+		} else {
+			fmt.Fprintln(stderr, "error:", err)
+		}
+		return code
+	}
 	if host == "" && fs.NArg() > 0 {
 		host = fs.Arg(0)
 	}
 	if host == "" {
-		fmt.Fprintln(stderr, "error: falta el host. Uso: nperf client <host>")
-		return exitUsage
+		return fail(exitUsage, errors.New("falta el host. Uso: nperf client <host>"))
 	}
 	if err := validateDuration(*secs); err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return exitUsage
+		return fail(exitUsage, err)
 	}
 	if err := client.ValidateStreams(*streams); err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return exitUsage
+		return fail(exitUsage, err)
 	}
 	if *direction != "fwd" && *direction != "rev" && *direction != "both" {
-		fmt.Fprintf(stderr, "error: sentido desconocido %q; use fwd, rev o both\n", *direction)
-		return exitUsage
+		return fail(exitUsage, fmt.Errorf("sentido desconocido %q; use fwd, rev o both", *direction))
 	}
 	if *protoName != "tcp" && *protoName != "udp" && *protoName != "both" {
-		fmt.Fprintf(stderr, "error: protocolo desconocido %q; use tcp, udp o both\n", *protoName)
-		return exitUsage
+		return fail(exitUsage, fmt.Errorf("protocolo desconocido %q; use tcp, udp o both", *protoName))
 	}
 	var rate float64
 	if *rateStr != "" {
 		if *protoName == "tcp" {
-			fmt.Fprintln(stderr, "error: -udp-rate solo aplica con -proto udp o both (por defecto: both)")
-			return exitUsage
+			return fail(exitUsage, errors.New("-udp-rate solo aplica con -proto udp o both (por defecto: both)"))
 		}
 		var err error
 		if rate, err = client.ParseRate(*rateStr); err != nil {
-			fmt.Fprintln(stderr, "error:", err)
-			return exitUsage
+			return fail(exitUsage, err)
 		}
 	}
 	k, err := resolveKey(fs, *key)
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return exitUsage
+		return fail(exitUsage, err)
 	}
 	if k == "" {
 		fmt.Fprintln(stderr, "aviso: conectando sin clave")
 	}
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
-	fmt.Fprintf(stdout, "%s hacia %s durante %d s por fase...\n", modeText(*protoName), addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: k, Streams: *streams,
-		OnQueue: func(pos int) { fmt.Fprintf(stdout, "en cola (posición %d)\n", pos) }})
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return exitError
-	}
-	var notes []string
-	if *protoName == "both" {
-		if r := res.RTT; r != nil {
-			fmt.Fprintf(stdout, "RTT: mín %s, media %s, máx %s (%d pings)\n",
-				fmtRTT(r.Min), fmtRTT(r.Avg), fmtRTT(r.Max), r.Samples)
-		}
-		printDir("tcp", "fwd", "cliente -> servidor", res.Fwd)
-		printDir("tcp", "rev", "servidor -> cliente", res.Rev)
-		printDir("udp", "fwd", "cliente -> servidor", res.UDPFwd)
-		printDir("udp", "rev", "servidor -> cliente", res.UDPRev)
-		notes = append(notes, res.Notes...)
-		notes = append(notes, rateNote("fwd", res.UDPFwd, res.UDPRateFwd), rateNote("rev", res.UDPRev, res.UDPRateRev))
+	opts := client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: k, Streams: *streams}
+	if *jsonOut { // stdout solo lleva el JSON
+		opts.OnQueue = func(pos int) { fmt.Fprintf(stderr, "en cola (posición %d)\n", pos) }
 	} else {
-		printDir(*protoName, "fwd", "cliente -> servidor", res.Fwd)
-		printDir(*protoName, "rev", "servidor -> cliente", res.Rev)
-		if *protoName == "udp" {
-			target := rate
-			if target == 0 {
-				target = client.DefaultUDPRate
-			}
-			notes = append(notes, rateNote("fwd", res.Fwd, target), rateNote("rev", res.Rev, target))
-		}
+		fmt.Fprintf(stdout, "%s hacia %s durante %d s por fase...\n", modeText(*protoName), addr, *secs)
+		opts.OnQueue = func(pos int) { fmt.Fprintf(stdout, "en cola (posición %d)\n", pos) }
 	}
-	for _, n := range notes {
-		if n != "" {
-			fmt.Fprintln(stdout, "nota:", n)
-		}
+	res, err := client.Run(ctx, addr, opts)
+	if err != nil {
+		return fail(exitError, err)
 	}
+	p := report.Params{Host: host, Port: *port, Proto: *protoName, Direction: *direction, Duration: dur,
+		Streams: *streams, UDPRate: rate, Version: version.Current}
+	if *jsonOut {
+		if err := report.JSON(stdout, p, res); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return exitError
+		}
+		return exitOK
+	}
+	report.Text(stdout, p, res)
 	return exitOK
-}
-
-// fmtRTT da formato a un RTT en ms; por debajo de 1 µs (incluido 0, por la resolución del
-// reloj) muestra "<1 µs".
-func fmtRTT(d time.Duration) string {
-	if d < time.Microsecond {
-		return "<1 µs"
-	}
-	return fmt.Sprintf("%.2f ms", float64(d)/float64(time.Millisecond))
-}
-
-func printDir(proto, dir, label string, d client.Dir) {
-	name := strings.ToUpper(proto)
-	if !d.Measured {
-		fmt.Fprintf(stdout, "%s %s (%s): no medido\n", name, dir, label)
-		return
-	}
-	if u := d.UDP; u != nil {
-		fmt.Fprintf(stdout, "%s %s (%s): enviado %.1f Mbps, recibido %.1f Mbps, jitter %.3f ms, pérdida %.2f %% (%d de %d datagramas)\n",
-			name, dir, label, u.SentMbps, d.Mbps, u.JitterMS, u.LossPct, u.Lost, u.Expected)
-		return
-	}
-	fmt.Fprintf(stdout, "%s %s (%s): %.1f Mbps (%d bytes en %.1f s), retransmisiones: %s\n",
-		name, dir, label, d.Mbps, d.Received.Bytes, d.Received.Elapsed.Seconds(), fmtRetrans(d.Sent))
-}
-
-// fmtRetrans da formato a las retransmisiones del emisor o "no disponible".
-func fmtRetrans(r meter.Result) string {
-	if !r.RetransOK {
-		return "no disponible"
-	}
-	if r.RetransEstimated {
-		return "~" + strconv.FormatUint(r.Retrans, 10) + " (estimado)"
-	}
-	return strconv.FormatUint(r.Retrans, 10)
 }

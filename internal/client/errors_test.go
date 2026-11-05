@@ -30,7 +30,7 @@ func TestSecondRun(t *testing.T) {
 	defer cancel()
 	for i := 0; i < 2; i++ {
 		res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond})
-		if err != nil || res.Mbps <= 0 {
+		if err != nil || res.Fwd.Mbps <= 0 {
 			t.Fatalf("prueba %d: %+v %v", i, res, err)
 		}
 	}

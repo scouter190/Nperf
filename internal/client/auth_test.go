@@ -49,7 +49,7 @@ func (l *logSink) waitFor(sub string) string {
 func TestKeyOK(t *testing.T) {
 	addr := startWith(t, server.WithKey("secreto"))
 	res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond, Key: "secreto"})
-	if err != nil || res.Mbps <= 0 {
+	if err != nil || res.Fwd.Mbps <= 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
@@ -62,7 +62,7 @@ func TestWrongKeyNoLoad(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "clave incorrecta") {
 			t.Fatalf("%s: error = %v", p, err)
 		}
-		if res.Sent.Bytes != 0 || res.Mbps != 0 {
+		if res.Fwd.Sent.Bytes != 0 || res.Fwd.Mbps != 0 {
 			t.Errorf("%s: hubo carga: %+v", p, res)
 		}
 		if got := log.waitFor("clave incorrecta"); !strings.Contains(got, "clave incorrecta") {
@@ -133,7 +133,7 @@ func TestKeyNeverOnWire(t *testing.T) {
 		}
 	}()
 	res, err := client.Run(context.Background(), rl.Addr().String(), client.Options{Duration: 200 * time.Millisecond, Key: key})
-	if err != nil || res.Mbps <= 0 {
+	if err != nil || res.Fwd.Mbps <= 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 	mu.Lock()
@@ -165,7 +165,7 @@ func TestMajorVersionMismatch(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "versión incompatible") {
 			t.Fatalf("%s: cliente: %v", p, err)
 		}
-		if res.Sent.Bytes != 0 || res.Mbps != 0 {
+		if res.Fwd.Sent.Bytes != 0 || res.Fwd.Mbps != 0 {
 			t.Errorf("%s: se midió: %+v", p, res)
 		}
 		if got := log.waitFor("versión incompatible"); !strings.Contains(got, "versión incompatible") {
@@ -198,7 +198,7 @@ func TestClientDetectsIncompatibleServer(t *testing.T) {
 func TestMinorVersionCompatible(t *testing.T) {
 	addr := startWith(t, server.WithVersion("0.9.5"))
 	res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond, Version: "0.1.0"})
-	if err != nil || res.Mbps <= 0 {
+	if err != nil || res.Fwd.Mbps <= 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
