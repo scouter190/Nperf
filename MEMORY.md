@@ -6,7 +6,7 @@
 **Fase 4 - Implementando spec 002 (interfaz y descubrimiento).** Spec 001 completa a falta de la validación manual del usuario (docs/validacion-iperf3.md).
 
 ## Spec activa
-`specs/002-interfaz-descubrimiento/` (T1-T5 y T8-T10 hechas de T1-T18). Spec 001: `specs/001-medidor-par/` (cerrada).
+`specs/002-interfaz-descubrimiento/` (T1-T10 hechas de T1-T18). Spec 001: `specs/001-medidor-par/` (cerrada).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar). Repo: https://github.com/scouter190/Nperf (rama `main`).
@@ -32,7 +32,7 @@
 
 - Spec 002: dos binarios (cmd/nperf consola, cmd/nperf-gui subsistema GUI, test de cabecera PE); puente WebView2 elegido: jchv/go-webview2 + go-winloader (se integra en T15; validar Defender ahí).
 
-- Spec 002 descubrimiento (`internal/discovery`): anuncio `NPDISC1` ≤ 512 B, solo IPv4 unicast, alias sin caracteres de control; beacon por interfaz cada 3 s con log limitado; consulta unicast `NPDISC1 ?` rellenada a 128 B (anti-amplificación) y 1 respuesta/IP/s; subredes extra IP/CIDR ≥ /24. Config: alias, duración, puerto 5301, subredes; campos desconocidos se conservan; `Load` (CLI, solo clave) y `LoadFull` (GUI). Instancia única: `internal/app` (mutex Local\ en Windows, flock en otros).
+- Spec 002 descubrimiento (`internal/discovery`): anuncio `NPDISC1` ≤ 512 B, solo IPv4 unicast, alias sin caracteres de control; beacon por interfaz cada 3 s con log limitado; consulta unicast `NPDISC1 ?` rellenada a 128 B (anti-amplificación) y 1 respuesta/IP/s; subredes extra IP/CIDR ≥ /24; tabla de equipos (dedup por id, inalcanzable a 10 s, tope 256 con desalojo del inalcanzable más antiguo); `server.Status()` alimenta beacon y `nperf status`. Config: alias, duración, puerto 5301, subredes; campos desconocidos se conservan; `Load` (CLI, solo clave) y `LoadFull` (GUI). Instancia única: `internal/app` (mutex Local\ en Windows, flock en otros).
 
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI: comandos y flags en inglés, mensajes en español.
@@ -43,7 +43,7 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 �
 - CI Windows: tests con -p 1 (paquetes en serie) para evitar contención de CPU en tests de tiempo real.
 
 ## Próximo paso
-T6 (receptor y tabla de equipos), T7 (estado del server) y T11–T13 (backend de la app).
+T11–T13 (backend de la app: lista, selección, TEST!/Cancelar, server siempre activo); luego T14–T17 (ventana) y T18.
 
 ## Pendientes
 - Confirmar Walk como librería de interfaz.

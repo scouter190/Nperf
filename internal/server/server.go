@@ -164,6 +164,16 @@ const drainWait = time.Second
 // statusWait acota la escritura de la respuesta de estado (debe responder en < 1 s).
 const statusWait = 500 * time.Millisecond
 
+// Status devuelve el estado público (proto.StateAvailable o proto.StateBusy) y cuántos clientes
+// esperan en la cola. Es barato y seguro para uso concurrente; no ocupa turno.
+func (s *Server) Status() (state string, queue int) {
+	busy, waiting := s.q.snapshot()
+	if busy {
+		return proto.StateBusy, waiting
+	}
+	return proto.StateAvailable, waiting
+}
+
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer c.Close()
 	c.SetReadDeadline(time.Now().Add(s.hsWait)) // cubre hello y todo el handshake
@@ -175,11 +185,8 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 	switch first.Type {
 	case proto.TypeStatus:
 		// Consulta pública: responde solo state y queue y cierra; no da paso al resto del protocolo.
-		busy, waiting := s.q.snapshot()
-		r := proto.StatusReply{State: proto.StateAvailable, Queue: waiting}
-		if busy {
-			r.State = proto.StateBusy
-		}
+		state, waiting := s.Status()
+		r := proto.StatusReply{State: state, Queue: waiting}
 		c.SetWriteDeadline(time.Now().Add(statusWait))
 		codec.WriteStatus(r)
 	case proto.TypeHello:
