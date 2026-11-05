@@ -1,7 +1,8 @@
 'use strict';
 // UI de NPerf. Todo dato del backend se inserta como texto (textContent / createTextNode).
 
-// Puente con Go: T15 define window.nperfCall(nombre, ...args) -> Promise.
+// Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
+// El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
 const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest'];
 if (!window.nperf) {
@@ -10,7 +11,9 @@ if (!window.nperf) {
     api[m] = function () {
       const args = Array.prototype.slice.call(arguments);
       if (typeof window.nperfCall !== 'function') return Promise.reject(new Error('puente no disponible'));
-      return Promise.resolve(window.nperfCall.apply(null, [m].concat(args)));
+      const meta = document.querySelector('meta[name="nperf-session"]');
+      const secret = meta ? meta.getAttribute('content') : '';
+      return Promise.resolve(window.nperfCall.apply(null, [secret, m].concat(args)));
     };
   });
   window.nperf = api;

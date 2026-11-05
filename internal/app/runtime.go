@@ -29,9 +29,12 @@ type RuntimeOptions struct {
 	// DiscoveryPort sustituye al discovery_port de la configuración si es != 0.
 	DiscoveryPort int
 	Interval      time.Duration // anuncios y consultas; 0 = discovery.DefaultInterval
-	Ifaces        discovery.IfaceSource
-	Send          discovery.SendFunc // nil = UDP real
-	Warn          func(string)       // avisos (p. ej. sin clave); nil = ignorar
+	// Table, si no es nil, se reutiliza (y su SelfID es el id de instancia): así un
+	// reinicio conserva la lista de equipos y el id. nil = tabla nueva con id nuevo.
+	Table  *discovery.Table
+	Ifaces discovery.IfaceSource
+	Send   discovery.SendFunc // nil = UDP real
+	Warn   func(string)       // avisos (p. ej. sin clave); nil = ignorar
 
 	// Inyección para tests: sockets ya abiertos (el Runtime los cierra).
 	MeasureListener net.Listener
@@ -81,10 +84,19 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 	if o.DiscoveryPort != 0 {
 		dport = o.DiscoveryPort
 	}
-	id, err := discovery.NewInstanceID()
-	if err != nil {
-		return nil, fmt.Errorf("no se pudo generar el id de instancia: %w", err)
+	table := o.Table
+	if table == nil {
+		table = &discovery.Table{}
 	}
+	if table.SelfID == "" {
+		nid, err := discovery.NewInstanceID()
+		if err != nil {
+			return nil, fmt.Errorf("no se pudo generar el id de instancia: %w", err)
+		}
+		table.SelfID = nid
+	}
+	id := table.SelfID
+	var err error
 	ifaces := o.Ifaces
 	if ifaces == nil {
 		ifaces = discovery.SystemIfaces(false)
@@ -129,7 +141,6 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 	mport = ln.Addr().(*net.TCPAddr).Port
 
 	srv := server.New(server.WithKey(cfg.Key), server.WithUDPConn(uc))
-	table := &discovery.Table{SelfID: id}
 	var addrs []netip.Addr
 	for _, s := range cfg.ExtraSubnets {
 		a, err := discovery.ParseSubnet(s)

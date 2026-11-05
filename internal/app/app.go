@@ -105,6 +105,7 @@ type State struct {
 	CanTest         bool              `json:"can_test"`
 	TestBlocked     string            `json:"test_blocked_reason"`
 	ConfigError     string            `json:"config_error"`
+	HasKey          bool              `json:"has_key"` // la clave nunca se expone
 }
 
 // App es el backend de la interfaz. Seguro para uso concurrente.
@@ -122,6 +123,15 @@ type App struct {
 	cancel    context.CancelFunc // nil si no hay prueba en curso
 	testHook  func()             // solo pruebas: se llama en la goroutine de la prueba antes de fijar el estado final
 	testDone  chan struct{}      // se cierra al terminar la goroutine de la prueba
+	rtErr     string             // último error al reiniciar el runtime ("" = ninguno)
+}
+
+// SetRuntimeError fija (o limpia con "") el error del último reinicio del runtime;
+// State lo muestra en config_error si no hay otro error de configuración.
+func (a *App) SetRuntimeError(msg string) {
+	a.mu.Lock()
+	a.rtErr = msg
+	a.mu.Unlock()
 }
 
 // New crea la App; lee la duración guardada (si la configuración es inválida, devuelve error).
@@ -371,7 +381,7 @@ func (a *App) State() State {
 	cfg, cfgErr := a.cfg()
 	alias := a.aliasFrom(cfg)
 	a.mu.Lock()
-	sel, dir, dur, test := a.selected, a.direction, a.duration, a.test
+	sel, dir, dur, test, rtErr := a.selected, a.direction, a.duration, a.test, a.rtErr
 	a.mu.Unlock()
 	if test.Status == "" {
 		test.Status = TestIdle
@@ -424,6 +434,9 @@ func (a *App) State() State {
 	if cfgErr != nil {
 		cfgText = "Configuración inválida (se usan valores por defecto): " + cfgErr.Error()
 	}
+	if cfgText == "" && rtErr != "" {
+		cfgText = rtErr
+	}
 	canTest, blocked := true, ""
 	switch {
 	case test.Status == TestCancelling:
@@ -439,7 +452,7 @@ func (a *App) State() State {
 			}
 		}
 	}
-	return State{CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
+	return State{HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
 		DurationSeconds: dur, TotalSeconds: total, TotalLabel: label, Alias: alias, ExtraSubnets: subs,
 		FirewallHint: hint, Test: test}
 }

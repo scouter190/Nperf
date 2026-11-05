@@ -322,3 +322,33 @@ func TestConfigError(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestStateHasKey(t *testing.T) {
+	a, _, _, _ := newApp(t)
+	if a.State().HasKey {
+		t.Fatal("sin clave guardada has_key debe ser false")
+	}
+	if err := a.SetKey("secreta"); err != nil {
+		t.Fatal(err)
+	}
+	s := a.State()
+	if !s.HasKey {
+		t.Fatal("has_key debe ser true tras guardar la clave")
+	}
+	b, _ := json.Marshal(s)
+	if !strings.Contains(string(b), `"has_key":true`) || strings.Contains(string(b), "secreta") {
+		t.Fatalf("json: has_key ausente o la clave se filtra: %s", b)
+	}
+}
+
+func TestRuntimeErrorInState(t *testing.T) {
+	a, _, _, _ := newApp(t)
+	a.SetRuntimeError("puerto ocupado")
+	if got := a.State().ConfigError; got != "puerto ocupado" {
+		t.Fatalf("config_error = %q", got)
+	}
+	a.SetRuntimeError("")
+	if a.State().ConfigError != "" {
+		t.Fatal("el error debe limpiarse")
+	}
+}
