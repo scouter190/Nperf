@@ -366,7 +366,7 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	}
 
 	if o.Proto == proto.ProtoUDP {
-		return runUDP(ctx, cc, dialer, addr, codec, session, o, rate, dir)
+		return runUDP(ctx, dialer, addr, codec, session, o, rate, dir)
 	}
 	conns := make([]net.Conn, 0, o.Streams)
 	var connsMu sync.Mutex // closeAll puede correr desde AfterFunc mientras se abren flujos
@@ -447,7 +447,7 @@ func expect(c *proto.Codec, typ string) (proto.Message, error) {
 	return m, nil
 }
 
-func runUDP(ctx context.Context, cc net.Conn, dialer *net.Dialer, addr string, codec *proto.Codec, session string, o Options, rate float64, dir string) (Dir, error) {
+func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.Codec, session string, o Options, rate float64, dir string) (Dir, error) {
 	var res Dir
 	uc, err := dialer.DialContext(ctx, "udp", addr)
 	if err != nil {
@@ -457,11 +457,6 @@ func runUDP(ctx context.Context, cc net.Conn, dialer *net.Dialer, addr string, c
 	stop := context.AfterFunc(ctx, func() { uc.Close() })
 	defer stop()
 	if err := greetUDP(ctx, uc, session); err != nil {
-		// Si el servidor rechazó la fase, su error explica mejor que la falta de acuse.
-		cc.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		if m, rerr := codec.Read(); rerr == nil && m.Type == proto.TypeError {
-			return res, fmt.Errorf("el servidor respondió: %s", m.Error)
-		}
 		return res, err
 	}
 	if dir == proto.DirRev {

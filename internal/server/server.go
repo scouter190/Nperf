@@ -232,6 +232,10 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		return false
 	}
 	if p.Proto == proto.ProtoUDP {
+		if p.Direction == proto.DirRev && p.RateBps > MaxUDPRate {
+			fail("tasa UDP demasiado alta: el máximo aceptado es 10 Gbps")
+			return false
+		}
 		return s.controlUDP(ctx, c, codec, id, p)
 	}
 	if p.Proto != proto.ProtoTCP {
