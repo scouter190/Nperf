@@ -120,6 +120,7 @@
 - **Dos ejecutables** con el mismo código: `nperf.exe` (CLI de consola, sin cambios; sin argumentos muestra la ayuda) y `nperf-gui.exe` (subsistema Windows GUI, doble clic sin consola). El CI compila y publica ambos como artefactos; `scripts/build-windows.*` generan ambos.
 - Descubrimiento: anuncio UDP broadcast propio **cada 3 s** en cada interfaz IPv4, puerto propio **5301/UDP** (configurable). Público en la LAN (como `nperf status`): alias, IP, puerto, estado (disponible/ocupado) y cola. Equipo sin anunciarse **10 s** pasa a gris (no seleccionable).
 - Subredes extra a mano: IP o CIDR de **máx. /24**, consultadas por unicast en 5301/UDP.
+- Consulta unicast de descubrimiento: `NPDISC1 ?` rellenada hasta 128 bytes (anti-amplificación, factor ≤ 4x) y como máximo 1 respuesta por IP y segundo.
 - Origen de la prueba: **siempre "Este equipo"**; el usuario elige solo el destino. Control remoto A → B desde un tercer equipo: spec futura, junto al mapa.
 - TEST! pasa a "Cancelar" durante la prueba o la cola. **Una sola instancia** de la app por usuario. Sin equipos en **15 s**: sugerencia de revisar el firewall.
 - Nombre mostrado: alias configurable por técnico + IP; sin alias, el nombre del equipo de Windows.
