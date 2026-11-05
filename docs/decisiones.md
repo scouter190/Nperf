@@ -92,7 +92,8 @@
 - [ ] Validar resultados contra iperf3.
 
 ## 16. Medidor por CLI (spec 001)
-- Un solo `.exe` con modos `nperf escuchar` y `nperf medir <host>`; salida legible y `-json`.
-- Sentido en CLI: `ida` (A → B), `vuelta` (B → A), `ambos` (default).
+- Un solo `.exe` con modos `nperf server` y `nperf client <host>`; salida legible y `-json`.
+- Comandos y flags en inglés (`-port`, `-key`, `-proto tcp|udp|both`, `-direction fwd|rev|both`, `-duration`, `-streams`, `-udp-rate`, `-json`); mensajes al usuario en español.
+- Sentido en CLI: `fwd` (A → B), `rev` (B → A), `both` (default).
 - La clave nunca viaja en claro por el canal de control.
 - Validación: throughput TCP a ≤10 % de iperf3 en la misma red cableada.

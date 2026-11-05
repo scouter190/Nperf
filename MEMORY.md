@@ -17,7 +17,7 @@
 1. Puerto por defecto: propuesta 5300 (no 5201, para convivir con iperf3).
 2. Tasa UDP con `-proto udp` sin TCP previo: propuesta 100 Mbps.
 3. Cola: propuesta máximo 5 en espera; A cancela con Ctrl+C.
-4. Comandos y flags en español (`escuchar`, `medir`, `-duracion`) o en inglés.
+4. ~~Idioma de comandos~~: resuelto, en inglés (`server`, `client`, `-direction`).
 5. Tolerancia frente a iperf3: propuesta ±10 %.
 
 ## Próximo paso
