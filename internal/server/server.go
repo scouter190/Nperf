@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ type Server struct {
 	sessions map[string]chan dataConn
 	conns    map[net.Conn]struct{}
 	wg       sync.WaitGroup
+	udp      udpState
 }
 
 // margin es la holgura sobre la duración antes de abortar una lectura.
@@ -34,7 +36,8 @@ type dataConn struct {
 }
 
 func New() *Server {
-	return &Server{sessions: map[string]chan dataConn{}, conns: map[net.Conn]struct{}{}}
+	return &Server{sessions: map[string]chan dataConn{}, conns: map[net.Conn]struct{}{},
+		udp: udpState{byID: map[string]*udpSession{}, byAddr: map[netip.AddrPort]*udpSession{}}}
 }
 
 // Serve acepta conexiones hasta que ctx se cancele; al volver, todas las
@@ -50,6 +53,10 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	})
 	defer stop()
 	defer s.wg.Wait()
+	if err := s.startUDP(ctx, ln); err != nil {
+		ln.Close()
+		return err
+	}
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -121,6 +128,10 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec) {
 	p, err := codec.Read()
 	if err != nil || p.Type != proto.TypeParams {
 		fail("se esperaban parámetros")
+		return
+	}
+	if p.Proto == proto.ProtoUDP && p.Direction == proto.DirFwd {
+		s.controlUDP(ctx, codec, id, p)
 		return
 	}
 	if p.Proto != proto.ProtoTCP || p.Direction != proto.DirFwd {
