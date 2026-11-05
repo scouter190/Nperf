@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - Implementando spec 001.** T1, T2 y T14 hechas y aprobadas.
+**Fase 3 - Implementando spec 001.** T1, T2, T3 y T14 hechas y aprobadas.
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1, T2 y T14 hechas; T3-T13 y T15 pendientes).
+`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1, T2, T3 y T14 hechas; T4-T13 y T15 pendientes).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar).
@@ -20,12 +20,14 @@
 - CI (`.github/workflows/ci.yml`) en verde: windows-latest vet/test/build + artefacto `nperf.exe`; ubuntu `-race`.
 - Finales de línea LF forzados con `.gitattributes` (gofmt en CI).
 - Guía de entorno para Windows: `docs/entorno-local.md` (el usuario clona en Documentos).
+- Compilación: `scripts/build-windows.sh` (cruzada, GOOS=windows GOARCH=amd64) y `scripts/build-windows.ps1` (nativo en Windows); salida `nperf.exe` en la raíz.
+- Nota: la constante `Version` está duplicada en `internal/client` e `internal/server`; se unifica en T5 (`internal/version`).
 
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · ±10 % vs iperf3 · CLI en inglés.
 
 ## Próximo paso
-`implementer` hace T3 (compilación cruzada) y T4 (UDP en la sesión); luego `reviewer`.
+`implementer` hace T4 (UDP en la sesión); luego `reviewer`.
 
 ## Pendientes
 - Confirmar Walk como librería de interfaz.
