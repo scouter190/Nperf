@@ -40,8 +40,12 @@ func run(args []string) int {
 func runServer(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	port := fs.Int("port", defaultPort, "puerto de escucha")
+	key := fs.String("key", "", "shared key (empty = no key; both sides must then be empty)")
 	if fs.Parse(args) != nil {
 		return 2
+	}
+	if *key == "" {
+		fmt.Fprintln(os.Stderr, "aviso: sin clave, cualquiera puede usar este servidor")
 	}
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
 	if err != nil {
@@ -49,7 +53,7 @@ func runServer(ctx context.Context, args []string) int {
 		return 1
 	}
 	fmt.Printf("Servidor escuchando en %s\n", ln.Addr())
-	if err := server.New().Serve(ctx, ln); err != nil {
+	if err := server.New(server.WithKey(*key), server.WithLog(func(m string) { fmt.Fprintln(os.Stderr, m) })).Serve(ctx, ln); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
@@ -60,6 +64,7 @@ func runClient(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("client", flag.ContinueOnError)
 	port := fs.Int("port", defaultPort, "puerto del servidor")
 	secs := fs.Int("duration", 10, "duración de la prueba en segundos")
+	key := fs.String("key", "", "shared key (empty = no key; both sides must then be empty)")
 	protoName := fs.String("proto", "tcp", "protocolo: tcp o udp")
 	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M")
 	direction := fs.String("direction", "fwd", "sentido: fwd")
@@ -102,10 +107,13 @@ func runClient(ctx context.Context, args []string) int {
 			return 2
 		}
 	}
+	if *key == "" {
+		fmt.Fprintln(os.Stderr, "aviso: conectando sin clave")
+	}
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
 	fmt.Printf("Midiendo %s hacia %s durante %d s...\n", strings.ToUpper(*protoName), addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, UDPRate: rate})
+	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, UDPRate: rate, Key: *key})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1

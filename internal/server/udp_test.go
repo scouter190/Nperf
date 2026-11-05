@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"nperf/internal/proto"
+	"nperf/internal/version"
 )
 
 func startTest(t *testing.T) (*Server, *net.TCPAddr) {
@@ -57,8 +58,7 @@ func TestUDPGreeting(t *testing.T) {
 	}
 	defer cc.Close()
 	codec := proto.NewCodec(cc)
-	codec.Write(proto.Message{Type: proto.TypeHello})
-	hello, err := codec.Read()
+	session, err := proto.ClientHandshake(codec, "", version.Current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +74,13 @@ func TestUDPGreeting(t *testing.T) {
 	if _, n := sizes(s); n != 0 {
 		t.Error("id desconocido se asoció")
 	}
-	if !greet(c1, hello.Session) {
+	if !greet(c1, session) {
 		t.Fatal("saludo válido sin acuse")
 	}
-	if !greet(c1, hello.Session) {
+	if !greet(c1, session) {
 		t.Error("reintento desde la misma dirección sin acuse")
 	}
-	if greet(c2, hello.Session) {
+	if greet(c2, session) {
 		t.Error("saludo desde otra dirección recibió acuse")
 	}
 	if _, n := sizes(s); n != 1 {
@@ -107,7 +107,7 @@ func TestUDPGreeting(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if greet(c1, hello.Session) {
+	if greet(c1, session) {
 		t.Error("sesión expirada recibió acuse")
 	}
 }

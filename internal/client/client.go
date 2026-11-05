@@ -12,9 +12,8 @@ import (
 
 	"nperf/internal/meter"
 	"nperf/internal/proto"
+	"nperf/internal/version"
 )
-
-const Version = "0.1.0"
 
 // udpMagic es el prefijo del saludo UDP (igual que server.UDPMagic).
 const udpMagic = "NPUDP1 "
@@ -25,6 +24,8 @@ type Options struct {
 	Duration time.Duration
 	Proto    string  // "tcp" (por defecto) o "udp"
 	UDPRate  float64 // bps; 0 = DefaultUDPRate
+	Key      string  // clave compartida; vacía solo es válida si el servidor tampoco tiene
+	Version  string  // vacío = version.Current (se cambia solo en pruebas)
 }
 
 // DefaultUDPRate es la tasa UDP cuando no hay TCP previo: 100 Mbps.
@@ -62,10 +63,11 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	cc.SetDeadline(time.Now().Add(o.Duration + margin))
 	codec := proto.NewCodec(cc)
 
-	if err := codec.Write(proto.Message{Type: proto.TypeHello, Version: Version}); err != nil {
-		return res, err
+	if o.Version == "" {
+		o.Version = version.Current
 	}
-	hello, err := expect(codec, proto.TypeHello)
+	// Handshake antes de cualquier carga o saludo UDP.
+	session, err := proto.ClientHandshake(codec, o.Key, o.Version)
 	if err != nil {
 		return res, err
 	}
@@ -84,7 +86,7 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	}
 
 	if o.Proto == proto.ProtoUDP {
-		return runUDP(ctx, &dialer, addr, codec, hello.Session, o, res)
+		return runUDP(ctx, &dialer, addr, codec, session, o, res)
 	}
 	dc, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -93,7 +95,7 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	defer dc.Close()
 	stopData := context.AfterFunc(ctx, func() { dc.Close() })
 	defer stopData()
-	if err := proto.NewCodec(dc).Write(proto.Message{Type: proto.TypeData, Session: hello.Session}); err != nil {
+	if err := proto.NewCodec(dc).Write(proto.Message{Type: proto.TypeData, Session: session}); err != nil {
 		return res, err
 	}
 	res.Sent, err = meter.SendTCP(ctx, dc, o.Duration)

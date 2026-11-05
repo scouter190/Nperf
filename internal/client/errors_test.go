@@ -9,6 +9,7 @@ import (
 	"nperf/internal/client"
 	"nperf/internal/proto"
 	"nperf/internal/server"
+	"nperf/internal/version"
 )
 
 func start(t *testing.T) (string, context.CancelFunc, chan struct{}) {
@@ -52,8 +53,9 @@ func TestUnsupportedMode(t *testing.T) {
 	}
 	defer c.Close()
 	codec := proto.NewCodec(c)
-	codec.Write(proto.Message{Type: proto.TypeHello})
-	codec.Read()
+	if _, err := proto.ClientHandshake(codec, "", version.Current); err != nil {
+		t.Fatal(err)
+	}
 	codec.Write(proto.Message{Type: proto.TypeParams, Proto: "udp", Direction: "rev"})
 	m, err := codec.Read()
 	if err != nil || m.Type != proto.TypeError {

@@ -3,8 +3,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -14,9 +12,8 @@ import (
 
 	"nperf/internal/meter"
 	"nperf/internal/proto"
+	"nperf/internal/version"
 )
-
-const Version = "0.1.0"
 
 type Server struct {
 	mu       sync.Mutex
@@ -24,7 +21,26 @@ type Server struct {
 	conns    map[net.Conn]struct{}
 	wg       sync.WaitGroup
 	udp      udpState
+	key      string
+	ver      string
+	logf     func(string)
+	hsWait   time.Duration
 }
+
+// Option configura el servidor.
+type Option func(*Server)
+
+// WithKey fija la clave compartida (vacía = sin clave; el cliente debe usar también vacía).
+func WithKey(k string) Option { return func(s *Server) { s.key = k } }
+
+// WithLog fija dónde se registran avisos (versión incompatible, clave incorrecta).
+func WithLog(f func(string)) Option { return func(s *Server) { s.logf = f } }
+
+// WithHandshakeTimeout fija el plazo total del handshake (por defecto 10 s).
+func WithHandshakeTimeout(d time.Duration) Option { return func(s *Server) { s.hsWait = d } }
+
+// WithVersion reemplaza la versión anunciada (para pruebas).
+func WithVersion(v string) Option { return func(s *Server) { s.ver = v } }
 
 // margin es la holgura sobre la duración antes de abortar una lectura.
 const margin = 10 * time.Second
@@ -35,9 +51,13 @@ type dataConn struct {
 	done chan struct{}
 }
 
-func New() *Server {
-	return &Server{sessions: map[string]chan dataConn{}, conns: map[net.Conn]struct{}{},
+func New(opts ...Option) *Server {
+	s := &Server{ver: version.Current, hsWait: 10 * time.Second, logf: func(string) {}, sessions: map[string]chan dataConn{}, conns: map[net.Conn]struct{}{},
 		udp: udpState{byID: map[string]*udpSession{}, byAddr: map[netip.AddrPort]*udpSession{}}}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Serve acepta conexiones hasta que ctx se cancele; al volver, todas las
@@ -84,17 +104,17 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer c.Close()
-	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	c.SetReadDeadline(time.Now().Add(s.hsWait)) // cubre hello y todo el handshake
 	codec := proto.NewCodec(c)
 	first, err := codec.Read()
 	if err != nil {
 		return
 	}
-	c.SetReadDeadline(time.Time{})
 	switch first.Type {
 	case proto.TypeHello:
-		s.control(ctx, c, codec)
+		s.control(ctx, c, codec, first)
 	case proto.TypeData:
+		c.SetReadDeadline(time.Time{})
 		s.mu.Lock()
 		ch := s.sessions[first.Session]
 		s.mu.Unlock()
@@ -113,18 +133,21 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 	}
 }
 
-func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec) {
+func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, first proto.Message) {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
-	id := newID()
+	// El id de sesión solo se emite tras autenticar; hasta entonces no existe en s.sessions.
+	id, err := proto.ServerHandshake(codec, first, s.key, s.ver)
+	if err != nil {
+		s.logf("aviso: " + err.Error() + " (" + c.RemoteAddr().String() + ")")
+		return
+	}
+	c.SetReadDeadline(time.Time{}) // handshake terminado
 	ch := make(chan dataConn, 1)
 	s.mu.Lock()
 	s.sessions[id] = ch
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.sessions, id); s.mu.Unlock() }()
 
-	if err := codec.Write(proto.Message{Type: proto.TypeHello, Version: Version, Session: id}); err != nil {
-		return
-	}
 	p, err := codec.Read()
 	if err != nil || p.Type != proto.TypeParams {
 		fail("se esperaban parámetros")
@@ -157,10 +180,4 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec) {
 		fail("no llegó la conexión de datos")
 	case <-ctx.Done():
 	}
-}
-
-func newID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

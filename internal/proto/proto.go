@@ -8,9 +8,16 @@ import (
 	"io"
 )
 
+// Textos de error del handshake.
+const (
+	ErrBadKey       = "clave incorrecta"
+	ErrIncompatible = "versión incompatible"
+)
+
 // Tipos de mensaje.
 const (
 	TypeHello  = "hello"
+	TypeAuth   = "auth"
 	TypeParams = "params"
 	TypeStart  = "start"
 	TypeResult = "result"
@@ -30,6 +37,8 @@ type Message struct {
 	Type       string  `json:"type"`
 	Version    string  `json:"version,omitempty"`
 	Session    string  `json:"session,omitempty"`
+	Nonce      string  `json:"nonce,omitempty"`
+	MAC        string  `json:"mac,omitempty"`
 	Proto      string  `json:"proto,omitempty"`
 	Direction  string  `json:"direction,omitempty"`
 	DurationMS int64   `json:"duration_ms,omitempty"`
