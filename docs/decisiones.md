@@ -7,6 +7,7 @@
 
 ## 2. Plataforma
 - **Windows** únicamente. Lenguaje **Go**. **.exe portable** (sin instalador en v1).
+- Go 1.27.3 (go.mod, CI y entorno local).
 - Interfaz: **Walk (Win32 nativo)**, consumo mínimo.
 - **Sin administrador**. Diagnósticos que lo requieran se omiten con aviso.
 - Firewall: la app detecta si está bloqueada y muestra un **aviso guiado** para permitirla.

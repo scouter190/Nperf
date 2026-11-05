@@ -8,7 +8,7 @@ winget install --id Git.Git -e
 winget install --id GoLang.Go -e
 ```
 
-Go debe ser 1.24 o superior (alternativa: instalador desde https://go.dev/dl/). Instala también Claude Code siguiendo https://docs.claude.com/en/docs/claude-code. Reabre PowerShell y comprueba:
+Go debe ser 1.27.3 (alternativa: instalador de esa versión desde https://go.dev/dl/). Instala también Claude Code siguiendo https://docs.claude.com/en/docs/claude-code. Reabre PowerShell y comprueba:
 
 ```powershell
 git --version

@@ -9,7 +9,7 @@
 `specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T1 hecha; T2-T15 pendientes).
 
 ## Estado del código
-- Módulo `nperf` (Go 1.24, solo librería estándar).
+- Módulo `nperf` (Go 1.27.3, solo librería estándar).
 - Esqueleto TCP `fwd` de punta a punta: `cmd/nperf` (`server`, `client <host>`, `-port` 5300, `-duration` en segundos enteros), `internal/proto`, `internal/meter/tcp.go`, `internal/server`, `internal/client`.
 - Tests con `-race`: integración en loopback, errores, segunda prueba, cancelación, unitarios de proto y meter.
 - El rango 3-300 s de `-duration` se valida en T11.
