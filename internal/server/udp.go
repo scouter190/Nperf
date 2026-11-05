@@ -169,7 +169,7 @@ type udpWriter struct {
 func (w udpWriter) Write(b []byte) (int, error) { return w.c.WriteToUDPAddrPort(b, w.a) }
 
 // sendUDPRev envía a la tasa pedida una vez que el saludo UDP del cliente asoció su dirección.
-func (s *Server) sendUDPRev(ctx context.Context, codec *proto.Codec, sess *udpSession, p proto.Message, d time.Duration) {
+func (s *Server) sendUDPRev(ctx context.Context, c net.Conn, codec *proto.Codec, sess *udpSession, p proto.Message, d time.Duration) bool {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
 	rate := p.RateBps
 	if rate == 0 {
@@ -177,9 +177,9 @@ func (s *Server) sendUDPRev(ctx context.Context, codec *proto.Codec, sess *udpSe
 	}
 	if rate < 8*meter.DefaultUDPSize {
 		fail("tasa UDP inválida")
-		return
+		return false
 	}
-	sctx, stopWatch := s.watchControl(ctx, codec)
+	sctx, stopWatch := s.watchControl(ctx, c, codec)
 	defer stopWatch()
 	t := time.NewTimer(d + margin)
 	defer t.Stop()
@@ -187,26 +187,28 @@ func (s *Server) sendUDPRev(ctx context.Context, codec *proto.Codec, sess *udpSe
 	case <-sess.ready:
 	case <-t.C:
 		fail("no llegó el saludo UDP")
-		return
+		return false
 	case <-sctx.Done():
-		return
+		return false
 	}
 	s.udp.mu.Lock()
 	uc, addr := s.udp.conn, sess.addr
 	s.udp.mu.Unlock()
 	st, err := meter.SendUDP(sctx, udpWriter{uc, addr}, rate, meter.DefaultUDPSize, d)
-	if sctx.Err() != nil {
-		return
+	cancelled := sctx.Err() != nil
+	stopWatch() // antes de responder: el lector no debe robar la siguiente fase
+	if cancelled {
+		return false
 	}
 	if err != nil {
 		fail("error de envío: " + err.Error())
-		return
+		return false
 	}
-	codec.Write(proto.Message{Type: proto.TypeResult, Bytes: st.Bytes, DurationMS: st.Elapsed.Milliseconds(),
-		Mbps: st.Mbps(), Packets: st.Packets})
+	return codec.Write(proto.Message{Type: proto.TypeResult, Bytes: st.Bytes, DurationMS: st.Elapsed.Milliseconds(),
+		Mbps: st.Mbps(), Packets: st.Packets}) == nil
 }
 
-func (s *Server) controlUDP(ctx context.Context, codec *proto.Codec, id string, p proto.Message) {
+func (s *Server) controlUDP(ctx context.Context, c net.Conn, codec *proto.Codec, id string, p proto.Message) bool {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
 	s.udp.mu.Lock()
 	ready := s.udp.conn != nil
@@ -218,7 +220,7 @@ func (s *Server) controlUDP(ctx context.Context, codec *proto.Codec, id string, 
 	s.udp.mu.Unlock()
 	if !ready {
 		fail("UDP no disponible en este servidor")
-		return
+		return false
 	}
 	defer func() {
 		s.udp.mu.Lock()
@@ -229,29 +231,28 @@ func (s *Server) controlUDP(ctx context.Context, codec *proto.Codec, id string, 
 		s.udp.mu.Unlock()
 	}()
 	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
-		return
+		return false
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
 	if p.Direction == proto.DirRev {
-		s.sendUDPRev(ctx, codec, sess, p, d)
-		return
+		return s.sendUDPRev(ctx, c, codec, sess, p, d)
 	}
 	rctx, cancel := context.WithTimeout(ctx, d+margin)
 	defer cancel()
 	sess.SetReadDeadline(time.Now().Add(d + margin))
 	st, err := meter.ReceiveUDP(rctx, sess, time.Second)
 	if ctx.Err() != nil {
-		return
+		return false
 	}
 	if st.Received == 0 {
 		fail("no llegaron datagramas UDP")
-		return
+		return false
 	}
 	if err != nil {
 		fail("error de medición: " + err.Error())
-		return
+		return false
 	}
-	codec.Write(proto.Message{Type: proto.TypeResult, Bytes: st.Bytes, DurationMS: st.Elapsed.Milliseconds(),
+	return codec.Write(proto.Message{Type: proto.TypeResult, Bytes: st.Bytes, DurationMS: st.Elapsed.Milliseconds(),
 		Mbps: st.Mbps(), Received: st.Received, Expected: st.Expected, Lost: st.Lost,
-		LossPct: st.LossPercent(), JitterMS: float64(st.Jitter) / float64(time.Millisecond)})
+		LossPct: st.LossPercent(), JitterMS: float64(st.Jitter) / float64(time.Millisecond)}) == nil
 }

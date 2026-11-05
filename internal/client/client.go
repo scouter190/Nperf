@@ -31,6 +31,12 @@ type Options struct {
 	Key       string        // clave compartida; vacía solo es válida si el servidor tampoco tiene
 	Streams   int           // flujos TCP paralelos; 0 = proto.DefaultStreams (1-proto.MaxStreams)
 	Version   string        // vacío = version.Current (se cambia solo en pruebas)
+	// OnQueue se llama con la posición en cola (1 = el siguiente) cada vez que el servidor la
+	// informa; mientras espera en cola no rigen plazos de lectura.
+	OnQueue func(pos int)
+	// HandshakeWait es el plazo de conexión, handshake y obtención de turno cuando no hay cola
+	// (0 = 10 s). La espera en cola no cuenta.
+	HandshakeWait time.Duration
 }
 
 // ValidateStreams comprueba el número de flujos (1-proto.MaxStreams).
@@ -121,7 +127,7 @@ func (r *Result) set(dir string, d Dir) {
 }
 
 // Run mide TCP o UDP en el sentido pedido. En both hace fwd y luego rev, cada uno con la
-// duración completa y su propia sesión autenticada.
+// duración completa, dentro de una única sesión autenticada (un solo turno del servidor).
 func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	var res Result
 	var dirs []string
@@ -135,11 +141,25 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	default:
 		return res, fmt.Errorf("sentido no soportado: %q", o.Direction)
 	}
+	if o.Streams == 0 {
+		o.Streams = proto.DefaultStreams
+	}
+	if err := ValidateStreams(o.Streams); err != nil {
+		return res, err
+	}
+	if o.Proto != "" && o.Proto != proto.ProtoTCP && o.Proto != proto.ProtoUDP && o.Proto != proto.ProtoBoth {
+		return res, fmt.Errorf("protocolo no soportado: %q", o.Proto)
+	}
+	ss, err := openSession(ctx, addr, &o)
+	if err != nil {
+		return res, err
+	}
+	defer ss.close()
 	if o.Proto == proto.ProtoBoth {
-		return runFull(ctx, addr, o, dirs)
+		return runFull(ctx, ss, o, dirs)
 	}
 	for _, dir := range dirs {
-		d, err := runDir(ctx, addr, o, dir, nil)
+		d, err := runPhase(ctx, ss, o, dir, nil)
 		if err != nil {
 			return res, err
 		}
@@ -148,9 +168,9 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	return res, nil
 }
 
-// runFull hace RTT (en la primera sesión, antes de su carga), TCP en cada sentido y luego UDP
-// en cada sentido. Un error de cualquier fase TCP/UDP aborta toda la medición.
-func runFull(ctx context.Context, addr string, o Options, dirs []string) (Result, error) {
+// runFull hace RTT (antes de cualquier carga), TCP en cada sentido y luego UDP en cada
+// sentido, todo en la misma sesión. Un error de cualquier fase aborta toda la medición.
+func runFull(ctx context.Context, ss *sess, o Options, dirs []string) (Result, error) {
 	var res Result
 	tcp := o
 	tcp.Proto = proto.ProtoTCP
@@ -160,7 +180,7 @@ func runFull(ctx context.Context, addr string, o Options, dirs []string) (Result
 		if i == 0 {
 			r = rtt
 		}
-		d, err := runDir(ctx, addr, tcp, dir, r)
+		d, err := runPhase(ctx, ss, tcp, dir, r)
 		if err != nil {
 			return res, err
 		}
@@ -183,7 +203,7 @@ func runFull(ctx context.Context, addr string, o Options, dirs []string) (Result
 			}
 		}
 		udp.UDPRate = rate
-		d, err := runDir(ctx, addr, udp, dir, nil)
+		d, err := runPhase(ctx, ss, udp, dir, nil)
 		if err != nil {
 			return res, err
 		}
@@ -222,34 +242,62 @@ func measureRTT(codec *proto.Codec) (*RTT, error) {
 	return r, nil
 }
 
-func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (Dir, error) {
-	var res Dir
-	if o.Streams == 0 {
-		o.Streams = proto.DefaultStreams
-	}
-	if err := ValidateStreams(o.Streams); err != nil {
-		return res, err
-	}
-	var dialer net.Dialer
-	cc, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return res, fmt.Errorf("no se pudo conectar a %s: %w", addr, err)
-	}
-	defer cc.Close()
-	stop := context.AfterFunc(ctx, func() { cc.Close() })
-	defer stop()
-	// Plazo global del canal de control: duración + margen.
-	cc.SetDeadline(time.Now().Add(o.Duration + margin))
-	codec := proto.NewCodec(cc)
+// sess es una sesión autenticada con el turno del servidor, que admite varias fases.
+type sess struct {
+	cc     net.Conn
+	codec  *proto.Codec
+	id     string
+	addr   string
+	dialer net.Dialer
+	stop   func() bool
+}
 
+func (s *sess) close() { s.stop(); s.cc.Close() }
+
+func openSession(ctx context.Context, addr string, o *Options) (*sess, error) {
+	s := &sess{addr: addr}
+	hs := o.HandshakeWait
+	if hs == 0 {
+		hs = 10 * time.Second
+	}
+	cc, err := s.dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo conectar a %s: %w", addr, err)
+	}
+	s.cc = cc
+	s.stop = context.AfterFunc(ctx, func() { cc.Close() })
+	s.codec = proto.NewCodec(cc)
+	cc.SetDeadline(time.Now().Add(hs)) // handshake y solicitud de turno
 	if o.Version == "" {
 		o.Version = version.Current
 	}
 	// Handshake antes de cualquier carga o saludo UDP.
-	session, err := proto.ClientHandshake(codec, o.Key, o.Version)
-	if err != nil {
-		return res, err
+	if s.id, err = proto.ClientHandshake(s.codec, o.Key, o.Version); err != nil {
+		s.close()
+		return nil, err
 	}
+	// En cola no rige ningún plazo (la espera la decide el servidor); al llegar el turno
+	// vuelven los plazos normales.
+	err = proto.ClientTurn(s.codec, func(pos int) {
+		cc.SetDeadline(time.Time{})
+		if o.OnQueue != nil {
+			o.OnQueue(pos)
+		}
+	})
+	if err != nil {
+		s.close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, err
+	}
+	cc.SetDeadline(time.Now().Add(hs))
+	return s, nil
+}
+
+func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (Dir, error) {
+	var res Dir
+	cc, codec, session, addr, dialer := ss.cc, ss.codec, ss.id, ss.addr, &ss.dialer
 	if rtt != nil { // antes de params: ni datos ni UDP han empezado
 		m, err := measureRTT(codec)
 		if err != nil {
@@ -260,9 +308,8 @@ func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (
 	if o.Proto == "" {
 		o.Proto = proto.ProtoTCP
 	}
-	if o.Proto != proto.ProtoTCP && o.Proto != proto.ProtoUDP {
-		return res, fmt.Errorf("protocolo no soportado: %q", o.Proto)
-	}
+	// Plazo del canal de control en esta fase: duración + margen.
+	cc.SetDeadline(time.Now().Add(o.Duration + margin))
 	rate := o.UDPRate
 	if rate == 0 {
 		rate = DefaultUDPRate
@@ -283,7 +330,7 @@ func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (
 	}
 
 	if o.Proto == proto.ProtoUDP {
-		return runUDP(ctx, &dialer, addr, codec, session, o, rate, dir)
+		return runUDP(ctx, dialer, addr, codec, session, o, rate, dir)
 	}
 	conns := make([]net.Conn, 0, o.Streams)
 	var connsMu sync.Mutex // closeAll puede correr desde AfterFunc mientras se abren flujos
@@ -335,6 +382,7 @@ func runDir(ctx context.Context, addr string, o Options, dir string, rtt *RTT) (
 		}
 		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(), Sent: sent}, nil
 	}
+	var err error
 	res.Sent, err = meter.SendTCPN(ctx, conns, o.Duration)
 	if err != nil {
 		return res, err

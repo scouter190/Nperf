@@ -86,6 +86,11 @@ func TestRTTBeforeLoad(t *testing.T) {
 			return
 		}
 		var types []string
+		if m, err := codec.Read(); err != nil || m.Type != proto.TypeTurn {
+			seq <- nil
+			return
+		}
+		codec.Write(proto.Message{Type: proto.TypeReady})
 		for {
 			m, err := codec.Read()
 			if err != nil {

@@ -56,6 +56,9 @@ func TestUnsupportedMode(t *testing.T) {
 	if _, err := proto.ClientHandshake(codec, "", version.Current); err != nil {
 		t.Fatal(err)
 	}
+	if err := proto.ClientTurn(codec, nil); err != nil {
+		t.Fatal(err)
+	}
 	codec.Write(proto.Message{Type: proto.TypeParams, Proto: "udp", Direction: "sideways"})
 	m, err := codec.Read()
 	if err != nil || m.Type != proto.TypeError {

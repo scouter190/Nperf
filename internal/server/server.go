@@ -26,6 +26,8 @@ type Server struct {
 	ver      string
 	logf     func(string)
 	hsWait   time.Duration
+	q        turnQueue
+	turnHook func(context.Context)
 }
 
 // Option configura el servidor.
@@ -39,6 +41,14 @@ func WithLog(f func(string)) Option { return func(s *Server) { s.logf = f } }
 
 // WithHandshakeTimeout fija el plazo total del handshake (por defecto 10 s).
 func WithHandshakeTimeout(d time.Duration) Option { return func(s *Server) { s.hsWait = d } }
+
+// WithMaxPerIP fija cuántas pruebas (en curso + en cola) admite una misma IP (0 = sin límite;
+// por defecto 0). Evita que un cliente autenticado acapare la cola.
+func WithMaxPerIP(n int) Option { return func(s *Server) { s.q.maxPerIP = n } }
+
+// WithTurnHook registra una función que se ejecuta al concederse el turno, antes de "ready"
+// (sirve a las pruebas para simular sesiones lentas de forma determinista).
+func WithTurnHook(f func(context.Context)) Option { return func(s *Server) { s.turnHook = f } }
 
 // WithVersion reemplaza la versión anunciada (para pruebas).
 func WithVersion(v string) Option { return func(s *Server) { s.ver = v } }
@@ -61,7 +71,7 @@ type dataConn struct {
 }
 
 func New(opts ...Option) *Server {
-	s := &Server{ver: version.Current, hsWait: 10 * time.Second, logf: func(string) {}, sessions: map[string]*session{}, conns: map[net.Conn]struct{}{},
+	s := &Server{ver: version.Current, hsWait: 10 * time.Second, logf: func(string) {}, q: turnQueue{maxWait: MaxQueue, perIP: map[string]int{}}, sessions: map[string]*session{}, conns: map[net.Conn]struct{}{},
 		udp: udpState{byID: map[string]*udpSession{}, byAddr: map[netip.AddrPort]*udpSession{}}}
 	for _, o := range opts {
 		o(s)
@@ -167,7 +177,18 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		s.logf("aviso: " + err.Error() + " (" + c.RemoteAddr().String() + ")")
 		return
 	}
-	c.SetReadDeadline(time.Now().Add(s.hsWait)) // plazo único hasta recibir params; los ping no lo extienden
+	c.SetReadDeadline(time.Now().Add(s.hsWait)) // plazo de la solicitud de turno
+	if m, err := codec.Read(); err != nil || m.Type != proto.TypeTurn {
+		fail("se esperaba la solicitud de turno")
+		return
+	}
+	// Solo clientes autenticados llegan a la cola. El turno se retiene hasta que termina la
+	// sesión (todas sus fases, p. ej. fwd y rev) y se libera siempre al salir.
+	release, err := s.acquireTurn(ctx, c, codec)
+	if err != nil {
+		return
+	}
+	defer release()
 	ss := &session{ch: make(chan dataConn, proto.MaxStreams)}
 	s.mu.Lock()
 	s.sessions[id] = ss
@@ -181,22 +202,36 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 			p, err = codec.Read()
 		}
 	}
-	if err != nil || p.Type != proto.TypeParams {
-		fail("se esperaban parámetros")
-		return
+	// Una sesión es una secuencia de fases (params -> start -> result) con el turno retenido.
+	for {
+		if err != nil || p.Type != proto.TypeParams {
+			fail("se esperaban parámetros")
+			return
+		}
+		c.SetReadDeadline(time.Time{}) // params recibido
+		if !s.phase(ctx, c, codec, id, ss, p) {
+			return
+		}
+		c.SetReadDeadline(time.Now().Add(s.hsWait)) // siguiente fase o cierre del cliente
+		if p, err = codec.Read(); err != nil {
+			return // EOF: el cliente terminó la sesión
+		}
 	}
-	c.SetReadDeadline(time.Time{}) // params recibido
+}
+
+// phase mide una fase; devuelve true si terminó bien y la sesión puede seguir.
+func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id string, ss *session, p proto.Message) bool {
+	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
 	if p.Direction != proto.DirFwd && p.Direction != proto.DirRev {
 		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
-		return
+		return false
 	}
 	if p.Proto == proto.ProtoUDP {
-		s.controlUDP(ctx, codec, id, p)
-		return
+		return s.controlUDP(ctx, c, codec, id, p)
 	}
 	if p.Proto != proto.ProtoTCP {
 		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
-		return
+		return false
 	}
 	streams := p.Streams
 	if streams == 0 {
@@ -204,11 +239,13 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 	}
 	if streams < 1 || streams > proto.MaxStreams {
 		fail(fmt.Sprintf("número de flujos fuera de rango: %d (permitido 1-%d)", p.Streams, proto.MaxStreams))
-		return
+		return false
 	}
+	ss.n.Store(0)
 	ss.limit.Store(int64(streams))
+	defer ss.limit.Store(0) // entre fases no se aceptan conexiones de datos
 	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
-		return
+		return false
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
 	timeout := time.After(d + margin)
@@ -225,10 +262,10 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		case <-timeout:
 			release()
 			fail(fmt.Sprintf("llegaron %d de %d conexiones de datos", len(dcs), streams))
-			return
+			return false
 		case <-ctx.Done():
 			release()
-			return
+			return false
 		}
 	}
 	defer release()
@@ -237,16 +274,16 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		conns[i] = dc.conn
 	}
 	if p.Direction == proto.DirRev {
-		sctx, stopWatch := s.watchControl(ctx, codec)
+		sctx, stopWatch := s.watchControl(ctx, c, codec)
 		res, err := meter.SendTCPN(sctx, conns, d)
 		cancelled := sctx.Err() != nil
-		stopWatch()
+		stopWatch() // antes de responder: el lector no debe robar la siguiente fase
 		if cancelled {
-			return // servidor cancelado o cliente desconectado
+			return false // servidor cancelado o cliente desconectado
 		}
 		if err != nil {
 			fail("error de envío: " + err.Error())
-			return
+			return false
 		}
 		msg := proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
 			DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()}
@@ -254,8 +291,7 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 			msg.Retrans = &res.Retrans
 			msg.RetransEst = res.RetransEstimated
 		}
-		codec.Write(msg)
-		return
+		return codec.Write(msg) == nil
 	}
 	rs := make([]io.Reader, len(dcs))
 	for i, dc := range dcs {
@@ -269,21 +305,32 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 	})
 	if err != nil {
 		fail("error de medición: " + err.Error())
-		return
+		return false
 	}
-	codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
-		DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
+	return codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
+		DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()}) == nil
 }
 
 // watchControl devuelve un contexto que se cancela si ctx se cancela o el cliente cierra el
-// canal de control (en rev el cliente no envía nada más tras params). stop libera el contexto.
-func (s *Server) watchControl(ctx context.Context, codec *proto.Codec) (context.Context, func()) {
+// canal de control (en rev el cliente no envía nada más tras params). stop (idempotente) libera
+// el contexto, detiene el lector sin consumir mensajes y deja la conexión sin plazo de lectura.
+func (s *Server) watchControl(ctx context.Context, c net.Conn, codec *proto.Codec) (context.Context, func()) {
 	sctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		codec.Read() // vuelve al cerrarse la conexión (handle la cierra al terminar)
+		defer close(done)
+		codec.Read() // vuelve al cerrarse la conexión o por el plazo que pone stop
 		cancel()
 	}()
-	return sctx, cancel
+	var once sync.Once
+	return sctx, func() {
+		once.Do(func() {
+			cancel()
+			c.SetReadDeadline(time.Now())
+			<-done
+			c.SetReadDeadline(time.Time{})
+		})
+	}
 }

@@ -54,6 +54,9 @@ func params(t *testing.T, addr string, dir string, streams int) (net.Conn, *prot
 	if err != nil {
 		t.Fatalf("paso handshake (streams=%d, dir=%s): %v", streams, dir, err)
 	}
+	if err := proto.ClientTurn(codec, nil); err != nil {
+		t.Fatalf("paso turno (streams=%d, dir=%s): %v", streams, dir, err)
+	}
 	if err := codec.Write(proto.Message{Type: proto.TypeParams, Proto: proto.ProtoTCP, Direction: dir, DurationMS: 300, Streams: streams}); err != nil {
 		t.Fatalf("paso write de params (streams=%d, dir=%s): %v", streams, dir, err)
 	}

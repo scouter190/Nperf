@@ -49,7 +49,8 @@ func runServer(ctx context.Context, args []string) int {
 	if *key == "" {
 		fmt.Fprintln(os.Stderr, "aviso: sin clave, cualquiera puede usar este servidor")
 	}
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
+	lc := net.ListenConfig{KeepAlive: 15 * time.Second} // detecta clientes en cola con la conexión caída
+	ln, err := lc.Listen(ctx, "tcp", ":"+strconv.Itoa(*port))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
@@ -116,7 +117,8 @@ func runClient(ctx context.Context, args []string) int {
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
 	fmt.Printf("Midiendo %s hacia %s durante %d s...\n", strings.ToUpper(*protoName), addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: *key, Streams: *streams})
+	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: *key, Streams: *streams,
+		OnQueue: func(pos int) { fmt.Printf("en cola (posición %d)\n", pos) }})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1

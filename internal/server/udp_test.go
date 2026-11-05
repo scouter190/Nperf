@@ -62,6 +62,9 @@ func TestUDPGreeting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := proto.ClientTurn(codec, nil); err != nil {
+		t.Fatal(err)
+	}
 	codec.Write(proto.Message{Type: proto.TypeParams, Proto: proto.ProtoUDP, Direction: proto.DirFwd, DurationMS: 1000})
 	if m, err := codec.Read(); err != nil || m.Type != proto.TypeStart {
 		t.Fatalf("start: %+v %v", m, err)
