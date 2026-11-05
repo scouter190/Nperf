@@ -248,12 +248,16 @@ func (s *Server) controlUDP(ctx context.Context, c net.Conn, codec *proto.Codec,
 	if p.Direction == proto.DirRev {
 		return s.sendUDPRev(ctx, c, codec, sess, p, d)
 	}
-	rctx, cancel := context.WithTimeout(ctx, d+margin)
+	sctx, stopWatch := s.watchControl(ctx, c, codec)
+	defer stopWatch()
+	rctx, cancel := context.WithTimeout(sctx, d+margin)
 	defer cancel()
 	sess.SetReadDeadline(time.Now().Add(d + margin))
 	st, err := meter.ReceiveUDP(rctx, sess, time.Second)
-	if ctx.Err() != nil {
-		return false
+	cancelled := sctx.Err() != nil
+	stopWatch() // antes de responder: el lector no debe robar la siguiente fase
+	if cancelled {
+		return false // servidor cancelado o cliente desconectado
 	}
 	if st.Received == 0 {
 		fail("no llegaron datagramas UDP")

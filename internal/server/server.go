@@ -64,6 +64,7 @@ const margin = 10 * time.Second
 // session liga las conexiones de datos a una sesión autenticada; limit es el número de
 // flujos negociado (0 hasta que llegan los params: las conexiones antes de eso se rechazan).
 type session struct {
+	mu    sync.Mutex // serializa la admisión de conexiones con el cierre de la fase
 	ch    chan dataConn
 	limit atomic.Int64
 	n     atomic.Int64
@@ -73,6 +74,37 @@ type dataConn struct {
 	r    io.Reader
 	conn net.Conn
 	done chan struct{}
+}
+
+// admit encola la conexión si la fase aún acepta más; si no, devuelve false.
+func (ss *session) admit(dc dataConn) bool {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if ss.n.Add(1) > ss.limit.Load() {
+		return false
+	}
+	select {
+	case ss.ch <- dc:
+		return true
+	default:
+		return false
+	}
+}
+
+// closePhase deja de aceptar conexiones y cierra las que quedaron en el canal.
+func (ss *session) closePhase() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.limit.Store(0)
+	for {
+		select {
+		case dc := <-ss.ch:
+			dc.conn.Close()
+			close(dc.done)
+		default:
+			return
+		}
+	}
 }
 
 func New(opts ...Option) *Server {
@@ -250,9 +282,11 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		fail(fmt.Sprintf("número de flujos fuera de rango: %d (permitido 1-%d)", p.Streams, proto.MaxStreams))
 		return false
 	}
+	ss.mu.Lock()
 	ss.n.Store(0)
 	ss.limit.Store(int64(streams))
-	defer ss.limit.Store(0) // entre fases no se aceptan conexiones de datos
+	ss.mu.Unlock()
+	defer ss.closePhase() // entre fases no se aceptan conexiones de datos; cierra las tardías
 	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
 		return false
 	}
@@ -313,11 +347,22 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		dc.conn.SetReadDeadline(time.Now().Add(d + margin))
 		rs[i] = dc.r
 	}
-	res, err := meter.ReceiveTCPN(rs, func() {
+	closeAll := func() {
 		for _, c := range conns {
 			c.Close()
 		}
-	})
+	}
+	// Si el cliente se va a mitad de la medición se cierran los datos y se libera el turno.
+	sctx, stopWatch := s.watchControl(ctx, c, codec)
+	unhook := context.AfterFunc(sctx, closeAll)
+	res, err := meter.ReceiveTCPN(rs, closeAll)
+	unhook()
+	cancelled := sctx.Err() != nil
+	stopWatch() // antes de responder: el lector no debe robar la siguiente fase
+	if cancelled {
+		closeAll()
+		return false
+	}
 	if err != nil {
 		fail("error de medición: " + err.Error())
 		return false

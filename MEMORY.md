@@ -17,6 +17,7 @@
 - Cliente abre siempre las conexiones; en rev mide el cliente. `Result{Fwd,Rev,UDPFwd,UDPRev,RTT,Notes}`; "no medido" con `Measured`. `client.Run` usa fwd por defecto: los consumidores pasan Direction explícito.
 - Sesión única: una sesión autenticada = varias fases (params -> start -> result) con el turno retenido. Protocolo: handshake -> `turn` -> `queue{position}`* -> `ready` -> ping* -> params.
 - Cola (`internal/server/queue.go`): FIFO, 1 en curso + 5 en espera; el 6.º recibe "cola llena". Solo entran clientes autenticados. Keepalive TCP 15 s en el server de la CLI.
+- Cola: el turno se libera en cuanto el cliente se va, en cualquier fase (watchControl en todas las esperas del server).
 - TCP multiflujo: suma medida por el receptor en ventana común; un flujo que falla = error.
 - `-proto both`: RTT -> TCP fwd/rev -> UDP fwd/rev. UDP = 90 % del TCP del mismo sentido, tope 10 Gbps; `-udp-rate` manda; con `-proto tcp` es error de uso. Un fallo aborta todo.
 - UDP: saludo `NPUDP1 <session>` en 5300; 100 Mbps por defecto sin TCP previo. El server rechaza RateBps > `server.MaxUDPRate` (10 Gbps) al recibir params (UDP rev); el cliente muestra ese error.
@@ -32,6 +33,7 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 �
 ## Notas
 - Subidas: regla en AGENTS.md (wip/actual → CI Windows verde → main, sin pedir permiso; el usuario revisa por tarea).
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
+- CI Windows: tests con -p 1 (paquetes en serie) para evitar contención de CPU en tests de tiempo real.
 
 ## Próximo paso
 T13 (prueba de aceptación E2E). Luego T15, T16.
