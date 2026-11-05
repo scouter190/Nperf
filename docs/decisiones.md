@@ -108,3 +108,7 @@
 - Secuencia por defecto (`-proto both`): RTT (10 ping/pong por el canal de control, antes de cualquier carga; mín/media/máx), TCP fwd, TCP rev, UDP fwd, UDP rev. UDP = 90 % del TCP del mismo sentido, con tope de 10 Gbps (en loopback el TCP da decenas de Gbps); `-udp-rate` manda sobre la derivación. Si el TCP de un sentido da una tasa inutilizable (< 1 datagrama/s), ese UDP queda "no medido" con una nota; un error TCP/UDP aborta toda la medición.
 - Streams: el cliente envía siempre el número explícito (default 4, rango 1–64); el server trata 0 como 1 solo por compatibilidad.
 - Retransmisiones: segmentos exactos en Linux (tcpi_total_retrans); en Windows estimación BytesRetrans/MSS, mostrada con ~. Las ve el emisor; en rev el server las envía en el resultado. Sin soporte: "no disponible".
+- Keepalive TCP de 15 s en el server: un cliente en cola con la conexión caída se detecta en ~15 s + sondas.
+- Cola: 1 en curso + 5 en espera, sin límite por IP por defecto (configurable con WithMaxPerIP); la clave compartida evita que extraños usen la cola.
+- Estado del equipo: consulta `status` (disponible / ocupado + cola) en el protocolo desde la spec 001; el indicador visual va en la spec de interfaz.
+- Consulta de estado pública en la LAN (decisión del usuario): solo expone state y queue. Sin ids de sesión, IPs, nombres, versión exacta ni detalles de la prueba; mensaje propio antes del handshake que no habilita ningún otro paso sin autenticar; no ocupa turno ni entra en la cola; el server responde en < 1 s y cierra la conexión.

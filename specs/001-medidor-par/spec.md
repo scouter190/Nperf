@@ -18,6 +18,7 @@ Medir el enlace entre dos equipos con NPerf (A ↔ B) usando el protocolo propio
 - RTT (ping por el canal de control) antes de la carga.
 - Métricas: throughput (Mbps), jitter y pérdida (UDP), retransmisiones (TCP, si Windows las entrega sin admin; si no, "no disponible").
 - Cola por concurrencia: si B ya está en prueba, la nueva espera en cola (máximo 5 en espera) y A recibe aviso con su posición; A puede cancelar con Ctrl+C.
+- Consulta de estado pública en la LAN `nperf status <host>`: "disponible" u "ocupado" con el número en cola, sin clave y sin lanzar prueba (base para el indicador visual de la spec de interfaz).
 - Salida legible por defecto y `-json` para comparar y automatizar.
 - Puerto 5300 por defecto, configurable con `-port`. Clave por `-key` o configuración local.
 
@@ -38,3 +39,4 @@ GUI y bandeja, mapa, descubrimiento automático, routers/APs sin agente, detecci
 11. `-json` produce un objeto válido con todas las métricas, sentidos y protocolos (incluidos "no medido"/"no disponible").
 12. En la misma red cableada, el throughput TCP (4 flujos, 10 s) está dentro de ±10 % del de `iperf3 -P 4 -t 10`, en ambos sentidos (`-R`).
 13. Funciona sin privilegios de administrador. `go vet` y `go test ./...` pasan.
+14. `nperf status <host>` (acepta `-port` y `-json`; no usa `-key`) informa sin autenticación y sin lanzar prueba "disponible" u "ocupado (N en cola)" y termina con código 0. Límites: la respuesta solo contiene `state` (`available`/`busy`) y `queue` (N), sin ids de sesión, IPs, nombres, versión exacta ni detalles de la prueba en curso; es un mensaje propio atendido antes del handshake que no da acceso a ningún otro paso del protocolo sin autenticar; no ocupa turno ni entra en la cola; el server responde con plazo corto (< 1 s, aunque haya una prueba en curso) y cierra la conexión. Con `-json` produce un objeto válido con solo `state` y `queue`.

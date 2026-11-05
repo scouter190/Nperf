@@ -6,7 +6,7 @@
 **Fase 3 - Implementando spec 001.** T1-T10 y T14 hechas y aprobadas.
 
 ## Spec activa
-`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T11-T13 y T15 pendientes; T16 propuesta, sin aprobar).
+`specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T11-T13, T15 y T16 pendientes; T16 aprobada).
 
 ## Estado del código
 - Módulo `nperf` (Go 1.27.3, solo librería estándar). Repo: https://github.com/scouter190/Nperf (rama `main`).
@@ -32,11 +32,11 @@ Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 �
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
 
 ## Próximo paso
-Aprobación de T16 por el usuario; luego T11 (CLI completa).
+T11 (CLI completa); T16 cuando el usuario lo indique.
 
 ## Pendientes
 - T11: acotar RateBps máximo del server en UDP rev (`sendUDPRev`, internal/server/udp.go); validar `-duration` 3-300 s; config local.
 - T12: retirar de `client.Result` los campos duplicados Sent/Received/Mbps/UDP (usar Fwd/Rev).
-- T16 (estado del equipo, `nperf status`, criterio 14) escrita por el planner, PENDIENTE de aprobación del usuario (incluida la decisión: consulta protegida con la clave).
+- T16 (estado del equipo, `nperf status`, criterio 14) aprobada: consulta pública en la LAN, sin clave; solo expone `state` y `queue`, antes del handshake y sin acceso a nada más.
 - Confirmar Walk como librería de interfaz.
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"): causa no encontrada; no reproducido en 500+ corridas; el test reporta el paso exacto. Si reaparece, analizar ese mensaje.
