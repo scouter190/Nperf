@@ -17,9 +17,9 @@ Medir el enlace entre dos equipos con NPerf (A ↔ B) usando el protocolo propio
 - UDP a tasa fija `-udp-rate`; por defecto 90 % del throughput TCP medido en ese sentido.
 - RTT (ping por el canal de control) antes de la carga.
 - Métricas: throughput (Mbps), jitter y pérdida (UDP), retransmisiones (TCP, si Windows las entrega sin admin; si no, "no disponible").
-- Cola por concurrencia: si B ya está en prueba, la nueva espera en cola y A recibe aviso con su posición.
+- Cola por concurrencia: si B ya está en prueba, la nueva espera en cola (máximo 5 en espera) y A recibe aviso con su posición; A puede cancelar con Ctrl+C.
 - Salida legible por defecto y `-json` para comparar y automatizar.
-- Puerto fijo por defecto, configurable con `-port`. Clave por `-key` o configuración local.
+- Puerto 5300 por defecto, configurable con `-port`. Clave por `-key` o configuración local.
 
 ### Excluye (specs posteriores)
 GUI y bandeja, mapa, descubrimiento automático, routers/APs sin agente, detección de adaptadores y WiFi, ejecución programada, alertas, exportación CSV, aviso guiado de firewall, compatibilidad de protocolo con iperf3.
@@ -32,9 +32,9 @@ GUI y bandeja, mapa, descubrimiento automático, routers/APs sin agente, detecci
 5. `-direction fwd` reporta el sentido rev como "no medido" (y viceversa).
 6. `-duration 5` dura 5 s ±0,5 s por sentido y protocolo; valores fuera de 3–300 se rechazan antes de conectar.
 7. `-streams 8` abre 8 conexiones TCP de datos (verificable en test o con `netstat`); el resultado suma los flujos.
-8. Sin `-udp-rate`, la tasa UDP enviada es 90 % ±5 % del throughput TCP del mismo sentido; con `-udp-rate 50M` se envía 50 Mbps ±5 %. Con `-proto udp` sin tasa se usa la tasa por defecto definida en decisiones.
+8. Sin `-udp-rate`, la tasa UDP enviada es 90 % ±5 % del throughput TCP del mismo sentido; con `-udp-rate 50M` se envía 50 Mbps ±5 %. Con `-proto udp` sin `-udp-rate` (sin TCP previo) se envía 100 Mbps ±5 %.
 9. UDP reporta jitter (ms) y pérdida (%); con pérdida inducida en test, la pérdida reportada coincide ±1 punto.
-10. Dos `client` simultáneos contra el mismo B: el segundo recibe "en cola (posición 1)" y se ejecuta al terminar el primero.
+10. Con B ocupado, los siguientes `client` reciben "en cola (posición N)" (N = 1..5) y se ejecutan en orden al terminar el anterior; el 6.º se rechaza al instante con "cola llena" y código ≠ 0. Ctrl+C en un cliente en cola lo saca de la cola, termina con código ≠ 0 y los demás avanzan de posición.
 11. `-json` produce un objeto válido con todas las métricas, sentidos y protocolos (incluidos "no medido"/"no disponible").
-12. En la misma red cableada, el throughput TCP (4 flujos, 10 s) difiere ≤10 % del de `iperf3 -P 4 -t 10`, en ambos sentidos (`-R`).
+12. En la misma red cableada, el throughput TCP (4 flujos, 10 s) está dentro de ±10 % del de `iperf3 -P 4 -t 10`, en ambos sentidos (`-R`).
 13. Funciona sin privilegios de administrador. `go vet` y `go test ./...` pasan.

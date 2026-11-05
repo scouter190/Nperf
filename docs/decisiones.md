@@ -96,4 +96,7 @@
 - Comandos y flags en inglés (`-port`, `-key`, `-proto tcp|udp|both`, `-direction fwd|rev|both`, `-duration`, `-streams`, `-udp-rate`, `-json`); mensajes al usuario en español.
 - Sentido en CLI: `fwd` (A → B), `rev` (B → A), `both` (default).
 - La clave nunca viaja en claro por el canal de control.
-- Validación: throughput TCP a ≤10 % de iperf3 en la misma red cableada.
+- Validación: throughput TCP dentro de ±10 % de iperf3 en la misma red cableada.
+- Puerto por defecto 5300 (no 5201, para convivir con iperf3).
+- UDP sin TCP previo (`-proto udp` sin `-udp-rate`): 100 Mbps.
+- Cola: máximo 5 en espera; el siguiente se rechaza con "cola llena"; el cliente cancela con Ctrl+C.

@@ -3,7 +3,7 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 1 - Spec 001 escrita, esperando aprobación del usuario.** Sin código todavía.
+**Fase 1 - Spec 001 completa, sin preguntas abiertas; esperando aprobación del usuario.** Sin código todavía.
 
 ## Hecho
 - Alcance y decisiones de v1 en `docs/decisiones.md` (incluye sección 16 de la spec 001).
@@ -13,15 +13,11 @@
 ## Spec activa
 `specs/001-medidor-par/` - solo `spec.md`. Plan y tareas tras la aprobación.
 
-## Preguntas abiertas (spec 001)
-1. Puerto por defecto: propuesta 5300 (no 5201, para convivir con iperf3).
-2. Tasa UDP con `-proto udp` sin TCP previo: propuesta 100 Mbps.
-3. Cola: propuesta máximo 5 en espera; A cancela con Ctrl+C.
-4. ~~Idioma de comandos~~: resuelto, en inglés (`server`, `client`, `-direction`).
-5. Tolerancia frente a iperf3: propuesta ±10 %.
+## Decisiones cerradas (spec 001)
+Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 (6.º rechazado) · ±10 % vs iperf3 · CLI en inglés.
 
 ## Próximo paso
-1. El usuario responde las preguntas y aprueba la spec.
+1. El usuario aprueba la spec 001.
 2. `planner` escribe `plan.md` y `tasks.md`; `implementer` empieza por T1.
 
 ## Pendientes
