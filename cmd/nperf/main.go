@@ -15,6 +15,7 @@ import (
 
 	"nperf/internal/client"
 	"nperf/internal/config"
+	"nperf/internal/netutil"
 	"nperf/internal/proto"
 	"nperf/internal/report"
 	"nperf/internal/server"
@@ -224,8 +225,8 @@ func runServer(ctx context.Context, args []string) int {
 	if k == "" {
 		fmt.Fprintln(stderr, "aviso: sin clave, cualquiera puede usar este servidor")
 	}
-	lc := net.ListenConfig{KeepAlive: 15 * time.Second} // detecta clientes en cola con la conexión caída
-	ln, err := lc.Listen(ctx, "tcp", ":"+strconv.Itoa(*port))
+	// keepalive: detecta clientes en cola con la conexión caída
+	ln, err := netutil.Listen(ctx, ":"+strconv.Itoa(*port), 15*time.Second)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return exitError

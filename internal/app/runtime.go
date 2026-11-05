@@ -11,6 +11,7 @@ import (
 
 	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/netutil"
 	"nperf/internal/server"
 )
 
@@ -104,8 +105,7 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 		}
 	}
 	if ln == nil {
-		lc := net.ListenConfig{KeepAlive: 15 * time.Second}
-		ln, err = lc.Listen(context.Background(), "tcp", ":"+strconv.Itoa(mport))
+		ln, err = netutil.Listen(context.Background(), ":"+strconv.Itoa(mport), 15*time.Second)
 		if err != nil {
 			closeAll()
 			return nil, fmt.Errorf("el puerto %d ya está en uso: ¿hay otra instancia de NPerf o iperf? (%v)", mport, err)
@@ -113,14 +113,14 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 	}
 	if uc == nil {
 		ta := ln.Addr().(*net.TCPAddr)
-		uc, err = net.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
+		uc, err = netutil.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
 		if err != nil {
 			closeAll()
 			return nil, fmt.Errorf("el puerto UDP %d ya está en uso: ¿hay otra instancia de NPerf o iperf? (%v)", ta.Port, err)
 		}
 	}
 	if pc == nil {
-		pc, err = net.ListenPacket("udp4", ":"+strconv.Itoa(dport))
+		pc, err = netutil.ListenPacket("udp4", ":"+strconv.Itoa(dport))
 		if err != nil {
 			closeAll()
 			return nil, fmt.Errorf("el puerto de descubrimiento %d ya está en uso: ¿hay otra instancia de NPerf? (%v)", dport, err)

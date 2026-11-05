@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"nperf/internal/meter"
+	"nperf/internal/netutil"
 	"nperf/internal/proto"
 )
 
@@ -93,7 +94,7 @@ func (s *Server) startUDP(ctx context.Context, ln net.Listener) error {
 	uc := s.udpConn
 	if uc == nil {
 		var err error
-		uc, err = net.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
+		uc, err = netutil.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
 		if err != nil {
 			return err
 		}

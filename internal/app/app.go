@@ -120,6 +120,7 @@ type App struct {
 	test      TestState
 	gen       int                // identifica la prueba vigente
 	cancel    context.CancelFunc // nil si no hay prueba en curso
+	testHook  func()             // solo pruebas: se llama en la goroutine de la prueba antes de fijar el estado final
 	testDone  chan struct{}      // se cierra al terminar la goroutine de la prueba
 }
 

@@ -174,6 +174,8 @@ func TestStartTestQueuedAndCancel(t *testing.T) {
 func TestStartTestCancelRunning(t *testing.T) {
 	e := newTestEnv(t, "k", "k", false)
 	e.a.duration = 30
+	release := make(chan struct{})
+	e.a.testHook = func() { <-release } // mantiene "cancelando" hasta que el test lo libere
 	if err := e.a.StartTest(); err != nil {
 		t.Fatal(err)
 	}
@@ -184,14 +186,13 @@ func TestStartTestCancelRunning(t *testing.T) {
 		t.Fatalf("CancelTest bloqueó %v", d)
 	}
 	s := e.a.State()
-	if s.Test.Status == TestCancelling {
-		if !s.Test.Running || s.CanTest || !strings.Contains(s.TestBlocked, "cancelando") || s.Test.Label != "Cancelando…" {
-			t.Fatalf("cancelando: %+v", s)
-		}
-		if err := e.a.StartTest(); err == nil {
-			t.Fatal("no debe iniciar durante cancelando")
-		}
+	if s.Test.Status != TestCancelling || !s.Test.Running || s.CanTest || !strings.Contains(s.TestBlocked, "cancelando") || s.Test.Label != "Cancelando…" {
+		t.Fatalf("cancelando: %+v", s)
 	}
+	if err := e.a.StartTest(); err == nil {
+		t.Fatal("no debe iniciar durante cancelando")
+	}
+	close(release)
 	if !e.a.WaitTest(10 * time.Second) {
 		t.Fatal("goroutine colgada")
 	}

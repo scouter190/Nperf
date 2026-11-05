@@ -67,6 +67,9 @@ func (a *App) StartTest() error {
 			rp = report.Build(report.Params{Host: p.IP.String(), Port: port, Proto: proto.ProtoBoth,
 				Direction: dir, Duration: o.Duration, Streams: o.Streams, Version: version.Current}, res)
 		}
+		if a.testHook != nil {
+			a.testHook()
+		}
 		a.mu.Lock()
 		if a.gen == gen && a.test.Running {
 			switch {
