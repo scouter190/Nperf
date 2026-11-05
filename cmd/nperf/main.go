@@ -67,7 +67,7 @@ func runClient(ctx context.Context, args []string) int {
 	key := fs.String("key", "", "shared key (empty = no key; both sides must then be empty)")
 	protoName := fs.String("proto", "tcp", "protocolo: tcp o udp")
 	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M")
-	direction := fs.String("direction", "fwd", "sentido: fwd")
+	direction := fs.String("direction", "both", "sentido: fwd, rev o both")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -83,8 +83,8 @@ func runClient(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "error: falta el host. Uso: nperf client <host>")
 		return 2
 	}
-	if *direction != "fwd" {
-		fmt.Fprintf(os.Stderr, "error: el sentido %q aún no está disponible; solo fwd\n", *direction)
+	if *direction != "fwd" && *direction != "rev" && *direction != "both" {
+		fmt.Fprintf(os.Stderr, "error: sentido desconocido %q; use fwd, rev o both\n", *direction)
 		return 2
 	}
 	if *protoName == "both" {
@@ -113,17 +113,27 @@ func runClient(ctx context.Context, args []string) int {
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
 	fmt.Printf("Midiendo %s hacia %s durante %d s...\n", strings.ToUpper(*protoName), addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, UDPRate: rate, Key: *key})
+	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: *key})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	if u := res.UDP; u != nil {
-		fmt.Printf("UDP fwd (cliente -> servidor): enviado %.1f Mbps, recibido %.1f Mbps, jitter %.3f ms, pérdida %.2f %% (%d de %d datagramas)\n",
-			u.SentMbps, res.Mbps, u.JitterMS, u.LossPct, u.Lost, u.Expected)
-		return 0
-	}
-	fmt.Printf("TCP fwd (cliente -> servidor): %.1f Mbps (%d bytes en %.1f s)\n",
-		res.Mbps, res.Received.Bytes, res.Received.Elapsed.Seconds())
+	printDir(*protoName, "fwd", "cliente -> servidor", res.Fwd)
+	printDir(*protoName, "rev", "servidor -> cliente", res.Rev)
 	return 0
+}
+
+func printDir(proto, dir, label string, d client.Dir) {
+	name := strings.ToUpper(proto)
+	if !d.Measured {
+		fmt.Printf("%s %s (%s): no medido\n", name, dir, label)
+		return
+	}
+	if u := d.UDP; u != nil {
+		fmt.Printf("%s %s (%s): enviado %.1f Mbps, recibido %.1f Mbps, jitter %.3f ms, pérdida %.2f %% (%d de %d datagramas)\n",
+			name, dir, label, u.SentMbps, d.Mbps, u.JitterMS, u.LossPct, u.Lost, u.Expected)
+		return
+	}
+	fmt.Printf("%s %s (%s): %.1f Mbps (%d bytes en %.1f s)\n",
+		name, dir, label, d.Mbps, d.Received.Bytes, d.Received.Elapsed.Seconds())
 }

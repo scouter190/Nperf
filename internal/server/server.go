@@ -153,11 +153,15 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		fail("se esperaban parámetros")
 		return
 	}
-	if p.Proto == proto.ProtoUDP && p.Direction == proto.DirFwd {
+	if p.Direction != proto.DirFwd && p.Direction != proto.DirRev {
+		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
+		return
+	}
+	if p.Proto == proto.ProtoUDP {
 		s.controlUDP(ctx, codec, id, p)
 		return
 	}
-	if p.Proto != proto.ProtoTCP || p.Direction != proto.DirFwd {
+	if p.Proto != proto.ProtoTCP {
 		fail(fmt.Sprintf("modo no soportado: %s/%s", p.Proto, p.Direction))
 		return
 	}
@@ -167,6 +171,23 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 	d := time.Duration(p.DurationMS) * time.Millisecond
 	select {
 	case dc := <-ch:
+		if p.Direction == proto.DirRev {
+			sctx, stopWatch := s.watchControl(ctx, codec)
+			res, err := meter.SendTCP(sctx, dc.conn, d)
+			cancelled := sctx.Err() != nil
+			stopWatch()
+			close(dc.done)
+			if cancelled {
+				return // servidor cancelado o cliente desconectado
+			}
+			if err != nil {
+				fail("error de envío: " + err.Error())
+				return
+			}
+			codec.Write(proto.Message{Type: proto.TypeResult, Bytes: res.Bytes,
+				DurationMS: res.Elapsed.Milliseconds(), Mbps: res.Mbps()})
+			return
+		}
 		dc.conn.SetReadDeadline(time.Now().Add(d + margin))
 		res, err := meter.ReceiveTCP(dc.r)
 		close(dc.done)
@@ -180,4 +201,17 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		fail("no llegó la conexión de datos")
 	case <-ctx.Done():
 	}
+}
+
+// watchControl devuelve un contexto que se cancela si ctx se cancela o el cliente cierra el
+// canal de control (en rev el cliente no envía nada más tras params). stop libera el contexto.
+func (s *Server) watchControl(ctx context.Context, codec *proto.Codec) (context.Context, func()) {
+	sctx, cancel := context.WithCancel(ctx)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		codec.Read() // vuelve al cerrarse la conexión (handle la cierra al terminar)
+		cancel()
+	}()
+	return sctx, cancel
 }

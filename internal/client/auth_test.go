@@ -36,6 +36,15 @@ type logSink struct {
 func (l *logSink) add(m string) { l.mu.Lock(); l.b = append(l.b, m); l.mu.Unlock() }
 func (l *logSink) all() string  { l.mu.Lock(); defer l.mu.Unlock(); return strings.Join(l.b, "\n") }
 
+// waitFor sondea el log hasta 1 s: el server responde al cliente antes de registrar.
+func (l *logSink) waitFor(sub string) string {
+	deadline := time.Now().Add(time.Second)
+	for !strings.Contains(l.all(), sub) && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	return l.all()
+}
+
 func TestKeyOK(t *testing.T) {
 	addr := startWith(t, server.WithKey("secreto"))
 	res, err := client.Run(context.Background(), addr, client.Options{Duration: 200 * time.Millisecond, Key: "secreto"})
@@ -55,8 +64,8 @@ func TestWrongKeyNoLoad(t *testing.T) {
 		if res.Sent.Bytes != 0 || res.Mbps != 0 {
 			t.Errorf("%s: hubo carga: %+v", p, res)
 		}
-		if !strings.Contains(log.all(), "clave incorrecta") {
-			t.Errorf("%s: el servidor no registró el fallo: %q", p, log.all())
+		if got := log.waitFor("clave incorrecta"); !strings.Contains(got, "clave incorrecta") {
+			t.Errorf("%s: el servidor no registró el fallo: %q", p, got)
 		}
 	}
 }
@@ -158,8 +167,8 @@ func TestMajorVersionMismatch(t *testing.T) {
 		if res.Sent.Bytes != 0 || res.Mbps != 0 {
 			t.Errorf("%s: se midió: %+v", p, res)
 		}
-		if !strings.Contains(log.all(), "versión incompatible") {
-			t.Errorf("%s: sin aviso en el servidor: %q", p, log.all())
+		if got := log.waitFor("versión incompatible"); !strings.Contains(got, "versión incompatible") {
+			t.Errorf("%s: sin aviso en el servidor: %q", p, got)
 		}
 	}
 }

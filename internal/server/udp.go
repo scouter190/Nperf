@@ -29,6 +29,7 @@ type udpState struct {
 // udpSession es el lector virtual de los datagramas de una sesión (cumple meter.PacketReader).
 type udpSession struct {
 	addr     netip.AddrPort
+	ready    chan struct{} // se cierra al asociar la dirección del cliente
 	q        chan []byte
 	wake     chan struct{}
 	mu       sync.Mutex
@@ -132,6 +133,7 @@ func (s *Server) dispatchUDP(uc *net.UDPConn) {
 				case !sess.addr.IsValid(): // primera asociación
 					sess.addr = ap
 					s.udp.byAddr[ap] = sess
+					close(sess.ready)
 					ok = true
 				case sess.addr == ap: // reintento legítimo
 					ok = true
@@ -158,13 +160,59 @@ func isClosed(err error) bool {
 	return err != nil && (errors.Is(err, net.ErrClosed))
 }
 
+// udpWriter envía datagramas a la dirección asociada de la sesión.
+type udpWriter struct {
+	c *net.UDPConn
+	a netip.AddrPort
+}
+
+func (w udpWriter) Write(b []byte) (int, error) { return w.c.WriteToUDPAddrPort(b, w.a) }
+
+// sendUDPRev envía a la tasa pedida una vez que el saludo UDP del cliente asoció su dirección.
+func (s *Server) sendUDPRev(ctx context.Context, codec *proto.Codec, sess *udpSession, p proto.Message, d time.Duration) {
+	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
+	rate := p.RateBps
+	if rate == 0 {
+		rate = 100e6
+	}
+	if rate < 8*meter.DefaultUDPSize {
+		fail("tasa UDP inválida")
+		return
+	}
+	sctx, stopWatch := s.watchControl(ctx, codec)
+	defer stopWatch()
+	t := time.NewTimer(d + margin)
+	defer t.Stop()
+	select {
+	case <-sess.ready:
+	case <-t.C:
+		fail("no llegó el saludo UDP")
+		return
+	case <-sctx.Done():
+		return
+	}
+	s.udp.mu.Lock()
+	uc, addr := s.udp.conn, sess.addr
+	s.udp.mu.Unlock()
+	st, err := meter.SendUDP(sctx, udpWriter{uc, addr}, rate, meter.DefaultUDPSize, d)
+	if sctx.Err() != nil {
+		return
+	}
+	if err != nil {
+		fail("error de envío: " + err.Error())
+		return
+	}
+	codec.Write(proto.Message{Type: proto.TypeResult, Bytes: st.Bytes, DurationMS: st.Elapsed.Milliseconds(),
+		Mbps: st.Mbps(), Packets: st.Packets})
+}
+
 func (s *Server) controlUDP(ctx context.Context, codec *proto.Codec, id string, p proto.Message) {
 	fail := func(msg string) { codec.Write(proto.Message{Type: proto.TypeError, Error: msg}) }
 	s.udp.mu.Lock()
 	ready := s.udp.conn != nil
 	var sess *udpSession
 	if ready {
-		sess = &udpSession{q: make(chan []byte, udpQueue), wake: make(chan struct{}, 1)}
+		sess = &udpSession{q: make(chan []byte, udpQueue), wake: make(chan struct{}, 1), ready: make(chan struct{})}
 		s.udp.byID[id] = sess
 	}
 	s.udp.mu.Unlock()
@@ -184,6 +232,10 @@ func (s *Server) controlUDP(ctx context.Context, codec *proto.Codec, id string, 
 		return
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
+	if p.Direction == proto.DirRev {
+		s.sendUDPRev(ctx, codec, sess, p, d)
+		return
+	}
 	rctx, cancel := context.WithTimeout(ctx, d+margin)
 	defer cancel()
 	sess.SetReadDeadline(time.Now().Add(d + margin))

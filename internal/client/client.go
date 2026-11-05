@@ -21,11 +21,12 @@ const udpMagic = "NPUDP1 "
 const margin = 10 * time.Second
 
 type Options struct {
-	Duration time.Duration
-	Proto    string  // "tcp" (por defecto) o "udp"
-	UDPRate  float64 // bps; 0 = DefaultUDPRate
-	Key      string  // clave compartida; vacía solo es válida si el servidor tampoco tiene
-	Version  string  // vacío = version.Current (se cambia solo en pruebas)
+	Duration  time.Duration // por sentido
+	Proto     string        // "tcp" (por defecto) o "udp"
+	Direction string        // "fwd" (por defecto), "rev" o "both" (fwd y luego rev)
+	UDPRate   float64       // bps; 0 = DefaultUDPRate
+	Key       string        // clave compartida; vacía solo es válida si el servidor tampoco tiene
+	Version   string        // vacío = version.Current (se cambia solo en pruebas)
 }
 
 // DefaultUDPRate es la tasa UDP cuando no hay TCP previo: 100 Mbps.
@@ -33,7 +34,7 @@ const DefaultUDPRate = 100e6
 
 // UDPResult son las métricas UDP de una prueba.
 type UDPResult struct {
-	SentMbps float64 // tasa enviada por el cliente
+	SentMbps float64 // tasa enviada por el emisor
 	Packets  int64   // datagramas enviados
 	Expected int64
 	Lost     int64
@@ -41,16 +42,65 @@ type UDPResult struct {
 	JitterMS float64
 }
 
-type Result struct {
-	Sent     meter.Result // lo enviado por el cliente
-	Received meter.Result // lo que midió el servidor
-	Mbps     float64      // lo medido por el servidor
+// Dir es el resultado de un sentido. Measured=false significa "no medido" (no se pidió),
+// distinto de una medición de 0.
+type Dir struct {
+	Measured bool
+	Sent     meter.Result // lo enviado por el emisor
+	Received meter.Result // lo que midió el receptor
+	Mbps     float64      // lo medido por el receptor
 	UDP      *UDPResult
 }
 
-// Run mide un flujo TCP o UDP fwd (cliente -> servidor).
+// Result representa ambos sentidos. Fwd es cliente -> servidor y Rev servidor -> cliente.
+// Sent, Received, Mbps y UDP repiten el primer sentido medido (atajo para pruebas de un solo sentido).
+type Result struct {
+	Fwd, Rev Dir
+	Sent     meter.Result
+	Received meter.Result
+	Mbps     float64
+	UDP      *UDPResult
+}
+
+func (r *Result) set(dir string, d Dir) {
+	first := !r.Fwd.Measured && !r.Rev.Measured
+	if dir == proto.DirRev {
+		r.Rev = d
+	} else {
+		r.Fwd = d
+	}
+	if first {
+		r.Sent, r.Received, r.Mbps, r.UDP = d.Sent, d.Received, d.Mbps, d.UDP
+	}
+}
+
+// Run mide TCP o UDP en el sentido pedido. En both hace fwd y luego rev, cada uno con la
+// duración completa y su propia sesión autenticada.
 func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	var res Result
+	var dirs []string
+	switch o.Direction {
+	case "", proto.DirFwd:
+		dirs = []string{proto.DirFwd}
+	case proto.DirRev:
+		dirs = []string{proto.DirRev}
+	case proto.DirBoth:
+		dirs = []string{proto.DirFwd, proto.DirRev}
+	default:
+		return res, fmt.Errorf("sentido no soportado: %q", o.Direction)
+	}
+	for _, dir := range dirs {
+		d, err := runDir(ctx, addr, o, dir)
+		if err != nil {
+			return res, err
+		}
+		res.set(dir, d)
+	}
+	return res, nil
+}
+
+func runDir(ctx context.Context, addr string, o Options, dir string) (Dir, error) {
+	var res Dir
 	var dialer net.Dialer
 	cc, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -77,8 +127,16 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	if o.Proto != proto.ProtoTCP && o.Proto != proto.ProtoUDP {
 		return res, fmt.Errorf("protocolo no soportado: %q", o.Proto)
 	}
-	if err := codec.Write(proto.Message{Type: proto.TypeParams, Proto: o.Proto,
-		Direction: proto.DirFwd, DurationMS: o.Duration.Milliseconds(), Streams: 1}); err != nil {
+	rate := o.UDPRate
+	if rate == 0 {
+		rate = DefaultUDPRate
+	}
+	params := proto.Message{Type: proto.TypeParams, Proto: o.Proto,
+		Direction: dir, DurationMS: o.Duration.Milliseconds(), Streams: 1}
+	if o.Proto == proto.ProtoUDP && dir == proto.DirRev {
+		params.RateBps = rate
+	}
+	if err := codec.Write(params); err != nil {
 		return res, err
 	}
 	if _, err := expect(codec, proto.TypeStart); err != nil {
@@ -86,7 +144,7 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	}
 
 	if o.Proto == proto.ProtoUDP {
-		return runUDP(ctx, &dialer, addr, codec, session, o, res)
+		return runUDP(ctx, &dialer, addr, codec, session, o, rate, dir)
 	}
 	dc, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -98,6 +156,22 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	if err := proto.NewCodec(dc).Write(proto.Message{Type: proto.TypeData, Session: session}); err != nil {
 		return res, err
 	}
+	if dir == proto.DirRev {
+		dc.SetReadDeadline(time.Now().Add(o.Duration + margin))
+		rr, err := meter.ReceiveTCP(dc)
+		if ctx.Err() != nil {
+			return res, ctx.Err()
+		}
+		if err != nil {
+			return res, err
+		}
+		r, err := expect(codec, proto.TypeResult)
+		if err != nil {
+			return res, err
+		}
+		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(),
+			Sent: meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}}, nil
+	}
 	res.Sent, err = meter.SendTCP(ctx, dc, o.Duration)
 	if err != nil {
 		return res, err
@@ -106,6 +180,7 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 	if err != nil {
 		return res, err
 	}
+	res.Measured = true
 	res.Received = meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}
 	res.Mbps = r.Mbps
 	return res, nil
@@ -125,11 +200,8 @@ func expect(c *proto.Codec, typ string) (proto.Message, error) {
 	return m, nil
 }
 
-func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.Codec, session string, o Options, res Result) (Result, error) {
-	rate := o.UDPRate
-	if rate == 0 {
-		rate = DefaultUDPRate
-	}
+func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.Codec, session string, o Options, rate float64, dir string) (Dir, error) {
+	var res Dir
 	uc, err := dialer.DialContext(ctx, "udp", addr)
 	if err != nil {
 		return res, fmt.Errorf("no se pudo abrir el socket UDP: %w", err)
@@ -140,6 +212,27 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.C
 	if err := greetUDP(ctx, uc, session); err != nil {
 		return res, err
 	}
+	if dir == proto.DirRev {
+		uc.SetReadDeadline(time.Now().Add(o.Duration + margin))
+		st, err := meter.ReceiveUDP(ctx, uc, time.Second)
+		if ctx.Err() != nil {
+			return res, ctx.Err()
+		}
+		if err != nil {
+			return res, err
+		}
+		if st.Received == 0 {
+			return res, fmt.Errorf("no llegaron datagramas UDP del servidor")
+		}
+		r, err := expect(codec, proto.TypeResult)
+		if err != nil {
+			return res, err
+		}
+		return Dir{Measured: true, Received: st.Result, Mbps: st.Mbps(),
+			Sent: meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond},
+			UDP: &UDPResult{SentMbps: r.Mbps, Packets: r.Packets, Expected: st.Expected, Lost: st.Lost,
+				LossPct: st.LossPercent(), JitterMS: float64(st.Jitter) / float64(time.Millisecond)}}, nil
+	}
 	st, err := meter.SendUDP(ctx, uc, rate, meter.DefaultUDPSize, o.Duration)
 	if err != nil {
 		return res, err
@@ -149,6 +242,7 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.C
 	if err != nil {
 		return res, err
 	}
+	res.Measured = true
 	res.Received = meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}
 	res.Mbps = r.Mbps
 	res.UDP = &UDPResult{SentMbps: st.Mbps(), Packets: st.Packets, Expected: r.Expected,

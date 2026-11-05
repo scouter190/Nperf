@@ -30,6 +30,8 @@ const (
 	ProtoTCP = "tcp"
 	ProtoUDP = "udp"
 	DirFwd   = "fwd"
+	DirRev   = "rev"
+	DirBoth  = "both" // solo en el cliente: dos pruebas, fwd y luego rev
 )
 
 // Message es el mensaje único del canal; cada tipo usa solo sus campos.
@@ -43,6 +45,8 @@ type Message struct {
 	Direction  string  `json:"direction,omitempty"`
 	DurationMS int64   `json:"duration_ms,omitempty"`
 	Streams    int     `json:"streams,omitempty"`
+	RateBps    float64 `json:"rate_bps,omitempty"` // UDP rev: tasa que debe enviar el servidor
+	Packets    int64   `json:"packets,omitempty"`  // rev: datagramas enviados por el servidor
 	Bytes      int64   `json:"bytes,omitempty"`
 	Mbps       float64 `json:"mbps,omitempty"`
 	Error      string  `json:"error,omitempty"`
