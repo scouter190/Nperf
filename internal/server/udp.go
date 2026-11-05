@@ -90,9 +90,13 @@ func (s *Server) startUDP(ctx context.Context, ln net.Listener) error {
 	if !ok {
 		return nil
 	}
-	uc, err := net.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
-	if err != nil {
-		return err
+	uc := s.udpConn
+	if uc == nil {
+		var err error
+		uc, err = net.ListenUDP("udp", &net.UDPAddr{IP: ta.IP, Port: ta.Port, Zone: ta.Zone})
+		if err != nil {
+			return err
+		}
 	}
 	uc.SetReadBuffer(4 << 20)
 	s.udp.mu.Lock()

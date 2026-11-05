@@ -10,6 +10,7 @@ import (
 
 	"nperf/internal/proto"
 	"nperf/internal/server"
+	"nperf/internal/testutil"
 	"nperf/internal/version"
 )
 
@@ -29,15 +30,12 @@ func (l *countLn) Accept() (net.Conn, error) {
 
 func startCounting(t *testing.T) (*countLn, func()) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := server.New()
+	ln, uc := testutil.Listen(t)
+	srv := server.New(server.WithUDPConn(uc))
 	cl := &countLn{Listener: ln, srv: srv}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { srv.Serve(ctx, cl); close(done) }()
+	go func() { testutil.ServeErr(t, ctx, srv.Serve(ctx, cl)); close(done) }()
 	return cl, func() { cancel(); <-done }
 }
 

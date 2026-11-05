@@ -8,6 +8,7 @@ import (
 
 	"nperf/internal/proto"
 	"nperf/internal/server"
+	"nperf/internal/testutil"
 	"nperf/internal/version"
 )
 
@@ -15,11 +16,10 @@ import (
 func TestParamsTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	go server.New(server.WithHandshakeTimeout(300*time.Millisecond)).Serve(ctx, ln)
+	ln, uc := testutil.Listen(t)
+	go func() {
+		testutil.ServeErr(t, ctx, server.New(server.WithHandshakeTimeout(300*time.Millisecond), server.WithUDPConn(uc)).Serve(ctx, ln))
+	}()
 	c, err := net.Dial("tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)

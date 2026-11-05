@@ -17,6 +17,7 @@ import (
 )
 
 type Server struct {
+	udpConn  *net.UDPConn // opcional: socket UDP preabierto (WithUDPConn)
 	mu       sync.Mutex
 	sessions map[string]*session
 	conns    map[net.Conn]struct{}
@@ -38,6 +39,10 @@ func WithKey(k string) Option { return func(s *Server) { s.key = k } }
 
 // WithLog fija dónde se registran avisos (versión incompatible, clave incorrecta).
 func WithLog(f func(string)) Option { return func(s *Server) { s.logf = f } }
+
+// WithUDPConn entrega al server un socket UDP ya abierto (mismo puerto que el listener TCP)
+// en lugar de abrirlo en Serve. Sin esta opción, Serve lo abre por su cuenta.
+func WithUDPConn(uc *net.UDPConn) Option { return func(s *Server) { s.udpConn = uc } }
 
 // WithHandshakeTimeout fija el plazo total del handshake (por defecto 10 s).
 func WithHandshakeTimeout(d time.Duration) Option { return func(s *Server) { s.hsWait = d } }

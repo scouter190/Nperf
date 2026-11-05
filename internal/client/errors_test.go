@@ -9,18 +9,19 @@ import (
 	"nperf/internal/client"
 	"nperf/internal/proto"
 	"nperf/internal/server"
+	"nperf/internal/testutil"
 	"nperf/internal/version"
 )
 
 func start(t *testing.T) (string, context.CancelFunc, chan struct{}) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, uc := testutil.Listen(t)
 	done := make(chan struct{})
-	go func() { server.New().Serve(ctx, ln); close(done) }()
+	go func() {
+		testutil.ServeErr(t, ctx, server.New(server.WithUDPConn(uc)).Serve(ctx, ln))
+		close(done)
+	}()
 	return ln.Addr().String(), cancel, done
 }
 

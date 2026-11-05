@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net"
+	"nperf/internal/testutil"
 	"testing"
 	"time"
 
@@ -13,13 +14,10 @@ import (
 func startTest(t *testing.T) (*Server, *net.TCPAddr) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New()
+	ln, uc := testutil.Listen(t)
+	s := New(WithUDPConn(uc))
 	done := make(chan struct{})
-	go func() { s.Serve(ctx, ln); close(done) }()
+	go func() { testutil.ServeErr(t, ctx, s.Serve(ctx, ln)); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
 	return s, ln.Addr().(*net.TCPAddr)
 }

@@ -3,6 +3,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -37,6 +38,38 @@ type Options struct {
 	// HandshakeWait es el plazo de conexión, handshake y obtención de turno cuando no hay cola
 	// (0 = 10 s). La espera en cola no cuenta.
 	HandshakeWait time.Duration
+	// DialTimeout acota cada conexión TCP (control y datos); 0 = 5 s.
+	DialTimeout time.Duration
+	// DialContext reemplaza al marcado TCP (pruebas); nil = net.Dialer.
+	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// errDialTimeout marca el vencimiento del plazo de conexión (el mensaje ya trae host y puerto).
+type errDialTimeout struct{ addr string }
+
+func (e errDialTimeout) Error() string {
+	return fmt.Sprintf("no se pudo conectar a %s (tiempo agotado)", e.addr)
+}
+
+const defaultDialTimeout = 5 * time.Second
+
+// dialTCP conecta con plazo propio; si vence, el error lo dice en claro.
+func dialTCP(ctx context.Context, o *Options, addr string) (net.Conn, error) {
+	d := o.DialTimeout
+	if d == 0 {
+		d = defaultDialTimeout
+	}
+	dctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	dial := o.DialContext
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
+	c, err := dial(dctx, "tcp", addr)
+	if err != nil && ctx.Err() == nil && dctx.Err() != nil {
+		return nil, errDialTimeout{addr}
+	}
+	return c, err
 }
 
 // ValidateStreams comprueba el número de flujos (1-proto.MaxStreams).
@@ -260,8 +293,11 @@ func openSession(ctx context.Context, addr string, o *Options) (*sess, error) {
 	if hs == 0 {
 		hs = 10 * time.Second
 	}
-	cc, err := s.dialer.DialContext(ctx, "tcp", addr)
+	cc, err := dialTCP(ctx, o, addr)
 	if err != nil {
+		if errors.As(err, new(errDialTimeout)) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("no se pudo conectar a %s: %w", addr, err)
 	}
 	s.cc = cc
@@ -345,7 +381,7 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	stopData := context.AfterFunc(ctx, closeAll)
 	defer stopData()
 	for i := 0; i < o.Streams; i++ {
-		dc, err := dialer.DialContext(ctx, "tcp", addr)
+		dc, err := dialTCP(ctx, &o, addr)
 		if err != nil {
 			if ctx.Err() != nil {
 				return res, ctx.Err()

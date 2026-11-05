@@ -22,6 +22,8 @@
 - Reloj: `internal/hrtime` (QPC en Windows) para RTT y jitter UDP.
 - Arreglos Windows: TCP fin por reloj entre escrituras + deadline end+2 s; UDP ráfaga acotada con deuda máx. 20 ms.
 - Tests con `-race`: integración TCP/UDP en loopback, cola (7 clientes, FIFO, cancelación), errores, unitarios.
+- Cliente: timeout de conexión 5 s para control y datos (`Options.DialTimeout`/`DialContext`, error tipado `errDialTimeout`, "tiempo agotado").
+- Tests: `server.WithUDPConn` (socket UDP preabierto) e `internal/testutil` (`Listen` TCP+UDP mismo puerto, `ServeErr`). Motivo: fallo CI Windows en TestMinorVersionCompatible (UDP ocupado en el puerto efímero; causa por análisis de código, no reproducida en Linux).
 - CI (`.github/workflows/ci.yml`): windows-latest vet/test/build + artefacto `nperf.exe`; ubuntu `-race`. LF forzado. Guía Windows: `docs/entorno-local.md`.
 
 ## Decisiones cerradas (spec 001)
@@ -36,6 +38,7 @@ T11 (CLI completa); T16 cuando el usuario lo indique.
 
 ## Pendientes
 - T11: acotar RateBps máximo del server en UDP rev (`sendUDPRev`, internal/server/udp.go); validar `-duration` 3-300 s; config local.
+- T11 (CLI): `nperf -h` sin ayuda ("comando desconocido"); ayuda de -key en inglés; "Midiendo BOTH" en la salida; aviso si no se alcanza la tasa UDP objetivo; validar -duration (0 hoy "mide" 0 Mbps).
 - T12: retirar de `client.Result` los campos duplicados Sent/Received/Mbps/UDP (usar Fwd/Rev).
 - T16 (estado del equipo, `nperf status`, criterio 14) aprobada: consulta pública en la LAN, sin clave; solo expone `state` y `queue`, antes del handshake y sin acceso a nada más.
 - Confirmar Walk como librería de interfaz.
