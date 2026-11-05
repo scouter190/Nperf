@@ -21,6 +21,7 @@ const (
 // Valores de params.
 const (
 	ProtoTCP = "tcp"
+	ProtoUDP = "udp"
 	DirFwd   = "fwd"
 )
 
@@ -36,6 +37,12 @@ type Message struct {
 	Bytes      int64   `json:"bytes,omitempty"`
 	Mbps       float64 `json:"mbps,omitempty"`
 	Error      string  `json:"error,omitempty"`
+	// Resultado UDP medido por el receptor.
+	Received int64   `json:"received,omitempty"`
+	Expected int64   `json:"expected,omitempty"`
+	Lost     int64   `json:"lost,omitempty"`
+	LossPct  float64 `json:"loss_pct,omitempty"`
+	JitterMS float64 `json:"jitter_ms,omitempty"`
 }
 
 // Codec lee y escribe mensajes por línea sobre una conexión.

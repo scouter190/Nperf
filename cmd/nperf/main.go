@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"time"
 
 	"nperf/internal/client"
@@ -59,6 +60,9 @@ func runClient(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("client", flag.ContinueOnError)
 	port := fs.Int("port", defaultPort, "puerto del servidor")
 	secs := fs.Int("duration", 10, "duración de la prueba en segundos")
+	protoName := fs.String("proto", "tcp", "protocolo: tcp o udp")
+	rateStr := fs.String("udp-rate", "", "tasa UDP (50M, 1G o bps); por defecto 100M")
+	direction := fs.String("direction", "fwd", "sentido: fwd")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -74,13 +78,42 @@ func runClient(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "error: falta el host. Uso: nperf client <host>")
 		return 2
 	}
+	if *direction != "fwd" {
+		fmt.Fprintf(os.Stderr, "error: el sentido %q aún no está disponible; solo fwd\n", *direction)
+		return 2
+	}
+	if *protoName == "both" {
+		fmt.Fprintln(os.Stderr, "error: -proto both aún no está disponible; use tcp o udp")
+		return 2
+	}
+	if *protoName != "tcp" && *protoName != "udp" {
+		fmt.Fprintf(os.Stderr, "error: protocolo desconocido %q; use tcp o udp\n", *protoName)
+		return 2
+	}
+	var rate float64
+	if *rateStr != "" {
+		if *protoName != "udp" {
+			fmt.Fprintln(os.Stderr, "error: -udp-rate solo aplica con -proto udp")
+			return 2
+		}
+		var err error
+		if rate, err = client.ParseRate(*rateStr); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 2
+		}
+	}
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
-	fmt.Printf("Midiendo TCP hacia %s durante %d s...\n", addr, *secs)
-	res, err := client.Run(ctx, addr, client.Options{Duration: dur})
+	fmt.Printf("Midiendo %s hacia %s durante %d s...\n", strings.ToUpper(*protoName), addr, *secs)
+	res, err := client.Run(ctx, addr, client.Options{Duration: dur, Proto: *protoName, UDPRate: rate})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
+	}
+	if u := res.UDP; u != nil {
+		fmt.Printf("UDP fwd (cliente -> servidor): enviado %.1f Mbps, recibido %.1f Mbps, jitter %.3f ms, pérdida %.2f %% (%d de %d datagramas)\n",
+			u.SentMbps, res.Mbps, u.JitterMS, u.LossPct, u.Lost, u.Expected)
+		return 0
 	}
 	fmt.Printf("TCP fwd (cliente -> servidor): %.1f Mbps (%d bytes en %.1f s)\n",
 		res.Mbps, res.Received.Bytes, res.Received.Elapsed.Seconds())
