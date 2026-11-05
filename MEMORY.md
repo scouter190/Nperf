@@ -3,7 +3,7 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 3 - Implementando spec 001.** T1-T10 y T14 hechas y aprobadas.
+**Fase 3 - Implementando spec 001.** T1-T10 y T14 hechas, aprobadas y en `main` (CI verde).
 
 ## Spec activa
 `specs/001-medidor-par/`: spec, `plan.md`, `tasks.md` (T11-T13, T15 y T16 pendientes; T16 aprobada).
@@ -23,14 +23,14 @@
 - Arreglos Windows: TCP fin por reloj entre escrituras + deadline end+2 s; UDP ráfaga acotada con deuda máx. 20 ms.
 - Tests con `-race`: integración TCP/UDP en loopback, cola (7 clientes, FIFO, cancelación), errores, unitarios.
 - Cliente: timeout de conexión 5 s para control y datos (`Options.DialTimeout`/`DialContext`, error tipado `errDialTimeout`, "tiempo agotado").
-- Tests: `server.WithUDPConn` (socket UDP preabierto) e `internal/testutil` (`Listen` TCP+UDP mismo puerto, `ServeErr`). Motivo: fallo CI Windows en TestMinorVersionCompatible (UDP ocupado en el puerto efímero; causa por análisis de código, no reproducida en Linux).
+- Tests: `server.WithUDPConn` (socket UDP preabierto) e `internal/testutil` (`Listen` TCP+UDP mismo puerto, `ServeErr`). Motivo: en Windows hay bloques de puertos reservados para UDP; `Listen` abre UDP primero y TCP en ese puerto (confirmado en CI).
 - CI (`.github/workflows/ci.yml`): windows-latest vet/test/build + artefacto `nperf.exe`; ubuntu `-race`. LF forzado. Guía Windows: `docs/entorno-local.md`.
 
 ## Decisiones cerradas (spec 001)
 Puerto 5300 · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI en inglés.
 
 ## Notas
-- Por decisión del usuario, no se sube nada a GitHub (ni main ni wip) hasta que él lo revise; los commits quedan locales. Desde T10 no hay CI de Windows hasta la próxima subida.
+- Subidas: regla en AGENTS.md (wip/actual -> CI Windows verde -> main, sin pedir permiso; el usuario revisa por tarea).
 - `greetTries`/`greetWait` (internal/client) son globales de test: no usar `t.Parallel` con `greetUDP`.
 
 ## Próximo paso

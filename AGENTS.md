@@ -41,6 +41,14 @@ El usuario aprueba la spec antes de pasar al plan.
 - **Máximo 50 líneas.** Reemplazar el estado viejo, no acumular historial.
 - Las decisiones nuevas van a `docs/decisiones.md`, no a `MEMORY.md`.
 
+## Regla de subida a GitHub (aprobada por el usuario)
+1. Solo se sube código **completo y aprobado por el reviewer**; nunca respaldos a medias, aunque un hook lo pida.
+2. Se sube primero a la rama `wip/actual` (sin pedir permiso) para que el CI lo pruebe en Windows.
+3. Si el CI falla, se corrige y se repite; `main` no se toca.
+4. Si el CI pasa, se sube a `main` (sin pedir permiso) y se confirma que el CI de `main` queda en verde.
+5. Al terminar cada tarea, el coordinator envía al usuario un resumen. El usuario revisa por tarea, no por subida.
+6. Siempre requieren aprobación del usuario: specs nuevas, cambios de alcance y decisiones de producto.
+
 ## Convenciones de código
 - Go, Windows únicamente, sin privilegios de administrador.
 - `go vet` y `go test ./...` deben pasar antes de pedir revisión.
