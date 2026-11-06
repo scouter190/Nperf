@@ -6,7 +6,7 @@
 **Fase 4 - Implementando spec 002 (interfaz y descubrimiento).** Spec 001 completa a falta de la validación manual del usuario (docs/validacion-iperf3.md).
 
 ## Spec activa
-`specs/002-interfaz-descubrimiento/` (T1-T15 hechas de T1-T18; T15 pendiente de validación del usuario en Windows). Spec 001: `specs/001-medidor-par/` (cerrada).
+`specs/002-interfaz-descubrimiento/` (T1-T15 hechas de T1-T18; T15 validada por el usuario en Windows). Spec 001: `specs/001-medidor-par/` (cerrada).
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -35,7 +35,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Usuario: probar nperf-gui.exe del CI (ventana, TEST!, Windows Defender). Luego T16 (bandeja), T17 (sin WebView2), T18 (validación manual).
+T16 (bandeja), T17 (sin WebView2), T18 (validación manual). Usuario: validación iperf3 de spec 001 cuando pueda.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.
