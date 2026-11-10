@@ -136,3 +136,5 @@
 - CLI: nuevo `nperf adapters [-json]`; `nperf client` sin semáforo ni datos de enlace (JSON v1 sin cambios).
 - Sin permiso de ubicación (Windows 11 24H2+): aviso con botón a Configuración › Privacidad › Ubicación.
 - Dúplex Ethernet fuera de la 003.
+- Compatibilidad (plan 003): el anuncio añade claves opcionales `link`, `tx`, `rx`, `ssid` (las versiones previas ya ignoran claves desconocidas). El resumen de enlace viaja como campo opcional `link` en `turn` (cliente) y `ready` (servidor), tras el handshake; sin campos BSSID/MAC por construcción. Par sin `link` → diagnóstico "parcial".
+- Lógica de red portable en `internal/netinfo` (fuente inyectable) y `internal/diag`; Win32 (GetAdaptersAddresses, wlanapi.dll por LazyDLL) solo en `_windows.go`.

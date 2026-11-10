@@ -1,6 +1,6 @@
 # 003 - Detección de red y cuello de botella
 
-> Pendiente de aprobación del usuario.
+> Aprobada por el usuario.
 
 ## Objetivo
 Saber por qué una prueba da lo que da: detectar las tarjetas de red de cada equipo (cable, WiFi y sus datos), mostrar el tipo de conexión de cada equipo en la lista y, tras TEST!, comparar el throughput medido con las velocidades de enlace de ambos extremos para señalar con un semáforo el tramo que limita.
