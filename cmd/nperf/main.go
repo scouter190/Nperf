@@ -50,9 +50,10 @@ Uso:
   nperf server [opciones]          inicia el servidor de medición
   nperf client <host> [opciones]   mide contra un servidor
   nperf status <host> [opciones]   consulta si el servidor está disponible u ocupado
+  nperf adapters [-json]           muestra las tarjetas de red (tipo, velocidad, WiFi)
   nperf help                       muestra esta ayuda
 
-Use "nperf server -h", "nperf client -h" o "nperf status -h" para ver las opciones de cada comando.
+Use "nperf server -h", "nperf client -h", "nperf status -h" o "nperf adapters -h" para ver las opciones de cada comando.
 La consulta de estado es pública en la red local: no usa clave y solo informa
 disponible/ocupado y cuántos clientes esperan.
 
@@ -76,6 +77,8 @@ func run(args []string) int {
 	case "-h", "-help", "--help", "help":
 		fmt.Fprint(stdout, generalHelp)
 		return exitOK
+	case "adapters":
+		return runAdapters(args[1:])
 	case "server", "client", "status":
 	default:
 		fmt.Fprintf(stderr, "comando desconocido: %s\n\n%s", args[0], generalHelp)

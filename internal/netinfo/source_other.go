@@ -16,3 +16,6 @@ func (otherSource) Adapters() ([]RawAdapter, error) {
 func (otherSource) WiFi(string) (RawWiFi, error) {
 	return RawWiFi{}, errors.New("no soportado en este sistema")
 }
+
+// System devuelve la fuente "no soportado" fuera de Windows.
+func System() Source { return otherSource{} }

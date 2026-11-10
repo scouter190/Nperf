@@ -82,3 +82,6 @@ func bytePtrToString(p *byte) string {
 	}
 	return windows.BytePtrToString(p)
 }
+
+// System devuelve la fuente real de Windows con la consulta WlanAPI incluida.
+func System() Source { return NewSystemSource(queryWiFi) }
