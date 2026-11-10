@@ -5,6 +5,9 @@ import (
 	"net"
 	"net/netip"
 	"time"
+
+	"nperf/internal/netinfo"
+	"nperf/internal/proto"
 )
 
 const (
@@ -30,9 +33,11 @@ type Beacon struct {
 	Ticks         <-chan time.Time // opcional: reloj inyectado
 	Ifaces        IfaceSource
 	Status        func() (state string, queue int) // estado actual del server
-	Send          SendFunc                         // nil = UDP real
-	Logf          func(format string, args ...any) // opcional; nil = sin log
-	Now           func() time.Time                 // opcional: reloj para limitar el log
+	// LinkFor devuelve el enlace de la interfaz con esa IP (nil o campo nil = sin campos de enlace).
+	LinkFor func(netip.Addr) *proto.Link
+	Send    SendFunc                         // nil = UDP real
+	Logf    func(format string, args ...any) // opcional; nil = sin log
+	Now     func() time.Time                 // opcional: reloj para limitar el log
 
 	lastLog map[string]time.Time
 }
@@ -102,10 +107,14 @@ func (b *Beacon) cycle() {
 		send = sendUDP
 	}
 	for _, ifc := range ifs {
-		data, err := Announce{
+		a := Announce{
 			Alias: b.Alias, IP: ifc.IP, Port: b.MeasurePort,
 			State: state, Queue: queue, InstanceID: b.InstanceID,
-		}.Marshal()
+		}
+		if b.LinkFor != nil {
+			a = a.WithLink(b.LinkFor(ifc.IP))
+		}
+		data, err := a.Marshal()
 		if err != nil {
 			continue
 		}
@@ -126,4 +135,17 @@ func sendUDP(local netip.Addr, dst netip.AddrPort, data []byte) error {
 	_ = c.SetWriteDeadline(time.Now().Add(time.Second))
 	_, err = c.Write(data)
 	return err
+}
+
+// WithLink copia al anuncio los campos públicos de l (tipo, velocidades, SSID); nil = sin cambios.
+// Marshal omite lo inválido.
+func (a Announce) WithLink(l *proto.Link) Announce {
+	if l == nil {
+		return a
+	}
+	a.Link = netinfo.Kind(l.Kind)
+	a.TxBps = l.TxBps
+	a.RxBps = l.RxBps
+	a.SSID = l.SSID
+	return a
 }

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"nperf/internal/proto"
 )
 
 func TestBroadcastAddr(t *testing.T) {
@@ -160,4 +162,63 @@ func TestBeaconLogRateLimited(t *testing.T) {
 	if logs != 2 {
 		t.Fatalf("tras un minuto logs=%d", logs)
 	}
+}
+
+func TestBeaconLinkFor(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]Announce{}
+	ifs := []Iface{
+		{Name: "a", IP: netip.MustParseAddr("192.168.1.10"), Broadcast: netip.MustParseAddr("192.168.1.255")},
+		{Name: "b", IP: netip.MustParseAddr("10.0.0.5"), Broadcast: netip.MustParseAddr("10.0.255.255")},
+		{Name: "c", IP: netip.MustParseAddr("172.16.0.5"), Broadcast: netip.MustParseAddr("172.16.255.255")},
+	}
+	ticks := make(chan time.Time)
+	b := &Beacon{
+		Alias: "pc", InstanceID: "0123456789abcdef", MeasurePort: 5300, Ticks: ticks,
+		Ifaces: func() ([]Iface, error) { return ifs, nil },
+		Status: func() (string, int) { return StateAvailable, 0 },
+		LinkFor: func(ip netip.Addr) *proto.Link {
+			switch ip.String() {
+			case "192.168.1.10":
+				return &proto.Link{Kind: "wifi", TxBps: 866e6, RxBps: 780e6, SSID: "Casa"}
+			case "10.0.0.5":
+				return &proto.Link{Kind: "eth", TxBps: 1e9, RxBps: 1e9}
+			}
+			return nil
+		},
+		Send: func(l netip.Addr, d netip.AddrPort, data []byte) error {
+			a, err := Parse(data)
+			if err != nil {
+				t.Errorf("parse: %v", err)
+			}
+			mu.Lock()
+			got[l.String()] = a
+			mu.Unlock()
+			return nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { b.Run(ctx); close(done) }()
+	cancel()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if a := got["192.168.1.10"]; a.Link != "wifi" || a.TxBps != 866e6 || a.RxBps != 780e6 || a.SSID != "Casa" {
+		t.Errorf("wifi: %+v", a)
+	}
+	if a := got["10.0.0.5"]; a.Link != "eth" || a.TxBps != 1e9 || a.SSID != "" {
+		t.Errorf("eth: %+v", a)
+	}
+	if a := got["172.16.0.5"]; a.Link != "" || a.TxBps != 0 || a.SSID != "" {
+		t.Errorf("sin enlace: %+v", a)
+	}
+	// El listener entrega los campos.
+	l := &Listener{OnAnnounce: func(a Announce, _ netip.AddrPort) {
+		if a.Link != "wifi" || a.SSID != "Casa" {
+			t.Errorf("listener: %+v", a)
+		}
+	}}
+	data, _ := got["192.168.1.10"].Marshal()
+	l.handle(data, netip.MustParseAddrPort("192.168.1.10:5301"), time.Now())
 }
