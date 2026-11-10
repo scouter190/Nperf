@@ -47,6 +47,8 @@ type Deps struct {
 	SelfState SelfState              // nil = disponible
 	Hostname  func() (string, error) // nil = os.Hostname
 	Now       func() time.Time       // nil = time.Now
+	Net       InventorySource        // inventario de red local; nil = sin datos
+	OpenURL   func(string) error     // abridor de URL (solo recibe LocationSettingsURL); nil = no disponible
 }
 
 // Device es un equipo de la lista.
@@ -58,6 +60,10 @@ type Device struct {
 	Label  string   `json:"status_label"`
 	Queue  int      `json:"queue"`
 	Port   int      `json:"port,omitempty"`
+	// Enlace: eth|wifi|other|unknown; velocidad y SSID como texto.
+	Link      string `json:"link"`
+	LinkSpeed string `json:"link_speed"`
+	SSID      string `json:"ssid,omitempty"`
 }
 
 // DirectionOption es un sentido elegible con su etiqueta.
@@ -395,7 +401,7 @@ func (a *App) State() State {
 	if a.d.SelfState != nil {
 		selfState, selfQueue = a.d.SelfState()
 	}
-	self := device(a.d.SelfID, alias, ips, peerStatus(selfState, selfQueue), selfQueue, 0)
+	self := a.selfLink(device(a.d.SelfID, alias, ips, peerStatus(selfState, selfQueue), selfQueue, 0), ips)
 
 	snap := a.d.Table.Snapshot()
 	peers := make([]Device, 0, len(snap))
@@ -405,7 +411,8 @@ func (a *App) State() State {
 		if p.Reachable {
 			st = peerStatus(p.State, p.Queue)
 		}
-		peers = append(peers, device(p.InstanceID, p.Alias, []string{p.IP.String()}, st, p.Queue, p.Port))
+		peers = append(peers, device(p.InstanceID, p.Alias, []string{p.IP.String()}, st, p.Queue, p.Port).
+			withLink(string(p.Link), p.TxBps, p.RxBps, p.SSID))
 		if p.InstanceID == sel {
 			peerAlias = p.Alias
 		}
