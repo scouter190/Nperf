@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,6 +48,9 @@ type Options struct {
 	DialTimeout time.Duration
 	// DialContext reemplaza al marcado TCP (pruebas); nil = net.Dialer.
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// LocalLink da el resumen del enlace propio para la IP local del control; se envía en
+	// "turn". nil o resultado nil = sin campo (compatible con servidores previos).
+	LocalLink func(localIP netip.Addr) *proto.Link
 }
 
 // errDialTimeout marca el vencimiento del plazo de conexión (el mensaje ya trae host y puerto).
@@ -145,6 +149,8 @@ type Result struct {
 	UDPFwd, UDPRev         Dir
 	UDPRateFwd, UDPRateRev float64
 	Notes                  []string
+	// LocalLink/RemoteLink: enlaces de este equipo y del servidor (nil = desconocido).
+	LocalLink, RemoteLink *proto.Link
 }
 
 func (r *Result) set(dir string, d Dir) {
@@ -157,8 +163,7 @@ func (r *Result) set(dir string, d Dir) {
 
 // Run mide TCP o UDP en el sentido pedido. En both hace fwd y luego rev, cada uno con la
 // duración completa, dentro de una única sesión autenticada (un solo turno del servidor).
-func Run(ctx context.Context, addr string, o Options) (Result, error) {
-	var res Result
+func Run(ctx context.Context, addr string, o Options) (res Result, err error) {
 	var dirs []string
 	switch o.Direction {
 	case "", proto.DirFwd:
@@ -184,6 +189,7 @@ func Run(ctx context.Context, addr string, o Options) (Result, error) {
 		return res, err
 	}
 	defer ss.close()
+	defer func() { res.LocalLink, res.RemoteLink = ss.local, ss.remote }()
 	if o.Proto == proto.ProtoBoth {
 		return runFull(ctx, ss, o, dirs)
 	}
@@ -279,6 +285,8 @@ type sess struct {
 	addr   string
 	dialer net.Dialer
 	stop   func() bool
+	local  *proto.Link // enlace propio enviado en turn
+	remote *proto.Link // enlace del servidor recibido en ready
 }
 
 func (s *sess) close() { s.stop(); s.cc.Close() }
@@ -310,7 +318,13 @@ func openSession(ctx context.Context, addr string, o *Options) (*sess, error) {
 	}
 	// En cola no rige ningún plazo (la espera la decide el servidor); al llegar el turno
 	// vuelven los plazos normales.
-	err = proto.ClientTurn(s.codec, func(pos int) {
+	if o.LocalLink != nil {
+		if ap, perr := netip.ParseAddrPort(cc.LocalAddr().String()); perr == nil {
+			s.local = o.LocalLink(ap.Addr().Unmap())
+		}
+	}
+	var ready proto.Message
+	ready, err = proto.ClientTurnLink(s.codec, s.local, func(pos int) {
 		cc.SetDeadline(time.Time{})
 		if o.OnQueue != nil {
 			o.OnQueue(pos)
@@ -323,6 +337,7 @@ func openSession(ctx context.Context, addr string, o *Options) (*sess, error) {
 		}
 		return nil, err
 	}
+	s.remote = ready.Link.Sanitize()
 	cc.SetDeadline(time.Now().Add(hs))
 	return s, nil
 }

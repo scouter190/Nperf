@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"unicode/utf8"
 )
 
 // Textos de error del handshake.
@@ -49,6 +50,63 @@ const (
 	MaxStreams     = 64
 )
 
+// Link resume el enlace de red de un extremo (sin BSSID ni MAC por construcción). Viaja solo
+// por el canal ya autenticado: en "turn" (cliente) y "ready" (servidor).
+type Link struct {
+	Kind      string `json:"kind,omitempty"` // eth, wifi u other; vacío = desconocido
+	TxBps     int64  `json:"tx_bps,omitempty"`
+	RxBps     int64  `json:"rx_bps,omitempty"`
+	SSID      string `json:"ssid,omitempty"`
+	Band      string `json:"band,omitempty"`
+	Standard  string `json:"standard,omitempty"`
+	SignalPct int    `json:"signal_pct,omitempty"`
+}
+
+const (
+	maxLinkBps   = int64(1e12) // 1 Tbps
+	maxLinkLabel = 16
+)
+
+func cleanText(v string, max int) string {
+	if len(v) > max {
+		return ""
+	}
+	for _, r := range v {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == utf8.RuneError {
+			return ""
+		}
+	}
+	return v
+}
+
+// Sanitize devuelve una copia validada de un enlace recibido de la red (nil -> nil): tipo
+// solo eth/wifi/other, SSID <= 32 B sin control, Band/Standard acotados, velocidades en
+// [0, 1 Tbps] y señal 0-100; lo inválido pasa a "desconocido" (vacío o 0).
+func (l *Link) Sanitize() *Link {
+	if l == nil {
+		return nil
+	}
+	o := *l
+	switch o.Kind {
+	case "eth", "wifi", "other":
+	default:
+		o.Kind = ""
+	}
+	o.SSID = cleanText(o.SSID, 32)
+	o.Band = cleanText(o.Band, maxLinkLabel)
+	o.Standard = cleanText(o.Standard, maxLinkLabel)
+	if o.TxBps < 0 || o.TxBps > maxLinkBps {
+		o.TxBps = 0
+	}
+	if o.RxBps < 0 || o.RxBps > maxLinkBps {
+		o.RxBps = 0
+	}
+	if o.SignalPct < 0 || o.SignalPct > 100 {
+		o.SignalPct = 0
+	}
+	return &o
+}
+
 // Message es el mensaje único del canal; cada tipo usa solo sus campos.
 type Message struct {
 	Type       string  `json:"type"`
@@ -75,6 +133,8 @@ type Message struct {
 	Lost     int64   `json:"lost,omitempty"`
 	LossPct  float64 `json:"loss_pct,omitempty"`
 	JitterMS float64 `json:"jitter_ms,omitempty"`
+	// Link: enlace del emisor del mensaje (solo en turn y ready; opcional).
+	Link *Link `json:"link,omitempty"`
 }
 
 // Codec lee y escribe mensajes por línea sobre una conexión.
@@ -115,27 +175,34 @@ func (c *Codec) Read() (Message, error) {
 const MaxPings = 64
 
 // ClientTurn pide turno y espera "ready". onQueue (puede ser nil) se llama con cada posición
-// en cola recibida; mientras espera no hay que aplicar plazos de lectura.
+// en cola recibida; mientras espera no hay que aplicar plazos de lectura. Devuelve el "ready".
 func ClientTurn(c *Codec, onQueue func(pos int)) error {
-	if err := c.Write(Message{Type: TypeTurn}); err != nil {
-		return err
+	_, err := ClientTurnLink(c, nil, onQueue)
+	return err
+}
+
+// ClientTurnLink es ClientTurn enviando además el enlace local (nil = sin campo) y devolviendo
+// el mensaje "ready" (su Link es el del servidor, nil si el par es de una versión previa).
+func ClientTurnLink(c *Codec, link *Link, onQueue func(pos int)) (Message, error) {
+	if err := c.Write(Message{Type: TypeTurn, Link: link}); err != nil {
+		return Message{}, err
 	}
 	for {
 		m, err := c.Read()
 		if err != nil {
-			return fmt.Errorf("canal de control cerrado: %w", err)
+			return m, fmt.Errorf("canal de control cerrado: %w", err)
 		}
 		switch m.Type {
 		case TypeReady:
-			return nil
+			return m, nil
 		case TypeQueue:
 			if onQueue != nil {
 				onQueue(m.Position)
 			}
 		case TypeError:
-			return fmt.Errorf("el servidor respondió: %s", m.Error)
+			return m, fmt.Errorf("el servidor respondió: %s", m.Error)
 		default:
-			return fmt.Errorf("mensaje inesperado %q (se esperaba %q)", m.Type, TypeReady)
+			return m, fmt.Errorf("mensaje inesperado %q (se esperaba %q)", m.Type, TypeReady)
 		}
 	}
 }

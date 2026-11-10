@@ -49,3 +49,21 @@ func TestRetransOptional(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkSanitize(t *testing.T) {
+	var nl *Link
+	if nl.Sanitize() != nil {
+		t.Fatal("nil debe seguir nil")
+	}
+	h := (&Link{Kind: "<b>", TxBps: -5, RxBps: 1 << 60, SSID: "a\x00b", Band: "0123456789abcdefX", Standard: "w\ni", SignalPct: 150}).Sanitize()
+	if *h != (Link{}) {
+		t.Fatalf("hostil no saneado: %+v", *h)
+	}
+	if (&Link{SSID: strings.Repeat("a", 33)}).Sanitize().SSID != "" {
+		t.Fatal("SSID de 33 B")
+	}
+	ok := Link{Kind: "wifi", TxBps: 1e9, RxBps: 2e9, SSID: "casa", Band: "5 GHz", Standard: "WiFi 6", SignalPct: 100}
+	if g := ok.Sanitize(); *g != ok {
+		t.Fatalf("válido alterado: %+v", *g)
+	}
+}

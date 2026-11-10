@@ -176,7 +176,11 @@ func (s *Server) acquireTurn(ctx context.Context, c net.Conn, codec *proto.Codec
 		s.turnHook(ctx)
 	}
 	c.SetReadDeadline(time.Now().Add(s.hsWait)) // plazo único hasta recibir params
-	if err := codec.Write(proto.Message{Type: proto.TypeReady}); err != nil {
+	ready := proto.Message{Type: proto.TypeReady}
+	if s.linkFn != nil {
+		ready.Link = s.linkFn(c.LocalAddr())
+	}
+	if err := codec.Write(ready); err != nil {
 		release()
 		return nil, err
 	}

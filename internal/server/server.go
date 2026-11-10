@@ -29,6 +29,7 @@ type Server struct {
 	hsWait   time.Duration
 	q        turnQueue
 	turnHook func(context.Context)
+	linkFn   func(net.Addr) *proto.Link
 }
 
 // Option configura el servidor.
@@ -55,6 +56,12 @@ func WithMaxPerIP(n int) Option { return func(s *Server) { s.q.maxPerIP = n } }
 // (sirve a las pruebas para simular sesiones lentas de forma determinista).
 func WithTurnHook(f func(context.Context)) Option { return func(s *Server) { s.turnHook = f } }
 
+// WithLinkProvider fija quién da el resumen del enlace local para la dirección local de cada
+// control (se envía en "ready"). Sin él, el servidor no envía enlace.
+func WithLinkProvider(f func(local net.Addr) *proto.Link) Option {
+	return func(s *Server) { s.linkFn = f }
+}
+
 // WithVersion reemplaza la versión anunciada (para pruebas).
 func WithVersion(v string) Option { return func(s *Server) { s.ver = v } }
 
@@ -64,10 +71,11 @@ const margin = 10 * time.Second
 // session liga las conexiones de datos a una sesión autenticada; limit es el número de
 // flujos negociado (0 hasta que llegan los params: las conexiones antes de eso se rechazan).
 type session struct {
-	mu    sync.Mutex // serializa la admisión de conexiones con el cierre de la fase
-	ch    chan dataConn
-	limit atomic.Int64
-	n     atomic.Int64
+	clientLink *proto.Link // enlace declarado por el cliente en "turn" (nil = no lo envió)
+	mu         sync.Mutex  // serializa la admisión de conexiones con el cierre de la fase
+	ch         chan dataConn
+	limit      atomic.Int64
+	n          atomic.Int64
 }
 
 type dataConn struct {
@@ -234,10 +242,12 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		return
 	}
 	c.SetReadDeadline(time.Now().Add(s.hsWait)) // plazo de la solicitud de turno
-	if m, err := codec.Read(); err != nil || m.Type != proto.TypeTurn {
+	m, err := codec.Read()
+	if err != nil || m.Type != proto.TypeTurn {
 		fail("se esperaba la solicitud de turno")
 		return
 	}
+	clientLink := m.Link.Sanitize()
 	// Solo clientes autenticados llegan a la cola. El turno se retiene hasta que termina la
 	// sesión (todas sus fases, p. ej. fwd y rev) y se libera siempre al salir.
 	release, err := s.acquireTurn(ctx, c, codec)
@@ -245,7 +255,7 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		return
 	}
 	defer release()
-	ss := &session{ch: make(chan dataConn, proto.MaxStreams)}
+	ss := &session{ch: make(chan dataConn, proto.MaxStreams), clientLink: clientLink}
 	s.mu.Lock()
 	s.sessions[id] = ss
 	s.mu.Unlock()
