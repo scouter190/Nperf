@@ -6,7 +6,7 @@
 **Fase 5 - Implementando spec 003 (detección de red y cuello de botella).** Specs 001 y 002 completas en código, a falta de validaciones manuales del usuario (docs/validacion-iperf3.md, docs/validacion-gui.md).
 
 ## Spec activa
-`specs/003-deteccion-red/` (aprobada; hechas T1-T14 de T1-T16; decisiones §18). Spec 002: código completo, T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/003-deteccion-red/` (aprobada; hechas T1-T15 de T1-T16; decisiones §18). Spec 002: código completo, T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -38,7 +38,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Spec 003: T15→T16. Usuario: validacion-gui.md y validacion-iperf3.md.
+Spec 003: T16. Usuario: validacion-gui.md y validacion-iperf3.md.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

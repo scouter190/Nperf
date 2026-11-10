@@ -4,7 +4,7 @@
 // Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
 // El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
-const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest'];
+const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings'];
 if (!window.nperf) {
   const api = {};
   NPERF_METHODS.forEach(function (m) {
@@ -49,11 +49,24 @@ function toast(msg) {
 }
 function act(p) { return Promise.resolve(p).then(poll, function (e) { toast(e); return poll(); }); }
 
+const KINDS = { eth: 'Cable (Ethernet)', wifi: 'WiFi', other: 'Otro tipo de enlace', unknown: 'Tipo de enlace desconocido' };
+function linkLine(d) {
+  const parts = [];
+  if (d.link_speed && d.link_speed !== 'no disponible') parts.push(d.link_speed);
+  if (d.ssid) parts.push(d.ssid);
+  return parts.join(' · ');
+}
+
 function deviceRow(d, selectable, selected) {
   const row = el('div', 'dev' + (selectable ? '' : ' self') + (selected ? ' sel' : '') + (d.status === 'unreachable' ? ' unreachable' : ''));
+  const kind = KINDS[d.link] ? d.link : 'unknown';
+  const ico = el('span', 'ico ' + kind); ico.title = KINDS[kind];
+  row.appendChild(ico);
   const info = el('div', 'info');
   info.appendChild(el('span', 'name', d.alias));
   info.appendChild(el('span', 'ip', (d.ips || []).join(', ')));
+  const ln = linkLine(d);
+  if (ln) info.appendChild(el('span', 'ip', ln));
   row.appendChild(info);
   row.appendChild(el('span', 'badge ' + d.status, d.status_label));
   row.tabIndex = selectable && d.status !== 'unreachable' ? 0 : -1;
@@ -160,10 +173,50 @@ function retrans(r) {
   return (r.estimated ? '~' : '') + r.count;
 }
 
+function fmtBps(n) {
+  if (!n || n <= 0) return null;
+  const u = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']; let v = Number(n), i = 0;
+  while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
+  return v.toLocaleString('es', { maximumFractionDigits: 1 }) + ' ' + u[i];
+}
+function linkText(l) {
+  if (!l) return 'enlace desconocido';
+  const parts = [KINDS[l.kind] || KINDS.unknown];
+  const tx = fmtBps(l.tx_bps), rx = fmtBps(l.rx_bps);
+  if (tx && rx && tx !== rx) parts.push('↑ ' + tx + ' / ↓ ' + rx); else if (tx || rx) parts.push(tx || rx);
+  if (l.ssid) parts.push(l.ssid);
+  return parts.join(' · ');
+}
+const SEMA = { green: 'Sin limitación detectada', amber: 'Limitación moderada', red: 'Limitación fuerte' };
+function diagnosisView(s) {
+  const dg = s.test.diagnosis;
+  const peer = s.peers.filter(function (p) { return p.id === s.selected_id; })[0];
+  const box = el('div', 'diag');
+  box.appendChild(el('h3', '', 'Diagnóstico'));
+  [['fwd', dg.fwd], ['rev', dg.rev]].forEach(function (x) {
+    if (!x[1]) return;
+    const d = x[1];
+    const color = SEMA[d.color] ? d.color : 'none';
+    const row = el('div', 'dg-row');
+    const dot = el('span', 'dot ' + color); dot.title = SEMA[color] || 'Sin datos';
+    row.appendChild(dot);
+    row.appendChild(el('span', 'dg-dir', dirLabel(s, x[0])));
+    row.appendChild(el('span', 'dg-pct', color === 'none' ? 'sin datos' : d.percent + ' %'));
+    const txt = el('span', 'dg-text', d.text || (SEMA[color] || ''));
+    row.appendChild(txt);
+    if (d.partial) { const p = el('span', 'badge partial', 'parcial'); p.title = 'Diagnóstico parcial: falta información de un extremo'; row.appendChild(p); }
+    box.appendChild(row);
+  });
+  box.appendChild(el('p', 'muted dg-links', s.self.alias + ': ' + linkText(dg.local) + ' · ' + (peer ? peer.alias : 'destino') + ': ' + linkText(dg.remote)));
+  return box;
+}
+
 function reportView(s, detailed) {
   const r = s.test.report;
   const box = el('div');
   const rtt = r.rtt;
+  const dgn = s.test.diagnosis;
+  if (dgn && (dgn.fwd || dgn.rev)) box.appendChild(diagnosisView(s));
   box.appendChild(el('h3', '', 'RTT'));
   if (rtt.status !== 'measured') box.appendChild(el('p', 'muted', rtt.status === 'not_measured' ? 'no medido' : 'no disponible'));
   else {
@@ -222,6 +275,51 @@ function renderDetail(s) {
   else c.appendChild(el('p', 'muted', 'Elija un equipo y pulse TEST!.'));
 }
 
+function adapterCard(a, detailed) {
+  const card = el('div', 'card' + (a.connected ? '' : ' off'));
+  const head = el('div', 'card-head');
+  const kind = KINDS[a.kind] ? a.kind : 'unknown';
+  const ico = el('span', 'ico ' + kind); ico.title = a.kind_label || KINDS[kind];
+  head.appendChild(ico);
+  head.appendChild(el('span', 'name', a.name));
+  head.appendChild(el('span', 'card-speed', a.speed));
+  card.appendChild(head);
+  const kv = function (k, v) { if (v) card.appendChild(el('div', 'kv', k + ': ' + v)); };
+  const w = a.wifi;
+  if (w) {
+    if (!w.available) kv('WiFi', w.reason || 'no disponible');
+    else {
+      kv('SSID', w.ssid); kv('Banda', w.band); kv('Canal', w.channel); kv('Señal', w.signal);
+      if (detailed) { kv('BSSID', w.bssid); kv('RSSI', w.rssi); kv('Estándar', w.standard); kv('Tasa ↑', w.tx_rate); kv('Tasa ↓', w.rx_rate); }
+    }
+  }
+  if (detailed) {
+    kv('Descripción', a.description); kv('MAC', a.mac); kv('IPv4', (a.ipv4 || []).join(', '));
+    if (!w) { kv('Tasa ↑', a.tx_rate); kv('Tasa ↓', a.rx_rate); }
+  }
+  return card;
+}
+
+function renderAdapters(v, detailed) {
+  if (!changed('adapters', [v, detailed])) return;
+  const c = $('adapters'); clear(c);
+  const n = $('location-notice');
+  n.hidden = !v.location_denied;
+  $('location-text').textContent = v.location_notice || '';
+  if (!v.adapters || !v.adapters.length) c.appendChild(el('p', 'muted', 'No se detectaron tarjetas de red.'));
+  (v.adapters || []).forEach(function (a) { c.appendChild(adapterCard(a, detailed)); });
+}
+
+let adaptersBusy = false;
+function refreshAdapters() {
+  if (!$('adapters-box').open || adaptersBusy) return;
+  adaptersBusy = true;
+  const detailed = $('detailed').checked;
+  Promise.resolve().then(function () { return nperf.adapters(detailed); })
+    .then(function (v) { renderAdapters(v, detailed); }, function (e) { $('adapters').textContent = String(e && e.message ? e.message : e); delete sig.adapters; })
+    .then(function () { adaptersBusy = false; });
+}
+
 function render(s) {
   last = s;
   renderBar(s); renderList(s); renderSettings(s); renderDetail(s);
@@ -247,7 +345,10 @@ document.addEventListener('DOMContentLoaded', function () {
   $('duration').addEventListener('change', commitDuration);
   $('test').addEventListener('click', function () { act(nperf.startTest()); });
   $('cancel').addEventListener('click', function () { act(nperf.cancelTest()); });
-  $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); });
+  $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); refreshAdapters(); });
+  $('adapters-box').addEventListener('toggle', refreshAdapters);
+  $('location-open').addEventListener('click', function () { act(nperf.openLocationSettings()); });
+  setInterval(refreshAdapters, 5000);
   $('alias-save').addEventListener('click', function () { act(nperf.setAlias($('alias').value)); });
   $('key-save').addEventListener('click', function () {
     const k = $('key').value;

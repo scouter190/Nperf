@@ -74,8 +74,8 @@ func TestBindingsExistInApp(t *testing.T) {
 	}
 	typ := reflect.TypeOf(&app.App{})
 	names := regexp.MustCompile(`'(\w+)'`).FindAllStringSubmatch(m[1], -1)
-	if len(names) != 10 {
-		t.Fatalf("se esperaban 10 métodos, hay %d", len(names))
+	if len(names) != 12 {
+		t.Fatalf("se esperaban 12 métodos, hay %d", len(names))
 	}
 	for _, n := range names {
 		goName := strings.ToUpper(n[1][:1]) + n[1][1:]
@@ -84,6 +84,29 @@ func TestBindingsExistInApp(t *testing.T) {
 		}
 		if !strings.Contains(js, "nperf."+n[1]+"(") && n[1] != "state" {
 			t.Errorf("app.js no usa nperf.%s", n[1])
+		}
+	}
+}
+
+// La UI cubre iconos, panel de tarjetas, aviso de ubicación y semáforo, sin recursos externos.
+func TestNetworkDetectionUI(t *testing.T) {
+	js, css, html := read(t, "app.js"), read(t, "app.css"), read(t, "index.html")
+	for _, s := range []string{"nperf.adapters(", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "$('adapters-box').open", "d.ssid", "diagnosis", "'parcial'"} {
+		if !strings.Contains(js, s) {
+			t.Errorf("app.js no contiene %q", s)
+		}
+	}
+	for _, s := range []string{".ico.eth", ".ico.wifi", ".ico.other", ".ico.unknown", ".dot.green", ".dot.amber", ".dot.red", "prefers-color-scheme:dark"} {
+		if !strings.Contains(css, s) {
+			t.Errorf("app.css no contiene %q", s)
+		}
+	}
+	if regexp.MustCompile(`(?i)url\((["']?)(https?:|//)`).MatchString(css) {
+		t.Error("app.css no debe cargar recursos externos")
+	}
+	for _, id := range []string{`id="adapters-box"`, `id="location-open"`, `id="adapters"`} {
+		if !strings.Contains(html, id) {
+			t.Errorf("index.html sin %s", id)
 		}
 	}
 }
