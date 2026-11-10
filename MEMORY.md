@@ -6,7 +6,7 @@
 **Fase 4 - Implementando spec 002 (interfaz y descubrimiento).** Spec 001 completa a falta de la validación manual del usuario (docs/validacion-iperf3.md).
 
 ## Spec activa
-`specs/002-interfaz-descubrimiento/` (T1-T15 hechas de T1-T18; T15 validada por el usuario en Windows). Spec 001: `specs/001-medidor-par/` (cerrada).
+`specs/002-interfaz-descubrimiento/` (T1-T16 hechas de T1-T18; T15 validada por el usuario en Windows; T16 pendiente de prueba a mano, criterio 17). Spec 001: `specs/001-medidor-par/` (cerrada).
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -21,7 +21,7 @@
 - Tests: `-race`, loopback TCP/UDP, cola, errores; e2e con el binario real (`cmd/nperf/e2e_test.go`, -short lo salta). CI: windows-latest vet/test (-p 1 -count=3)/build de nperf.exe y nperf-gui.exe + ubuntu `-race`.
 
 ## Estado del código (spec 002)
-- Dos binarios: `cmd/nperf` (consola) y `cmd/nperf-gui` (ventana WebView2; test de cabecera PE). `internal/gui`: UI servida por HTTP en 127.0.0.1 (puerto y token aleatorios, CSP también como cabecera); puente `nperfCall(secreto, nombre, args)` con lista blanca, tipos y secreto por sesión (go-webview2 no permite cancelar navegación); reinicio del runtime al guardar; instancia única y errores con MessageBox. `internal/netutil`: puertos exclusivos en Windows (SO_EXCLUSIVEADDRUSE).
+- Dos binarios: `cmd/nperf` (consola) y `cmd/nperf-gui` (ventana WebView2; test de cabecera PE). `internal/gui`: UI servida por HTTP en 127.0.0.1 (puerto y token aleatorios, CSP también como cabecera); puente `nperfCall(secreto, nombre, args)` con lista blanca, tipos y secreto por sesión (go-webview2 no permite cancelar navegación); reinicio del runtime al guardar; instancia única y errores con MessageBox. Bandeja (`tray.go` controlador portable + `tray_windows.go` Win32 en el hilo de la UI): cerrar oculta, menú Abrir/Salir, doble clic abre, TaskbarCreated reañade el icono; Salir → Terminate → svc.Stop. `internal/netutil`: puertos exclusivos en Windows (SO_EXCLUSIVEADDRUSE).
 - `internal/discovery`: anuncio `NPDISC1` ≤ 512 B, solo IPv4 unicast, alias sin caracteres de control; beacon por interfaz cada 3 s (log limitado); consulta unicast `NPDISC1 ?` rellenada a 128 B (anti-amplificación), 1 respuesta/IP/s, responde con la IP de la interfaz de la subred de quien pregunta; subredes extra IP/CIDR ≥ /24; tabla (dedup por id, inalcanzable a 10 s, tope 256 con desalojo del inalcanzable más antiguo). `server.Status()` alimenta beacon y `nperf status`.
 - `internal/config`: alias, duración, puerto de descubrimiento 5301, subredes; guardado atómico; campos desconocidos se conservan; `Load` (CLI, solo clave) y `LoadFull` (GUI).
 - `internal/app`: instancia única (mutex Local\ en Windows, flock en otros); `App` (lista con "Este equipo" aparte, destino alcanzable, sentido/duración, alias, subredes, sugerencia de firewall a 15 s, `State()` JSON con `can_test`/`config_error`, clave nunca expuesta); `StartTest`/`CancelTest` no bloqueante ("Cancelando…") + `WaitTest`; `Runtime` arranca server + beacon + listener + consultas a subredes (la config se lee solo en Start: reiniciar al guardar). `client.Options.OnPhase`.
@@ -35,7 +35,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-T16 (bandeja), T17 (sin WebView2), T18 (validación manual). Usuario: validación iperf3 de spec 001 cuando pueda.
+Usuario: probar la bandeja (T16). Luego T17 (sin WebView2), T18 (validación manual). Usuario: validación iperf3 de spec 001 cuando pueda.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

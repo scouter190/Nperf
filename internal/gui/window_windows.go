@@ -16,7 +16,8 @@ func init() {
 
 // RunWindow abre la ventana "NPerf" con la UI en url y enlaza window.nperfCall a
 // call (lista blanca en Bridge.Call). Bloquea hasta que se cierra la ventana; al
-// cerrarla la app termina. dataDir es la carpeta de datos de WebView2.
+// cerrarla se oculta en la bandeja; solo "Salir" del menú termina la app.
+// dataDir es la carpeta de datos de WebView2.
 //
 // go-webview2 no expone NavigationStarting; la protección del puente es el secreto por
 // sesión + CSP sin enlaces externos. call recibe el secreto como primer argumento de
@@ -45,6 +46,14 @@ func RunWindow(url, dataDir string, call func(secret, name string, args ...json.
 	}
 	if err := w.Bind("nperfCall", safe); err != nil {
 		return err
+	}
+	// Bandeja: cerrar oculta la ventana; "Salir" termina el bucle y Run vuelve (el
+	// llamador detiene server y anuncio al salir). Si la bandeja falla, la ventana
+	// funciona como antes (cerrar = salir).
+	ctl := NewTrayController(TrayActions{Quit: w.Terminate})
+	if tr, err := installTray(uintptr(w.Window()), ctl); err == nil {
+		ctl.act.Show, ctl.act.Hide = tr.showMain, tr.hideMain
+		defer tr.remove()
 	}
 	w.Navigate(url)
 	w.Run()
