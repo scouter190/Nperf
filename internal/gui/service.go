@@ -163,3 +163,5 @@ func (s *Service) Backend() Backend { return backend{s.App} }
 type backend struct{ *app.App }
 
 func (b backend) State() any { return b.App.State() }
+
+func (b backend) Adapters(detailed bool) (any, error) { return b.App.Adapters(detailed) }

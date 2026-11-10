@@ -30,6 +30,40 @@ func (f *fake) RemoveSubnet(s string) error { return f.rec("removeSubnet:" + s) 
 func (f *fake) StartTest() error            { return f.rec("startTest") }
 func (f *fake) CancelTest()                 { f.calls = append(f.calls, "cancelTest") }
 
+func (f *fake) Adapters(d bool) (any, error) {
+	if d {
+		return "det", f.rec("adapters:true")
+	}
+	return "cmp", f.rec("adapters:false")
+}
+func (f *fake) OpenLocationSettings() error { return f.rec("openLocationSettings") }
+
+func TestBridgeAdapters(t *testing.T) {
+	f := &fake{}
+	b := &Bridge{Secret: sec, B: f}
+	if v, err := b.Call(sec, "adapters", raw(`true`)...); err != nil || v != "det" {
+		t.Fatalf("adapters true: %v %v", v, err)
+	}
+	if _, err := b.Call(sec, "openLocationSettings"); err != nil {
+		t.Fatal(err)
+	}
+	bad := []struct {
+		name string
+		args []json.RawMessage
+	}{
+		{"adapters", nil}, {"adapters", raw(`"true"`)}, {"adapters", raw(`null`)},
+		{"adapters", raw(`true`, `false`)}, {"openLocationSettings", raw(`"ms-settings:x"`)},
+	}
+	for _, c := range bad {
+		if _, err := b.Call(sec, c.name, c.args...); err == nil {
+			t.Errorf("%s %v debía fallar", c.name, c.args)
+		}
+	}
+	if len(f.calls) != 2 {
+		t.Errorf("llamadas inesperadas: %v", f.calls)
+	}
+}
+
 func raw(vs ...string) []json.RawMessage {
 	out := make([]json.RawMessage, len(vs))
 	for i, v := range vs {

@@ -24,6 +24,8 @@ type Backend interface {
 	RemoveSubnet(s string) error
 	StartTest() error
 	CancelTest()
+	Adapters(detailed bool) (any, error)
+	OpenLocationSettings() error
 }
 
 // Bridge despacha las llamadas de la UI (window.nperfCall) a Backend con una lista
@@ -68,6 +70,17 @@ func strArg(name string, args []json.RawMessage) (string, error) {
 	return s, nil
 }
 
+func boolArg(name string, args []json.RawMessage) (bool, error) {
+	if len(args) != 1 {
+		return false, fmt.Errorf("%s: se esperaba 1 argumento (booleano)", name)
+	}
+	var v bool
+	if bytes.Equal(bytes.TrimSpace(args[0]), []byte("null")) || json.Unmarshal(args[0], &v) != nil {
+		return false, fmt.Errorf("%s: el argumento debe ser verdadero o falso", name)
+	}
+	return v, nil
+}
+
 func intArg(name string, args []json.RawMessage) (int, error) {
 	if len(args) != 1 {
 		return 0, fmt.Errorf("%s: se esperaba 1 argumento (número entero)", name)
@@ -94,6 +107,16 @@ func (b *Bridge) Call(secret, name string, args ...json.RawMessage) (any, error)
 			return nil, err
 		}
 		return b.B.State(), nil
+	case "adapters":
+		var d bool
+		if d, err = boolArg(name, args); err != nil {
+			return nil, err
+		}
+		return b.B.Adapters(d)
+	case "openLocationSettings":
+		if err = noArgs(name, args); err == nil {
+			err = b.B.OpenLocationSettings()
+		}
 	case "startTest":
 		if err = noArgs(name, args); err == nil {
 			err = b.B.StartTest()
