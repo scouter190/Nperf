@@ -92,6 +92,8 @@ type TestState struct {
 	Position int            `json:"queue_position,omitempty"`
 	Error    string         `json:"error,omitempty"`
 	Report   *report.Report `json:"report,omitempty"`
+	// Diagnosis: semáforo por sentido y enlaces de ambos extremos (solo en "done").
+	Diagnosis *Diagnosis `json:"diagnosis,omitempty"`
 }
 
 // State es el snapshot serializable para la UI.

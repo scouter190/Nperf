@@ -114,6 +114,18 @@ func TestInventoryInvalidSSIDAndSourceError(t *testing.T) {
 	}
 }
 
+func (c *Cache) idle() {
+	for {
+		c.mu.Lock()
+		f := c.flight
+		c.mu.Unlock()
+		if f == nil {
+			return
+		}
+		<-f.done
+	}
+}
+
 func TestCached(t *testing.T) {
 	f := &fakeSrc{raw: rawSet()}
 	now := time.Unix(1000, 0)
@@ -127,19 +139,83 @@ func TestCached(t *testing.T) {
 		t.Fatalf("n=%d", f.adapterN)
 	}
 	now = now.Add(2 * time.Second)
-	c.Inventory()
+	if in, err := c.Inventory(); err != nil || len(in) == 0 { // caducado: sirve el previo
+		t.Fatalf("%v %v", in, err)
+	}
+	c.idle()
 	if f.adapterN != 2 {
 		t.Fatalf("n=%d", f.adapterN)
 	}
-	// Los errores no se cachean.
+	// Los errores no se cachean: con dato previo se sirve este y se reintenta.
 	f.err = errors.New("x")
 	now = now.Add(5 * time.Second)
-	if _, err := c.Inventory(); err == nil {
+	if _, err := c.Inventory(); err != nil {
+		t.Fatal(err)
+	}
+	c.idle()
+	f.err = nil
+	c.Inventory()
+	c.idle()
+	if f.adapterN != 4 {
+		t.Fatalf("n=%d", f.adapterN)
+	}
+	// Sin dato previo, el error se devuelve y no se cachea.
+	g := &fakeSrc{raw: rawSet(), err: errors.New("x")}
+	c2 := Cached(g, time.Hour, nil)
+	if _, err := c2.Inventory(); err == nil {
 		t.Fatal("esperaba error")
 	}
-	f.err = nil
-	if _, err := c.Inventory(); err != nil || f.adapterN != 4 {
-		t.Fatalf("err=%v n=%d", err, f.adapterN)
+	g.err = nil
+	if _, err := c2.Inventory(); err != nil || g.adapterN != 2 {
+		t.Fatalf("err=%v n=%d", err, g.adapterN)
+	}
+}
+
+type blockSrc struct {
+	fakeSrc
+	gate chan struct{}
+}
+
+func (b *blockSrc) Adapters() ([]RawAdapter, error) { <-b.gate; return b.raw, nil }
+
+func TestCachedSlowSourceDoesNotBlock(t *testing.T) {
+	b := &blockSrc{fakeSrc: fakeSrc{raw: rawSet()}, gate: make(chan struct{}, 1)}
+	now := time.Unix(1000, 0)
+	c := Cached(b, time.Second, func() time.Time { return now })
+	b.gate <- struct{}{} // primera consulta
+	if _, err := c.Inventory(); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute) // caducado; la fuente queda bloqueada
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 3; i++ {
+			if in, err := c.Inventory(); err != nil || len(in) == 0 {
+				t.Errorf("%v %v", in, err)
+			}
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Inventory se bloqueó con dato previo")
+	}
+	close(b.gate) // libera el refresco
+	c.idle()
+}
+
+func TestCachedFirstCallTimesOut(t *testing.T) {
+	b := &blockSrc{fakeSrc: fakeSrc{raw: rawSet()}, gate: make(chan struct{})}
+	c := Cached(b, time.Second, nil)
+	c.wait = 50 * time.Millisecond
+	if _, err := c.Inventory(); err == nil {
+		t.Fatal("esperaba error por tope de espera")
+	}
+	close(b.gate)
+	c.idle()
+	if _, err := c.Inventory(); err != nil {
+		t.Fatal(err)
 	}
 }
 

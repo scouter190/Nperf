@@ -6,7 +6,7 @@
 **Fase 5 - Implementando spec 003 (detección de red y cuello de botella).** Specs 001 y 002 completas en código, a falta de validaciones manuales del usuario (docs/validacion-iperf3.md, docs/validacion-gui.md).
 
 ## Spec activa
-`specs/003-deteccion-red/` (aprobada; hechas T1-T12 de T1-T16; decisiones §18). Spec 002: código completo, T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/003-deteccion-red/` (aprobada; hechas T1-T13 de T1-T16; decisiones §18). Spec 002: código completo, T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -27,7 +27,7 @@
 - `internal/app`: instancia única (mutex Local\ en Windows, flock en otros); `App` (lista con "Este equipo" aparte, destino alcanzable, sentido/duración, alias, subredes, sugerencia de firewall a 15 s, `State()` JSON con `can_test`/`config_error`, clave nunca expuesta); `StartTest`/`CancelTest` no bloqueante ("Cancelando…") + `WaitTest`; `Runtime` arranca server + beacon + listener + consultas a subredes (la config se lee solo en Start: reiniciar al guardar). `client.Options.OnPhase`.
 
 ## Estado del código (spec 003)
-- `internal/netinfo`: Classify/Kind eth/wifi/other, FormatBps, ValidSSID (≤32 B, sin control), BandChannel/Standard/WLANReason; `Source` (Adapters, WiFi(guid): T5 rellena GUID desde AdapterName, T6 consulta por GUID), `Inventory` (error WLAN no fatal), `Cached` (errores no cacheados), `SummaryForLocalIP` → proto.Link. Anuncio: claves opcionales link/tx/rx/ssid validadas, alias truncado (nunca el SSID). `NewSystemSource(wifi)` (GetAdaptersAddresses, velocidad ^0→0), `queryWiFi(guid)` (wlanapi LazyDLL, BSS por BSSID con SecurityEnabled y reintento), `BuildView` (JSON v1). Beacon `LinkFor`; T13: aplicar `.WithLink` al anuncio de `Listener.Self` (respuestas a consultas). CLI `nperf adapters [-json]` con `netinfo.System()`. App: `Deps.Net` (InventorySource; T13 cablea netinfo.Cached(netinfo.System(),…)), `Deps.OpenURL` (T13: ShellExecuteW), Device.Link/LinkSpeed/SSID, `App.Adapters`, `OpenLocationSettings` (URL fija). `internal/diag.Evaluate` (cable 50/80, WiFi 30/50, nominal mín(tx emisor, rx receptor), parcial). `proto.Link` opcional en turn/ready (ClientTurn conserva firma → ClientTurnLink), `Link.Sanitize()` al recibir; sin BSSID/MAC.
+- `internal/netinfo`: Classify/Kind eth/wifi/other, FormatBps, ValidSSID (≤32 B, sin control), BandChannel/Standard/WLANReason; `Source` (Adapters, WiFi(guid): T5 rellena GUID desde AdapterName, T6 consulta por GUID), `Inventory` (error WLAN no fatal), `Cached` (errores no cacheados), `SummaryForLocalIP` → proto.Link. Anuncio: claves opcionales link/tx/rx/ssid validadas, alias truncado (nunca el SSID). `NewSystemSource(wifi)` (GetAdaptersAddresses, velocidad ^0→0), `queryWiFi(guid)` (wlanapi LazyDLL, BSS por BSSID con SecurityEnabled y reintento), `BuildView` (JSON v1). Beacon `LinkFor`; T13: aplicar `.WithLink` al anuncio de `Listener.Self` (respuestas a consultas). CLI `nperf adapters [-json]` con `netinfo.System()`. App: `Deps.Net` (InventorySource; T13 cablea netinfo.Cached(netinfo.System(),…)), `Deps.OpenURL` (T14 asigna `gui.OpenURL` con ShellExecuteW), Device.Link/LinkSpeed/SSID, `App.Adapters`, `OpenLocationSettings` (URL fija). T13: `TestState.Diagnosis` por sentido (fwd cliente→servidor), runtime cablea LinkProvider/LinkFor/Self; `Cache` sin mutex durante la consulta (un refresco en vuelo, dato viejo inmediato, 1.ª llamada tope 2 s). `internal/diag.Evaluate` (cable 50/80, WiFi 30/50, nominal mín(tx emisor, rx receptor), parcial). `proto.Link` opcional en turn/ready (ClientTurn conserva firma → ClientTurnLink), `Link.Sanitize()` al recibir; sin BSSID/MAC.
 
 ## Decisiones cerradas
 Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI: comandos y flags en inglés, mensajes en español · interfaz WebView2 (no Walk) · origen siempre "Este equipo".
@@ -38,7 +38,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Spec 003: T13→T14→T15→T16. Usuario: validacion-gui.md y validacion-iperf3.md.
+Spec 003: T14→T15→T16. Usuario: validacion-gui.md y validacion-iperf3.md.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

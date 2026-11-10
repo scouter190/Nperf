@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"strconv"
 	"time"
 
 	"nperf/internal/client"
+	"nperf/internal/diag"
+	"nperf/internal/netinfo"
 	"nperf/internal/proto"
 	"nperf/internal/report"
 	"nperf/internal/version"
@@ -51,6 +54,7 @@ func (a *App) StartTest() error {
 	o := client.Options{
 		Duration: time.Duration(dur) * time.Second, Proto: proto.ProtoBoth, Direction: dir,
 		Key: cfg.Key, Streams: proto.DefaultStreams, Version: version.Current,
+		LocalLink: func(ip netip.Addr) *proto.Link { return a.localLink(ip) },
 		OnQueue: func(pos int) {
 			set(func(t *TestState) { t.Status, t.Position, t.Phase = TestQueued, pos, "" })
 		},
@@ -63,7 +67,9 @@ func (a *App) StartTest() error {
 		defer cancel()
 		res, err := client.Run(ctx, addr, o)
 		var rp report.Report
+		var dg *Diagnosis
 		if err == nil {
+			dg = buildDiagnosis(res, a.Alias(), p.Alias, dir)
 			rp = report.Build(report.Params{Host: p.IP.String(), Port: port, Proto: proto.ProtoBoth,
 				Direction: dir, Duration: o.Duration, Streams: o.Streams, Version: version.Current}, res)
 		}
@@ -78,7 +84,7 @@ func (a *App) StartTest() error {
 			case err != nil:
 				a.test = TestState{Status: TestError, Error: err.Error()}
 			default:
-				a.test = TestState{Status: TestDone, Report: &rp}
+				a.test = TestState{Status: TestDone, Report: &rp, Diagnosis: dg}
 			}
 		}
 		a.mu.Unlock()
@@ -114,4 +120,79 @@ func (a *App) WaitTest(timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+// localLink resume el enlace local para la IP local de la conexión (nil = desconocido).
+func (a *App) localLink(ip netip.Addr) *proto.Link {
+	if a.d.Net == nil {
+		return nil
+	}
+	return linkForIP(a.d.Net, ip)
+}
+
+// DirDiagnosis es el semáforo de un sentido (Color vacío = sin semáforo).
+type DirDiagnosis struct {
+	Color   string `json:"color"`
+	Percent int    `json:"percent"`
+	Text    string `json:"text"`
+	Partial bool   `json:"partial"`
+}
+
+// Diagnosis reúne el diagnóstico por sentido (nil = sentido no pedido) y los enlaces de
+// ambos extremos (nil = desconocido).
+type Diagnosis struct {
+	Fwd    *DirDiagnosis `json:"fwd,omitempty"`
+	Rev    *DirDiagnosis `json:"rev,omitempty"`
+	Local  *proto.Link   `json:"local,omitempty"`
+	Remote *proto.Link   `json:"remote,omitempty"`
+}
+
+func diagEnd(alias string, l *proto.Link) diag.End {
+	e := diag.End{Alias: alias, Signal: -1}
+	if l == nil {
+		return e
+	}
+	e.Known = true
+	switch l.Kind {
+	case string(netinfo.KindEthernet):
+		e.Kind = diag.KindWired
+	case string(netinfo.KindWiFi):
+		e.Kind = diag.KindWiFi
+	case string(netinfo.KindOther):
+		e.Kind = diag.KindOther
+	default:
+		e.Known = false
+	}
+	if l.TxBps > 0 {
+		e.TxBps = uint64(l.TxBps)
+	}
+	if l.RxBps > 0 {
+		e.RxBps = uint64(l.RxBps)
+	}
+	if l.SignalPct > 0 {
+		e.Signal = l.SignalPct
+	}
+	return e
+}
+
+// buildDiagnosis evalúa el semáforo TCP de cada sentido pedido. En fwd emite el cliente
+// (local) y recibe el servidor; en rev al revés.
+func buildDiagnosis(res client.Result, localAlias, peerAlias, dir string) *Diagnosis {
+	loc, rem := diagEnd(localAlias, res.LocalLink), diagEnd(peerAlias, res.RemoteLink)
+	mk := func(d client.Dir, s, r diag.End) *DirDiagnosis {
+		bps := -1.0
+		if d.Measured {
+			bps = d.Mbps * 1e6
+		}
+		x := diag.Evaluate(bps, s, r)
+		return &DirDiagnosis{Color: string(x.Color), Percent: x.Percent, Text: x.Text, Partial: x.Partial}
+	}
+	dg := &Diagnosis{Local: res.LocalLink, Remote: res.RemoteLink}
+	if dir != proto.DirRev {
+		dg.Fwd = mk(res.Fwd, loc, rem)
+	}
+	if dir != proto.DirFwd {
+		dg.Rev = mk(res.Rev, rem, loc)
+	}
+	return dg
 }

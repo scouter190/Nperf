@@ -11,7 +11,9 @@ import (
 
 	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/netinfo"
 	"nperf/internal/netutil"
+	"nperf/internal/proto"
 	"nperf/internal/server"
 )
 
@@ -35,6 +37,8 @@ type RuntimeOptions struct {
 	Ifaces discovery.IfaceSource
 	Send   discovery.SendFunc // nil = UDP real
 	Warn   func(string)       // avisos (p. ej. sin clave); nil = ignorar
+	// Net es la fuente del inventario de red para anunciar el enlace propio (nil = sin enlace).
+	Net InventorySource
 
 	// Inyección para tests: sockets ya abiertos (el Runtime los cierra).
 	MeasureListener net.Listener
@@ -140,7 +144,21 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 	}
 	mport = ln.Addr().(*net.TCPAddr).Port
 
-	srv := server.New(server.WithKey(cfg.Key), server.WithUDPConn(uc))
+	srvOpts := []server.Option{server.WithKey(cfg.Key), server.WithUDPConn(uc)}
+	if o.Net != nil {
+		srvOpts = append(srvOpts, server.WithLinkProvider(func(local net.Addr) *proto.Link {
+			ta, ok := local.(*net.TCPAddr)
+			if !ok {
+				return nil
+			}
+			ip, ok := netip.AddrFromSlice(ta.IP)
+			if !ok {
+				return nil
+			}
+			return linkForIP(o.Net, ip)
+		}))
+	}
+	srv := server.New(srvOpts...)
 	var addrs []netip.Addr
 	for _, s := range cfg.ExtraSubnets {
 		a, err := discovery.ParseSubnet(s)
@@ -163,6 +181,9 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 		Interval: iv, Ifaces: ifaces, Status: srv.Status, Send: o.Send,
 		Logf: func(f string, a ...any) { warn(fmt.Sprintf(f, a...)) },
 	}
+	if o.Net != nil {
+		beacon.LinkFor = func(ip netip.Addr) *proto.Link { return linkForIP(o.Net, ip) }
+	}
 	self := func(from netip.Addr) (discovery.Announce, bool) {
 		ifs, err := ifaces()
 		if err != nil || len(ifs) == 0 {
@@ -170,7 +191,11 @@ func Start(parent context.Context, o RuntimeOptions) (*Runtime, error) {
 		}
 		ip := pickIP(ifs, from)
 		st, q := srv.Status()
-		return discovery.Announce{Alias: o.Alias, IP: ip, Port: mport, State: st, Queue: q, InstanceID: id}, true
+		an := discovery.Announce{Alias: o.Alias, IP: ip, Port: mport, State: st, Queue: q, InstanceID: id}
+		if o.Net != nil {
+			an = an.WithLink(linkForIP(o.Net, ip))
+		}
+		return an, true
 	}
 	lis := &discovery.Listener{Conn: pc, Self: self, OnAnnounce: table.Update}
 
@@ -213,4 +238,13 @@ func pickIP(ifs []discovery.Iface, from netip.Addr) netip.Addr {
 		}
 	}
 	return ifs[0].IP
+}
+
+// linkForIP da el resumen del enlace de la interfaz con esa IP (nil = desconocido o error).
+func linkForIP(src InventorySource, ip netip.Addr) *proto.Link {
+	infos, err := src.Inventory()
+	if err != nil {
+		return nil
+	}
+	return netinfo.SummaryForLocalIP(infos, ip.Unmap())
 }

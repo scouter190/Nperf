@@ -4,10 +4,19 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"nperf/internal/app"
 	"nperf/internal/discovery"
+	"nperf/internal/netinfo"
 )
+
+// OpenURL abre una URL en el sistema; lo asigna la implementación de cada plataforma
+// (open_windows.go, T14). nil = no disponible.
+var OpenURL func(string) error
+
+// netTTL es la vigencia de la caché del inventario de red.
+const netTTL = 5 * time.Second
 
 // StartFunc arranca el runtime (app.Start; inyectable en pruebas).
 type StartFunc func(context.Context, app.RuntimeOptions) (*app.Runtime, error)
@@ -22,6 +31,7 @@ type Service struct {
 	base   func() app.RuntimeOptions // opciones base (puertos, inyección); nil = vacías
 	start  StartFunc
 	table  *discovery.Table
+	net    app.InventorySource
 	mu     sync.Mutex // serializa Start/Stop/Restart
 	stoped bool
 	rtMu   sync.Mutex // protege rt (State lo lee sin esperar a un reinicio)
@@ -39,12 +49,17 @@ func NewService(ctx context.Context, configDir string, base func() app.RuntimeOp
 		return nil, fmt.Errorf("no se pudo generar el id de instancia: %w", err)
 	}
 	s := &Service{ctx: ctx, dir: configDir, base: base, start: start, table: &discovery.Table{SelfID: id}}
+	s.net = s.opts().Net
+	if s.net == nil {
+		s.net = netinfo.Cached(netinfo.System(), netTTL, nil)
+	}
 	ifaces := s.opts().Ifaces
 	if ifaces == nil {
 		ifaces = discovery.SystemIfaces(false)
 	}
 	a, err := app.New(app.Deps{
 		ConfigDir: configDir, Table: s.table, SelfID: id, SelfState: s.selfState,
+		Net: s.net, OpenURL: OpenURL,
 		SelfIPs: func() []string {
 			ifs, err := ifaces()
 			if err != nil {
@@ -87,7 +102,7 @@ func (s *Service) selfState() (string, int) {
 // startRuntime arranca el runtime con la configuración actual (s.mu tomado o sin concurrencia).
 func (s *Service) startRuntime() error {
 	o := s.opts()
-	o.ConfigDir, o.Alias, o.Table = s.dir, s.App.Alias(), s.table
+	o.ConfigDir, o.Alias, o.Table, o.Net = s.dir, s.App.Alias(), s.table, s.net
 	rt, err := s.start(s.ctx, o)
 	if err != nil {
 		return err

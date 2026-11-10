@@ -106,16 +106,29 @@ func Inventory(src Source) ([]Info, error) {
 	return out, nil
 }
 
-// Cache limita las consultas al sistema: reutiliza el inventario durante ttl.
-type Cache struct {
-	src Source
-	ttl time.Duration
-	now func() time.Time
+// firstWait es lo máximo que espera la primera llamada (sin dato previo) a la fuente.
+const firstWait = 2 * time.Second
 
-	mu   sync.Mutex
-	at   time.Time
+type flight struct {
+	done chan struct{}
 	data []Info
-	ok   bool
+	err  error
+}
+
+// Cache limita las consultas al sistema: reutiliza el inventario durante ttl. Nunca consulta
+// la fuente con el mutex tomado: hay un solo refresco en vuelo; con dato previo (aunque
+// caducado) se devuelve de inmediato y se refresca en segundo plano.
+type Cache struct {
+	src  Source
+	ttl  time.Duration
+	now  func() time.Time
+	wait time.Duration
+
+	mu     sync.Mutex
+	at     time.Time
+	data   []Info
+	ok     bool
+	flight *flight
 }
 
 // Cached envuelve src con una caché de ttl y reloj inyectable (nil = time.Now).
@@ -123,23 +136,52 @@ func Cached(src Source, ttl time.Duration, now func() time.Time) *Cache {
 	if now == nil {
 		now = time.Now
 	}
-	return &Cache{src: src, ttl: ttl, now: now}
+	return &Cache{src: src, ttl: ttl, now: now, wait: firstWait}
 }
 
-// Inventory devuelve el inventario, consultando la fuente si caducó. Los errores no se cachean.
+// Inventory devuelve el inventario. Los errores no se cachean.
 func (c *Cache) Inventory() ([]Info, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if t := c.now(); c.ok && t.Sub(c.at) < c.ttl {
-		return cloneInfos(c.data), nil
+	if c.ok && c.now().Sub(c.at) < c.ttl {
+		d := cloneInfos(c.data)
+		c.mu.Unlock()
+		return d, nil
 	}
+	f := c.flight
+	if f == nil {
+		f = &flight{done: make(chan struct{})}
+		c.flight = f
+		go c.refresh(f)
+	}
+	if c.ok { // caducado: se sirve el dato previo mientras se refresca
+		d := cloneInfos(c.data)
+		c.mu.Unlock()
+		return d, nil
+	}
+	c.mu.Unlock()
+	t := time.NewTimer(c.wait)
+	defer t.Stop()
+	select {
+	case <-f.done:
+		if f.err != nil {
+			return nil, f.err
+		}
+		return cloneInfos(f.data), nil
+	case <-t.C:
+		return nil, errors.New("el inventario de red tarda demasiado en responder")
+	}
+}
+
+func (c *Cache) refresh(f *flight) {
 	data, err := Inventory(c.src)
-	if err != nil {
-		c.ok = false
-		return nil, err
+	c.mu.Lock()
+	if err == nil {
+		c.data, c.at, c.ok = data, c.now(), true
 	}
-	c.data, c.at, c.ok = data, c.now(), true
-	return cloneInfos(data), nil
+	c.flight = nil
+	c.mu.Unlock()
+	f.data, f.err = data, err
+	close(f.done)
 }
 
 func cloneInfos(in []Info) []Info {
