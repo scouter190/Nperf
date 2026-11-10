@@ -2,7 +2,6 @@ package gui
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"runtime"
 
@@ -30,7 +29,7 @@ func RunWindow(url, dataDir string, call func(secret, name string, args ...json.
 		},
 	})
 	if w == nil {
-		return errors.New("no se pudo iniciar WebView2: instale el runtime de WebView2 de Microsoft")
+		return WindowCreateError(CheckWebView2())
 	}
 	defer w.Destroy()
 	w.SetSize(1000, 640, webview2.HintNone)

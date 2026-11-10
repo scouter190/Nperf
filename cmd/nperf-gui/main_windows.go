@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		gui.ShowError(err.Error())
+		gui.ShowStartupError(err)
 		os.Exit(1)
 	}
 }
