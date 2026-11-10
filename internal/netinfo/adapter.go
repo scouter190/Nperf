@@ -27,7 +27,9 @@ const (
 
 // RawAdapter son los datos tal cual los entrega el sistema.
 type RawAdapter struct {
-	Name        string
+	Name string
+	// GUID es el AdapterName "{...}" de GetAdaptersAddresses (clave de wlanapi).
+	GUID        string
 	Description string
 	MAC         string
 	IPv4        []netip.Addr
@@ -42,6 +44,7 @@ type RawAdapter struct {
 // Adapter es un adaptador clasificado.
 type Adapter struct {
 	Name        string
+	GUID        string
 	Description string
 	MAC         string
 	IPv4        []netip.Addr
@@ -91,7 +94,7 @@ func ClassifyAll(raw []RawAdapter) []Adapter {
 			continue
 		}
 		out = append(out, Adapter{
-			Name: r.Name, Description: r.Description, MAC: r.MAC,
+			Name: r.Name, GUID: r.GUID, Description: r.Description, MAC: r.MAC,
 			IPv4: r.IPv4, Kind: k, Connected: r.OperStatus == OperStatusUp,
 			TxBps: r.TxBps, RxBps: r.RxBps,
 		})
