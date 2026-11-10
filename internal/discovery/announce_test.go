@@ -4,6 +4,8 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"nperf/internal/netinfo"
 )
 
 func sample() Announce {
@@ -155,4 +157,79 @@ func TestExact512(t *testing.T) {
 		return
 	}
 	t.Fatal("sin combinación")
+}
+
+func TestLinkRoundTrip(t *testing.T) {
+	a := sample()
+	a.Link, a.TxBps, a.RxBps, a.SSID = netinfo.KindWiFi, 866_700_000, 650_000_000, "Café 5G"
+	b, err := a.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Parse(b)
+	if err != nil || got != a {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	for _, bad := range []string{"bssid", "mac", "band", "channel", "signal", "standard"} {
+		if strings.Contains(string(b), bad) {
+			t.Errorf("contiene %q", bad)
+		}
+	}
+}
+
+func TestOldAnnounceUnknownLink(t *testing.T) {
+	old := "NPDISC1 id=0123456789abcdef ip=192.168.1.20 port=5300 state=available queue=0 alias=x"
+	a, err := Parse([]byte(old))
+	if err != nil || a.Link != "" || a.TxBps != 0 || a.RxBps != 0 || a.SSID != "" {
+		t.Fatalf("%+v %v", a, err)
+	}
+}
+
+func TestInvalidSSIDOmittedAndDiscarded(t *testing.T) {
+	for _, ssid := range []string{strings.Repeat("a", 33), "a\x01b", "a\nb"} {
+		a := sample()
+		a.Link, a.SSID = netinfo.KindWiFi, ssid
+		b, err := a.Marshal()
+		if err != nil || strings.Contains(string(b), "ssid=") {
+			t.Fatalf("ssid %q no omitido: %s %v", ssid, b, err)
+		}
+	}
+	good, _ := sample().Marshal()
+	for _, ssid := range []string{strings.Repeat("a", 33), "a%01b", "%ff"} {
+		a, err := Parse([]byte(string(good) + " ssid=" + ssid))
+		if err != nil || a.SSID != "" {
+			t.Fatalf("ssid %q no descartado: %+v %v", ssid, a, err)
+		}
+	}
+}
+
+func TestInvalidLinkValuesDiscarded(t *testing.T) {
+	good, _ := sample().Marshal()
+	a, err := Parse([]byte(string(good) + " link=x tx=-5 rx=2000000000000"))
+	if err != nil || a.Link != "" || a.TxBps != 0 || a.RxBps != 0 {
+		t.Fatalf("%+v %v", a, err)
+	}
+	b := sample()
+	b.Link, b.TxBps, b.RxBps = "zzz", -1, maxLinkBps+1
+	m, _ := b.Marshal()
+	for _, k := range []string{"link=", "tx=", "rx="} {
+		if strings.Contains(string(m), k) {
+			t.Errorf("no omitido %s", k)
+		}
+	}
+}
+
+func TestMaxSizeWithLink(t *testing.T) {
+	a := sample()
+	a.Alias = strings.Repeat("ñ", 500)
+	a.Link, a.TxBps, a.RxBps = netinfo.KindWiFi, maxLinkBps, maxLinkBps
+	a.SSID = strings.Repeat("ñ", 16) // 32 B, 96 caracteres codificados
+	b, err := a.Marshal()
+	if err != nil || len(b) > MaxSize {
+		t.Fatalf("len %d err %v", len(b), err)
+	}
+	got, err := Parse(b)
+	if err != nil || got.SSID != a.SSID || got.TxBps != a.TxBps || got.Alias == "" {
+		t.Fatalf("%+v %v", got, err)
+	}
 }

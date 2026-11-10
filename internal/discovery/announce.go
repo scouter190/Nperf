@@ -25,6 +25,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"nperf/internal/netinfo"
 )
 
 const (
@@ -49,6 +51,36 @@ type Announce struct {
 	State      string     // StateAvailable o StateBusy
 	Queue      int        // clientes en espera, >= 0
 	InstanceID string     // 16 caracteres hex; ver NewInstanceID
+
+	// Enlace público opcional (claves link, tx, rx, ssid); vacío/0 = desconocido.
+	Link  netinfo.Kind // eth, wifi u other
+	TxBps int64        // velocidad de enlace de envío en bps
+	RxBps int64        // velocidad de enlace de recepción en bps
+	SSID  string       // solo si netinfo.ValidSSID
+}
+
+const maxLinkBps = int64(1e12) // 1 Tbps, como proto.Link.Sanitize
+
+func knownKind(k netinfo.Kind) bool {
+	return k == netinfo.KindEthernet || k == netinfo.KindWiFi || k == netinfo.KindOther
+}
+
+// linkFields serializa las claves opcionales válidas; lo inválido se omite.
+func (a Announce) linkFields() string {
+	var b strings.Builder
+	if knownKind(a.Link) {
+		b.WriteString(" link=" + string(a.Link))
+	}
+	if a.TxBps > 0 && a.TxBps <= maxLinkBps {
+		b.WriteString(" tx=" + strconv.FormatInt(a.TxBps, 10))
+	}
+	if a.RxBps > 0 && a.RxBps <= maxLinkBps {
+		b.WriteString(" rx=" + strconv.FormatInt(a.RxBps, 10))
+	}
+	if netinfo.ValidSSID(a.SSID) {
+		b.WriteString(" ssid=" + url.PathEscape(a.SSID))
+	}
+	return b.String()
 }
 
 // NewInstanceID genera un id de instancia aleatorio (8 bytes en hex).
@@ -94,9 +126,9 @@ func (a Announce) validate() error {
 }
 
 func (a Announce) encode(alias string) string {
-	return fmt.Sprintf("%s id=%s ip=%s port=%d state=%s queue=%d alias=%s",
+	return fmt.Sprintf("%s id=%s ip=%s port=%d state=%s queue=%d%s alias=%s",
 		Signature, a.InstanceID, a.IP.Unmap().String(), a.Port, a.State, a.Queue,
-		url.PathEscape(alias))
+		a.linkFields(), url.PathEscape(alias))
 }
 
 // Marshal serializa el anuncio. Si el mensaje superase MaxSize bytes, el
@@ -177,10 +209,27 @@ func Parse(data []byte) (Announce, error) {
 		return Announce{}, errors.New("alias con caracteres de control")
 	}
 	a = Announce{Alias: alias, IP: ip.Unmap(), Port: port, State: seen["state"], Queue: queue, InstanceID: seen["id"]}
+	// Claves de enlace opcionales: lo ausente o inválido queda "desconocido".
+	if k := netinfo.Kind(seen["link"]); knownKind(k) {
+		a.Link = k
+	}
+	a.TxBps = parseBps(seen["tx"])
+	a.RxBps = parseBps(seen["rx"])
+	if v, err := url.PathUnescape(seen["ssid"]); err == nil && netinfo.ValidSSID(v) {
+		a.SSID = v
+	}
 	if err := a.validate(); err != nil {
 		return Announce{}, err
 	}
 	return a, nil
+}
+
+func parseBps(v string) int64 {
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 || n > maxLinkBps {
+		return 0
+	}
+	return n
 }
 
 // TCPAddr devuelve la dirección de medición host:puerto.
