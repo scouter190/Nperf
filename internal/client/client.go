@@ -60,6 +60,9 @@ type Options struct {
 	// OnInterval se llama con cada muestra de 1 s (en orden) de las fases en vivo; phase es el
 	// mismo identificador que OnPhase. No se llama con un servidor sin soporte en vivo.
 	OnInterval func(phase string, iv Interval)
+	// OnLive se llama al recibir el start de cada fase con phase (como OnPhase) y si el
+	// servidor confirmó el modo en vivo.
+	OnLive func(phase string, live bool)
 }
 
 // errDialTimeout marca el vencimiento del plazo de conexión (el mensaje ya trae host y puerto).
@@ -429,6 +432,9 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	st, err := expectStart(ss)
 	if err != nil {
 		return res, err
+	}
+	if o.OnLive != nil {
+		o.OnLive(o.Proto+"_"+dir, st.Live)
 	}
 	// Solo con la confirmación del servidor hay muestras y sondas; un servidor previo ignora
 	// "live" y no admite mensajes en el control durante la fase.

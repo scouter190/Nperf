@@ -143,6 +143,9 @@ func runStatus(ctx context.Context, args []string) int {
 	return exitOK
 }
 
+// hiddenFlags son flags válidos que no salen en la ayuda.
+var hiddenFlags = map[string]bool{"no-load-rtt": true}
+
 // newFlagSet crea un FlagSet cuya ayuda y errores salen en español.
 func newFlagSet(name, usage string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -151,6 +154,9 @@ func newFlagSet(name, usage string) *flag.FlagSet {
 		fmt.Fprintf(stdout, "Uso: %s\n\nOpciones:\n", usage)
 		fs.SetOutput(stdout)
 		fs.VisitAll(func(f *flag.Flag) {
+			if hiddenFlags[f.Name] {
+				return
+			}
 			fmt.Fprintf(stdout, "  -%s\n    \t%s\n", f.Name, f.Usage)
 		})
 		fs.SetOutput(io.Discard)
@@ -279,6 +285,7 @@ func runClient(ctx context.Context, args []string) int {
 	streams := fs.Int("streams", proto.DefaultStreams, fmt.Sprintf("flujos TCP paralelos, de 1 a 64 (por defecto: %d)", proto.DefaultStreams))
 	direction := fs.String("direction", "both", "sentido: fwd (cliente a servidor), rev (servidor a cliente) o both (por defecto: both)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1) por la salida estándar; los errores salen como {\"error\": \"...\"}")
+	noLoadRTT := fs.Bool("no-load-rtt", false, "desactiva las sondas de RTT bajo carga")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -332,12 +339,13 @@ func runClient(ctx context.Context, args []string) int {
 	}
 	dur := time.Duration(*secs) * time.Second
 	addr := net.JoinHostPort(host, strconv.Itoa(*port))
-	opts := client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: k, Streams: *streams}
+	opts := client.Options{Duration: dur, Proto: *protoName, Direction: *direction, UDPRate: rate, Key: k, Streams: *streams, NoLoadRTT: *noLoadRTT}
 	if *jsonOut { // stdout solo lleva el JSON
 		opts.OnQueue = func(pos int) { fmt.Fprintf(stderr, "en cola (posición %d)\n", pos) }
 	} else {
 		fmt.Fprintf(stdout, "%s hacia %s durante %d s por fase...\n", modeText(*protoName), addr, *secs)
 		opts.OnQueue = func(pos int) { fmt.Fprintf(stdout, "en cola (posición %d)\n", pos) }
+		opts.OnInterval = func(phase string, iv client.Interval) { fmt.Fprintln(stdout, report.IntervalLine(phase, iv)) }
 	}
 	res, err := client.Run(ctx, addr, opts)
 	if err != nil {
