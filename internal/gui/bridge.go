@@ -26,6 +26,10 @@ type Backend interface {
 	CancelTest()
 	Adapters(detailed bool) (any, error)
 	OpenLocationSettings() error
+	AddHost(target, alias string) error
+	RemoveHost(id string) error
+	StartProbe(kind, id string) error
+	CancelProbe()
 }
 
 // Bridge despacha las llamadas de la UI (window.nperfCall) a Backend con una lista
@@ -68,6 +72,32 @@ func strArg(name string, args []json.RawMessage) (string, error) {
 		return "", fmt.Errorf("%s: el argumento debe ser texto", name)
 	}
 	return s, nil
+}
+
+// Límites de longitud (bytes) de los textos de los diagnósticos.
+const (
+	maxTargetLen = 255
+	maxAliasLen  = 128
+	maxIDLen     = 128
+)
+
+var probeKinds = map[string]bool{"ping": true, "trace": true, "mtu": true, "ports": true}
+
+// strArgs exige exactamente len(max) argumentos de texto, cada uno con su longitud máxima.
+func strArgs(name string, args []json.RawMessage, max ...int) ([]string, error) {
+	if len(args) != len(max) {
+		return nil, fmt.Errorf("%s: se esperaban %d argumentos (texto)", name, len(max))
+	}
+	out := make([]string, len(args))
+	for i, a := range args {
+		if bytes.Equal(bytes.TrimSpace(a), []byte("null")) || json.Unmarshal(a, &out[i]) != nil {
+			return nil, fmt.Errorf("%s: los argumentos deben ser texto", name)
+		}
+		if len(out[i]) > max[i] {
+			return nil, fmt.Errorf("%s: argumento %d demasiado largo", name, i+1)
+		}
+	}
+	return out, nil
 }
 
 func boolArg(name string, args []json.RawMessage) (bool, error) {
@@ -116,6 +146,28 @@ func (b *Bridge) Call(secret, name string, args ...json.RawMessage) (any, error)
 	case "openLocationSettings":
 		if err = noArgs(name, args); err == nil {
 			err = b.B.OpenLocationSettings()
+		}
+	case "cancelProbe":
+		if err = noArgs(name, args); err == nil {
+			b.B.CancelProbe()
+		}
+	case "addHost":
+		var v []string
+		if v, err = strArgs(name, args, maxTargetLen, maxAliasLen); err == nil {
+			err = b.B.AddHost(v[0], v[1])
+		}
+	case "removeHost":
+		var v []string
+		if v, err = strArgs(name, args, maxIDLen); err == nil {
+			err = b.B.RemoveHost(v[0])
+		}
+	case "startProbe":
+		var v []string
+		if v, err = strArgs(name, args, 16, maxIDLen); err == nil {
+			if !probeKinds[v[0]] {
+				return nil, fmt.Errorf("%s: tipo de diagnóstico no permitido: %q", name, v[0])
+			}
+			err = b.B.StartProbe(v[0], v[1])
 		}
 	case "startTest":
 		if err = noArgs(name, args); err == nil {

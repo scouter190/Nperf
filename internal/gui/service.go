@@ -9,6 +9,7 @@ import (
 	"nperf/internal/app"
 	"nperf/internal/discovery"
 	"nperf/internal/netinfo"
+	"nperf/internal/probe"
 )
 
 // OpenURL abre una URL en el sistema; lo asigna la implementación de cada plataforma
@@ -26,16 +27,17 @@ type StartFunc func(context.Context, app.RuntimeOptions) (*app.Runtime, error)
 type Service struct {
 	App *app.App
 
-	ctx    context.Context
-	dir    string
-	base   func() app.RuntimeOptions // opciones base (puertos, inyección); nil = vacías
-	start  StartFunc
-	table  *discovery.Table
-	net    app.InventorySource
-	mu     sync.Mutex // serializa Start/Stop/Restart
-	stoped bool
-	rtMu   sync.Mutex // protege rt (State lo lee sin esperar a un reinicio)
-	rt     *app.Runtime
+	ctx        context.Context
+	dir        string
+	base       func() app.RuntimeOptions // opciones base (puertos, inyección); nil = vacías
+	start      StartFunc
+	table      *discovery.Table
+	net        app.InventorySource
+	mu         sync.Mutex // serializa Start/Stop/Restart
+	stoped     bool
+	rtMu       sync.Mutex // protege rt (State lo lee sin esperar a un reinicio)
+	rt         *app.Runtime
+	closeProbe func() // libera el Env de los diagnósticos
 }
 
 // NewService crea App y arranca el runtime. Si algo falla (config inválida, puerto
@@ -57,7 +59,10 @@ func NewService(ctx context.Context, configDir string, base func() app.RuntimeOp
 	if ifaces == nil {
 		ifaces = discovery.SystemIfaces(false)
 	}
+	penv, pclose := probe.System()
+	s.closeProbe = pclose
 	a, err := app.New(app.Deps{
+		Probe: penv, Router: penv.Router,
 		ConfigDir: configDir, Table: s.table, SelfID: id, SelfState: s.selfState,
 		Net: s.net, OpenURL: OpenURL,
 		SelfIPs: func() []string {
@@ -73,10 +78,12 @@ func NewService(ctx context.Context, configDir string, base func() app.RuntimeOp
 		},
 	})
 	if err != nil {
+		pclose()
 		return nil, err
 	}
 	s.App = a
 	if err := s.startRuntime(); err != nil {
+		pclose()
 		return nil, err
 	}
 	return s, nil
@@ -154,7 +161,12 @@ func (s *Service) Stop() {
 	defer s.mu.Unlock()
 	s.stoped = true
 	s.App.CancelTest()
+	s.App.CancelProbe()
 	s.stopRuntime()
+	if s.closeProbe != nil {
+		s.closeProbe()
+		s.closeProbe = nil
+	}
 }
 
 // Backend adapta App a la interfaz del puente (State como any).

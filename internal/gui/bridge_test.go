@@ -36,6 +36,12 @@ func (f *fake) Adapters(d bool) (any, error) {
 	}
 	return "cmp", f.rec("adapters:false")
 }
+func (f *fake) AddHost(t, a string) error  { return f.rec("addHost:" + t + "|" + a) }
+func (f *fake) RemoveHost(id string) error { return f.rec("removeHost:" + id) }
+func (f *fake) StartProbe(k, id string) error {
+	return f.rec("startProbe:" + k + "|" + id)
+}
+func (f *fake) CancelProbe()                { f.calls = append(f.calls, "cancelProbe") }
 func (f *fake) OpenLocationSettings() error { return f.rec("openLocationSettings") }
 
 func TestBridgeAdapters(t *testing.T) {
@@ -91,6 +97,13 @@ func TestBridgeValid(t *testing.T) {
 		{"removeSubnet", raw(`"10.0.0.0/24"`), "removeSubnet:10.0.0.0/24"},
 		{"startTest", nil, "startTest"},
 		{"cancelTest", nil, "cancelTest"},
+		{"addHost", raw(`"10.0.0.9"`, `"NAS"`), "addHost:10.0.0.9|NAS"},
+		{"removeHost", raw(`"h1"`), "removeHost:h1"},
+		{"startProbe", raw(`"ping"`, `"h1"`), "startProbe:ping|h1"},
+		{"startProbe", raw(`"trace"`, `"h1"`), "startProbe:trace|h1"},
+		{"startProbe", raw(`"mtu"`, `"h1"`), "startProbe:mtu|h1"},
+		{"startProbe", raw(`"ports"`, `"h1"`), "startProbe:ports|h1"},
+		{"cancelProbe", nil, "cancelProbe"},
 	}
 	for _, c := range cases {
 		if _, err := b.Call(sec, c.name, c.args...); err != nil {
@@ -135,6 +148,21 @@ func TestBridgeRejects(t *testing.T) {
 		{"setDuration", raw(`1.5`)},
 		{"setDuration", raw(`null`)},
 		{"setDuration", nil},
+		{"addHost", raw(`"a"`)},
+		{"addHost", raw(`"a"`, `1`)},
+		{"addHost", raw(`null`, `"a"`)},
+		{"addHost", raw(`"a"`, `"b"`, `"c"`)},
+		{"addHost", raw(`"`+strings.Repeat("x", 256)+`"`, `"a"`)},
+		{"addHost", raw(`"a"`, `"`+strings.Repeat("x", 129)+`"`)},
+		{"removeHost", nil},
+		{"removeHost", raw(`1`)},
+		{"removeHost", raw(`"a"`, `"b"`)},
+		{"startProbe", raw(`"ping"`)},
+		{"startProbe", raw(`"nmap"`, `"h1"`)},
+		{"startProbe", raw(`"PING"`, `"h1"`)},
+		{"startProbe", raw(`"ping"`, `1`)},
+		{"startProbe", raw(`"ping"`, `"h1"`, `"x"`)},
+		{"cancelProbe", raw(`"x"`)},
 	}
 	for _, c := range bad {
 		if _, err := b.Call(sec, c.name, c.args...); err == nil {
