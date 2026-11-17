@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 6 - Spec 004 completa en código (equipos sin NPerf: ping, traceroute, MTU, puertos).** Specs 001-003 completas en código, a falta de validaciones manuales del usuario (docs/validacion-iperf3.md, validacion-gui.md, validacion-red.md).
+**Fase 7 - Implementando spec 005 (gráficas en vivo).** Specs 001-004 completas en código; validaciones manuales pendientes (iperf3, gui, red, sin-agente). Spec 003: banda/canal WiFi y virtuales validados por el usuario en Windows 11.
 
 ## Spec activa
-`specs/004-equipos-sin-agente/` (T1-T17 hechas, spec completa en código; validación manual pendiente: docs/validacion-sin-agente.md; decisiones §19; paquete nuevo `internal/probe`). Spec 003: código completo, validación manual pendiente. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/005-graficas-en-vivo/` (aprobada; 0 de T1-T18; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -41,7 +41,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Usuario: validar en Windows con docs/validacion-sin-agente.md (spec 004), validacion-red.md (003), validacion-gui.md (002) y validacion-iperf3.md (001); luego cerrar specs y proponer spec 005.
+Spec 005 olas: 1 = T1,T2,T5,T11,T16 · 2 = T3,T4,T12,T14 · 3 = T6 · 4 = T7 · 5 = T8,T9,T13 · 6 = T10∥T15 · 7 = T17 · T18. Usuario: validaciones manuales de specs 001-004.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.
