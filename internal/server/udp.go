@@ -191,7 +191,7 @@ func (s *Server) sendUDPRev(ctx context.Context, c net.Conn, codec *proto.Codec,
 		fail("tasa UDP demasiado alta: el máximo aceptado es 10 Gbps")
 		return false
 	}
-	sctx, stopWatch := s.watchControl(ctx, c, codec)
+	sctx, stopWatch := s.watchControlLive(ctx, c, codec, p.Live, d)
 	defer stopWatch()
 	t := time.NewTimer(d + margin)
 	defer t.Stop()
@@ -242,19 +242,27 @@ func (s *Server) controlUDP(ctx context.Context, c net.Conn, codec *proto.Codec,
 		}
 		s.udp.mu.Unlock()
 	}()
-	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
+	if err := codec.Write(proto.Message{Type: proto.TypeStart, Live: p.Live}); err != nil {
 		return false
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
 	if p.Direction == proto.DirRev {
 		return s.sendUDPRev(ctx, c, codec, sess, p, d)
 	}
-	sctx, stopWatch := s.watchControl(ctx, c, codec)
+	sctx, stopWatch := s.watchControlLive(ctx, c, codec, p.Live, d)
 	defer stopWatch()
 	rctx, cancel := context.WithTimeout(sctx, d+margin)
 	defer cancel()
 	sess.SetReadDeadline(time.Now().Add(d + margin))
-	st, err := meter.ReceiveUDP(rctx, sess, time.Second)
+	out, flush := s.startSamples(s.writerFor(c, codec), p.Live)
+	var st meter.UDPRecvStats
+	var err error
+	if p.Live {
+		st, err = meter.ReceiveUDPSamples(rctx, sess, time.Second, d, out)
+	} else {
+		st, err = meter.ReceiveUDP(rctx, sess, time.Second)
+	}
+	flush() // todas las muestras salen antes de result
 	cancelled := sctx.Err() != nil
 	stopWatch() // antes de responder: el lector no debe robar la siguiente fase
 	if cancelled {

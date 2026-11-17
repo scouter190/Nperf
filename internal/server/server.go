@@ -30,6 +30,7 @@ type Server struct {
 	q        turnQueue
 	turnHook func(context.Context)
 	linkFn   func(net.Addr) *proto.Link
+	lws      sync.Map // *proto.Codec -> *liveWriter
 }
 
 // Option configura el servidor.
@@ -235,6 +236,7 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		c.SetReadDeadline(time.Now().Add(drainWait))
 		io.Copy(io.Discard, io.LimitReader(c, 1<<20))
 	}()
+	defer s.lws.Delete(codec)
 	// El id de sesión solo se emite tras autenticar; hasta entonces no existe en s.sessions.
 	id, err := proto.ServerHandshake(codec, first, s.key, s.ver)
 	if err != nil {
@@ -269,12 +271,17 @@ func (s *Server) control(ctx context.Context, c net.Conn, codec *proto.Codec, fi
 		}
 	}
 	// Una sesión es una secuencia de fases (params -> start -> result) con el turno retenido.
+	live := false
 	for {
+		if live {
+			p, err = answerPings(codec, p, err) // ping tardío de la fase anterior
+		}
 		if err != nil || p.Type != proto.TypeParams {
 			fail("se esperaban parámetros")
 			return
 		}
 		c.SetReadDeadline(time.Time{}) // params recibido
+		live = live || p.Live
 		if !s.phase(ctx, c, codec, id, ss, p) {
 			return
 		}
@@ -316,7 +323,7 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 	ss.limit.Store(int64(streams))
 	ss.mu.Unlock()
 	defer ss.closePhase() // entre fases no se aceptan conexiones de datos; cierra las tardías
-	if err := codec.Write(proto.Message{Type: proto.TypeStart}); err != nil {
+	if err := codec.Write(proto.Message{Type: proto.TypeStart, Live: p.Live}); err != nil {
 		return false
 	}
 	d := time.Duration(p.DurationMS) * time.Millisecond
@@ -324,7 +331,7 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 	dcs := make([]dataConn, 0, streams)
 	// Mientras esperan los flujos de datos, un cierre del canal de control libera el turno al
 	// instante (no hay que esperar el plazo de la fase).
-	wctx, stopWait := s.watchControl(ctx, c, codec)
+	wctx, stopWait := s.watchControlLive(ctx, c, codec, p.Live, d)
 	release := func() {
 		for _, dc := range dcs {
 			close(dc.done)
@@ -352,7 +359,7 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		conns[i] = dc.conn
 	}
 	if p.Direction == proto.DirRev {
-		sctx, stopWatch := s.watchControl(ctx, c, codec)
+		sctx, stopWatch := s.watchControlLive(ctx, c, codec, p.Live, d)
 		res, err := meter.SendTCPN(sctx, conns, d)
 		cancelled := sctx.Err() != nil
 		stopWatch() // antes de responder: el lector no debe robar la siguiente fase
@@ -382,10 +389,18 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 		}
 	}
 	// Si el cliente se va a mitad de la medición se cierran los datos y se libera el turno.
-	sctx, stopWatch := s.watchControl(ctx, c, codec)
+	sctx, stopWatch := s.watchControlLive(ctx, c, codec, p.Live, d)
 	unhook := context.AfterFunc(sctx, closeAll)
-	res, err := meter.ReceiveTCPN(rs, closeAll)
+	out, flush := s.startSamples(s.writerFor(c, codec), p.Live)
+	var res meter.Result
+	var err error
+	if p.Live {
+		res, err = meter.ReceiveTCPNSamples(rs, closeAll, d, out)
+	} else {
+		res, err = meter.ReceiveTCPN(rs, closeAll)
+	}
 	unhook()
+	flush() // todas las muestras salen antes de result
 	cancelled := sctx.Err() != nil
 	stopWatch() // antes de responder: el lector no debe robar la siguiente fase
 	if cancelled {
@@ -404,14 +419,31 @@ func (s *Server) phase(ctx context.Context, c net.Conn, codec *proto.Codec, id s
 // canal de control (en rev el cliente no envía nada más tras params). stop (idempotente) libera
 // el contexto, detiene el lector sin consumir mensajes y deja la conexión sin plazo de lectura.
 func (s *Server) watchControl(ctx context.Context, c net.Conn, codec *proto.Codec) (context.Context, func()) {
+	return s.watchControlLive(ctx, c, codec, false, 0)
+}
+
+// watchControlLive es watchControl; con live contesta ping{seq} con pong{seq} (hasta duración en
+// s + 10 por fase; los que sobran se ignoran) y solo cancela con otro mensaje o al cerrarse.
+func (s *Server) watchControlLive(ctx context.Context, c net.Conn, codec *proto.Codec, live bool, d time.Duration) (context.Context, func()) {
 	sctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
+	lw := s.writerFor(c, codec)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		defer close(done)
-		codec.Read() // vuelve al cerrarse la conexión o por el plazo que pone stop
-		cancel()
+		defer cancel()
+		for n := 0; ; {
+			m, err := codec.Read() // vuelve al cerrarse la conexión o por el plazo que pone stop
+			if err != nil || !live || m.Type != proto.TypePing {
+				return
+			}
+			if n++; n <= maxPongs(d) {
+				if lw.write(proto.Message{Type: proto.TypePong, Seq: m.Seq}) != nil {
+					return
+				}
+			}
+		}
 	}()
 	var once sync.Once
 	return sctx, func() {
