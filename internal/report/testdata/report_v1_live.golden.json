@@ -1,0 +1,141 @@
+{
+  "format_version": 1,
+  "params": {
+    "host": "192.168.1.10",
+    "port": 5300,
+    "proto": "both",
+    "direction": "both",
+    "duration_s": 10,
+    "streams": 4,
+    "udp_rate_bps": null,
+    "version": "0.1.0"
+  },
+  "rtt": {
+    "status": "measured",
+    "min_ms": 0.5,
+    "avg_ms": 1,
+    "max_ms": 2,
+    "samples": 10
+  },
+  "tcp": {
+    "fwd": {
+      "status": "measured",
+      "throughput_mbps": 1000,
+      "bytes": 1250000000,
+      "duration_s": 10,
+      "retransmissions": {
+        "status": "available",
+        "count": 12,
+        "estimated": false
+      },
+      "udp": null,
+      "intervals": [
+        {
+          "t_s": 0,
+          "duration_s": 1,
+          "bytes": 125000000,
+          "throughput_mbps": 1000,
+          "rtt_ms": 12,
+          "datagrams_received": null,
+          "datagrams_lost": null,
+          "loss_pct": null,
+          "jitter_ms": null
+        },
+        {
+          "t_s": 1,
+          "duration_s": 1,
+          "bytes": 120000000,
+          "throughput_mbps": 960,
+          "rtt_ms": null,
+          "datagrams_received": null,
+          "datagrams_lost": null,
+          "loss_pct": null,
+          "jitter_ms": null
+        }
+      ],
+      "loaded_rtt": {
+        "status": "available",
+        "min_ms": 10,
+        "avg_ms": 15,
+        "median_ms": 12,
+        "max_ms": 30,
+        "samples": 1
+      }
+    },
+    "rev": {
+      "status": "measured",
+      "throughput_mbps": 900,
+      "bytes": 1250000000,
+      "duration_s": 10,
+      "retransmissions": {
+        "status": "unavailable",
+        "count": null,
+        "estimated": false
+      },
+      "udp": null,
+      "intervals": null,
+      "loaded_rtt": {
+        "status": "unavailable",
+        "min_ms": null,
+        "avg_ms": null,
+        "median_ms": null,
+        "max_ms": null,
+        "samples": 0
+      }
+    }
+  },
+  "udp": {
+    "fwd": {
+      "status": "measured",
+      "throughput_mbps": 890,
+      "bytes": 111000000,
+      "duration_s": 10,
+      "retransmissions": null,
+      "udp": {
+        "sent_mbps": 900,
+        "sent_bytes": 112500000,
+        "target_rate_bps": 900000000,
+        "jitter_ms": 0.125,
+        "loss_pct": 1,
+        "datagrams_sent": 80000,
+        "datagrams_expected": 80000,
+        "datagrams_lost": 800
+      },
+      "intervals": [
+        {
+          "t_s": 0,
+          "duration_s": 1,
+          "bytes": 11000000,
+          "throughput_mbps": 88,
+          "rtt_ms": 300,
+          "datagrams_received": 7000,
+          "datagrams_lost": 100,
+          "loss_pct": 1.41,
+          "jitter_ms": 0.125
+        }
+      ],
+      "loaded_rtt": {
+        "status": "available",
+        "min_ms": 300,
+        "avg_ms": 300,
+        "median_ms": 300,
+        "max_ms": 300,
+        "samples": 1
+      }
+    },
+    "rev": {
+      "status": "not_measured",
+      "throughput_mbps": null,
+      "bytes": null,
+      "duration_s": null,
+      "retransmissions": null,
+      "udp": null,
+      "intervals": null,
+      "loaded_rtt": null
+    }
+  },
+  "notes": [
+    "UDP rev no medido: prueba",
+    "la latencia sube 299 ms con carga en ida: colas llenas en el enlace (bufferbloat)"
+  ]
+}

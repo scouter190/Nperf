@@ -72,12 +72,14 @@ type JSONPair struct {
 
 // JSONDir es un protocolo en un sentido. Con status "not_measured" los demás campos son null.
 type JSONDir struct {
-	Status         string       `json:"status"`
-	ThroughputMbps *float64     `json:"throughput_mbps"` // medido por el receptor
-	Bytes          *int64       `json:"bytes"`           // recibidos
-	DurationS      *float64     `json:"duration_s"`
-	Retransmission *JSONRetrans `json:"retransmissions"` // solo TCP
-	UDP            *JSONUDP     `json:"udp"`             // solo UDP
+	Status         string         `json:"status"`
+	ThroughputMbps *float64       `json:"throughput_mbps"` // medido por el receptor
+	Bytes          *int64         `json:"bytes"`           // recibidos
+	DurationS      *float64       `json:"duration_s"`
+	Retransmission *JSONRetrans   `json:"retransmissions"` // solo TCP
+	UDP            *JSONUDP       `json:"udp"`             // solo UDP
+	Intervals      []JSONInterval `json:"intervals"`       // null sin muestras o no medido
+	LoadedRTT      *JSONLoadedRTT `json:"loaded_rtt"`      // null si no medido
 }
 
 type JSONRetrans struct {
@@ -121,7 +123,7 @@ func jsonDir(d client.Dir, target float64) JSONDir {
 		return JSONDir{Status: StatusNotMeasured}
 	}
 	j := JSONDir{Status: StatusMeasured, ThroughputMbps: ptr(d.Mbps), Bytes: ptr(d.Received.Bytes),
-		DurationS: ptr(d.Received.Elapsed.Seconds())}
+		DurationS: ptr(d.Received.Elapsed.Seconds()), Intervals: jsonIntervals(d), LoadedRTT: jsonLoadedRTT(d)}
 	if u := d.UDP; u != nil {
 		ju := &JSONUDP{SentMbps: u.SentMbps, SentBytes: d.Sent.Bytes, JitterMS: u.JitterMS, LossPct: u.LossPct,
 			DatagramsSent: u.Packets, DatagramsExpected: u.Expected, DatagramsLost: u.Lost}
