@@ -208,3 +208,59 @@ func TestManualHostsRoundTripAndLimits(t *testing.T) {
 		t.Fatal("target vacío debe fallar")
 	}
 }
+
+func TestManualHostsAliasInvalid(t *testing.T) {
+	dir := t.TempDir()
+	c := Defaults()
+	for _, al := range []string{strings.Repeat("a", 65), "a\x01b", "a\nb", "a\x7fb"} {
+		c.ManualHosts = []ManualHost{{"h", al}}
+		if Save(dir, c) == nil {
+			t.Errorf("alias %q debe fallar", al)
+		}
+	}
+	c.ManualHosts = []ManualHost{{"h", strings.Repeat("a", 64)}}
+	if err := Save(dir, c); err != nil {
+		t.Fatalf("alias de 64 bytes: %v", err)
+	}
+	write(t, dir, `{"manual_hosts":[{"target":"h","alias":"a\u0001b"}]}`)
+	if _, err := LoadFull(dir); err == nil {
+		t.Fatal("LoadFull con alias de control debe fallar")
+	}
+}
+
+func TestManualHostsEmptiedRemovesField(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, `{"key":"k","futuro":1,"manual_hosts":[{"target":"h","alias":"x"}]}`)
+	c, err := LoadFull(dir)
+	if err != nil || len(c.ManualHosts) != 1 {
+		t.Fatalf("carga: %v %v", c, err)
+	}
+	c.ManualHosts = nil
+	if err := Save(dir, c); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(Path(dir))
+	if strings.Contains(string(b), "manual_hosts") || !strings.Contains(string(b), "futuro") {
+		t.Fatalf("contenido: %s", b)
+	}
+	if g, err := LoadFull(dir); err != nil || len(g.ManualHosts) != 0 {
+		t.Fatalf("recarga: %v %v", g, err)
+	}
+}
+
+func TestLoadFullRejects65HostsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	var sb strings.Builder
+	sb.WriteString(`{"manual_hosts":[`)
+	for i := 0; i < 65; i++ {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(`{"target":"h","alias":""}`)
+	}
+	sb.WriteString(`]}`)
+	write(t, dir, sb.String())
+	if _, err := LoadFull(dir); err == nil || !strings.Contains(err.Error(), "manual_hosts") {
+		t.Fatalf("65 en disco: %v", err)
+	}
+}

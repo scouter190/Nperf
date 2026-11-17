@@ -11,6 +11,7 @@ import (
 
 	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/probe"
 	"nperf/internal/report"
 )
 
@@ -49,6 +50,7 @@ type Deps struct {
 	Now       func() time.Time       // nil = time.Now
 	Net       InventorySource        // inventario de red local; nil = sin datos
 	OpenURL   func(string) error     // abridor de URL (solo recibe LocationSettingsURL); nil = no disponible
+	Router    probe.Router           // rutas del sistema (puerta de enlace); nil = sin puerta de enlace
 }
 
 // Device es un equipo de la lista.
@@ -100,6 +102,7 @@ type TestState struct {
 type State struct {
 	Self            Device            `json:"self"`
 	Peers           []Device          `json:"peers"`
+	NoAgent         []Device          `json:"no_agent"` // equipos sin NPerf: puerta de enlace y manuales
 	SelectedID      string            `json:"selected_id"`
 	Direction       string            `json:"direction"`
 	Directions      []DirectionOption `json:"directions"`
@@ -131,7 +134,9 @@ type App struct {
 	cancel    context.CancelFunc // nil si no hay prueba en curso
 	testHook  func()             // solo pruebas: se llama en la goroutine de la prueba antes de fijar el estado final
 	testDone  chan struct{}      // se cierra al terminar la goroutine de la prueba
-	rtErr     string             // último error al reiniciar el runtime ("" = ninguno)
+	gwMu      sync.Mutex
+	gw        gwCache
+	rtErr     string // último error al reiniciar el runtime ("" = ninguno)
 }
 
 // SetRuntimeError fija (o limpia con "") el error del último reinicio del runtime;
@@ -265,6 +270,12 @@ func (a *App) SelectPeer(id string) error {
 	if id == a.d.SelfID {
 		return errors.New("el destino no puede ser Este equipo: el origen siempre es este equipo")
 	}
+	if a.isNoAgent(id) {
+		a.mu.Lock()
+		a.selected = id
+		a.mu.Unlock()
+		return nil
+	}
 	for _, p := range a.d.Table.Snapshot() {
 		if p.InstanceID == id {
 			if !p.Reachable {
@@ -286,6 +297,9 @@ func (a *App) Target() (discovery.Peer, error) {
 	a.mu.Unlock()
 	if id == "" {
 		return discovery.Peer{}, errors.New("elija un equipo de destino")
+	}
+	if a.isNoAgent(id) {
+		return discovery.Peer{}, errors.New(NoAgentBlocked)
 	}
 	for _, p := range a.d.Table.Snapshot() {
 		if p.InstanceID == id {
@@ -419,6 +433,13 @@ func (a *App) State() State {
 			peerAlias = p.Alias
 		}
 	}
+	noAgent := a.noAgentDevices(cfg)
+	selNoAgent := false
+	for _, d := range noAgent {
+		if d.ID == sel {
+			peerAlias, selNoAgent = d.Alias, true
+		}
+	}
 	if peerAlias == "" {
 		sel = ""
 	}
@@ -454,6 +475,8 @@ func (a *App) State() State {
 		canTest, blocked = false, "hay una prueba en curso"
 	case sel == "":
 		canTest, blocked = false, "elija un equipo de destino"
+	case selNoAgent:
+		canTest, blocked = false, NoAgentBlocked
 	default:
 		for _, p := range snap {
 			if p.InstanceID == sel && !p.Reachable {
@@ -461,7 +484,7 @@ func (a *App) State() State {
 			}
 		}
 	}
-	return State{HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
+	return State{HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
 		DurationSeconds: dur, TotalSeconds: total, TotalLabel: label, Alias: alias, ExtraSubnets: subs,
 		FirewallHint: hint, Test: test}
 }
