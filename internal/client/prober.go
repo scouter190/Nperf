@@ -148,3 +148,10 @@ func (p *Prober) Run(ctx context.Context, clk Clock, wake <-chan struct{}, onRes
 		}
 	}
 }
+
+// Pending devuelve la sonda en vuelo (seq y hora de envío), si la hay.
+func (p *Prober) Pending() (seq int, sentAt time.Time, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.seq, p.sentAt, p.inflight
+}

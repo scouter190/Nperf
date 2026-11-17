@@ -51,6 +51,15 @@ type Options struct {
 	// LocalLink da el resumen del enlace propio para la IP local del control; se envía en
 	// "turn". nil o resultado nil = sin campo (compatible con servidores previos).
 	LocalLink func(localIP netip.Addr) *proto.Link
+	// NoLoadRTT desactiva las sondas de RTT bajo carga (las muestras por intervalo siguen).
+	NoLoadRTT bool
+	// OnReady se llama al obtener el turno con el enlace propio y el del servidor (pueden ser nil).
+	OnReady func(local, remote *proto.Link)
+	// OnRTT se llama con el RTT inicial (antes de la carga), cuando la fase lo mide.
+	OnRTT func(RTT)
+	// OnInterval se llama con cada muestra de 1 s (en orden) de las fases en vivo; phase es el
+	// mismo identificador que OnPhase. No se llama con un servidor sin soporte en vivo.
+	OnInterval func(phase string, iv Interval)
 }
 
 // errDialTimeout marca el vencimiento del plazo de conexión (el mensaje ya trae host y puerto).
@@ -135,6 +144,11 @@ type Dir struct {
 	Received meter.Result // lo que midió el receptor
 	Mbps     float64      // lo medido por el receptor
 	UDP      *UDPResult
+	// Live indica que el servidor dio muestras en vivo; Intervals son las muestras de 1 s y
+	// LoadedRTT el resumen de las sondas respondidas (nil con NoLoadRTT o sin respuestas).
+	Live      bool
+	Intervals []Interval
+	LoadedRTT *LoadedRTT
 }
 
 // Result representa ambos sentidos. Fwd es cliente -> servidor y Rev servidor -> cliente.
@@ -151,6 +165,13 @@ type Result struct {
 	Notes                  []string
 	// LocalLink/RemoteLink: enlaces de este equipo y del servidor (nil = desconocido).
 	LocalLink, RemoteLink *proto.Link
+}
+
+func (r *Result) dirPtr(dir string) *Dir {
+	if dir == proto.DirRev {
+		return &r.Rev
+	}
+	return &r.Fwd
 }
 
 func (r *Result) set(dir string, d Dir) {
@@ -189,7 +210,14 @@ func Run(ctx context.Context, addr string, o Options) (res Result, err error) {
 		return res, err
 	}
 	defer ss.close()
-	defer func() { res.LocalLink, res.RemoteLink = ss.local, ss.remote }()
+	defer func() {
+		res.LocalLink, res.RemoteLink = ss.local, ss.remote
+		ss.giveUpLate()
+		res.Notes = append(res.Notes, ss.notes...)
+	}()
+	if o.OnReady != nil {
+		o.OnReady(ss.local, ss.remote)
+	}
 	if o.Proto == proto.ProtoBoth {
 		return runFull(ctx, ss, o, dirs)
 	}
@@ -199,7 +227,9 @@ func Run(ctx context.Context, addr string, o Options) (res Result, err error) {
 			return res, err
 		}
 		res.set(dir, d)
+		ss.bind(res.dirPtr(dir))
 	}
+	ss.finishLate()
 	return res, nil
 }
 
@@ -220,6 +250,7 @@ func runFull(ctx context.Context, ss *sess, o Options, dirs []string) (Result, e
 			return res, err
 		}
 		res.set(dir, d)
+		ss.bind(res.dirPtr(dir))
 	}
 	res.RTT = rtt
 	udp := o
@@ -244,10 +275,13 @@ func runFull(ctx context.Context, ss *sess, o Options, dirs []string) (Result, e
 		}
 		if dir == proto.DirRev {
 			res.UDPRev, res.UDPRateRev = d, rate
+			ss.bind(&res.UDPRev)
 		} else {
 			res.UDPFwd, res.UDPRateFwd = d, rate
+			ss.bind(&res.UDPFwd)
 		}
 	}
+	ss.finishLate()
 	return res, nil
 }
 
@@ -287,9 +321,19 @@ type sess struct {
 	stop   func() bool
 	local  *proto.Link // enlace propio enviado en turn
 	remote *proto.Link // enlace del servidor recibido en ready
+
+	live  bool // el servidor confirmó live en alguna fase: puede haber pong sueltos
+	rtt   *RTT // RTT inicial de la sesión (nil si no se midió)
+	wg    sync.WaitGroup
+	notes []string
+	nmu   sync.Mutex
+	late  *lateProbe // sonda de la última muestra de la fase anterior, en vuelo
 }
 
-func (s *sess) close() { s.stop(); s.cc.Close() }
+func (s *sess) addNote(n string) { s.nmu.Lock(); s.notes = append(s.notes, n); s.nmu.Unlock() }
+
+// close cierra el control y espera a las goroutines de fase (lectora, prober).
+func (s *sess) close() { s.stop(); s.cc.Close(); s.wg.Wait() }
 
 func openSession(ctx context.Context, addr string, o *Options) (*sess, error) {
 	s := &sess{addr: addr}
@@ -354,6 +398,10 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 			return res, err
 		}
 		*rtt = *m
+		ss.rtt = m
+		if o.OnRTT != nil {
+			o.OnRTT(*m)
+		}
 	}
 	if o.Proto == "" {
 		o.Proto = proto.ProtoTCP
@@ -368,7 +416,7 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 		rate = DefaultUDPRate
 	}
 	params := proto.Message{Type: proto.TypeParams, Proto: o.Proto,
-		Direction: dir, DurationMS: o.Duration.Milliseconds(), Streams: 1}
+		Direction: dir, DurationMS: o.Duration.Milliseconds(), Streams: 1, Live: true}
 	if o.Proto == proto.ProtoTCP {
 		params.Streams = o.Streams
 	}
@@ -378,12 +426,27 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 	if err := codec.Write(params); err != nil {
 		return res, err
 	}
-	if _, err := expect(codec, proto.TypeStart); err != nil {
+	st, err := expectStart(ss)
+	if err != nil {
 		return res, err
+	}
+	// Solo con la confirmación del servidor hay muestras y sondas; un servidor previo ignora
+	// "live" y no admite mensajes en el control durante la fase.
+	var lv *liveRun
+	if st.Live {
+		ss.live = true
+		lv = newLive(ctx, ss, &o, o.Proto+"_"+dir, o.Proto == proto.ProtoUDP)
+		defer lv.stop()
+	}
+	result := func() (proto.Message, error) {
+		if lv != nil {
+			return lv.result()
+		}
+		return expect(codec, proto.TypeResult)
 	}
 
 	if o.Proto == proto.ProtoUDP {
-		return runUDP(ctx, dialer, addr, codec, session, o, rate, dir)
+		return runUDP(ctx, dialer, addr, session, o, rate, dir, lv, result)
 	}
 	conns := make([]net.Conn, 0, o.Streams)
 	var connsMu sync.Mutex // closeAll puede correr desde AfterFunc mientras se abren flujos
@@ -418,14 +481,24 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 			c.SetReadDeadline(time.Now().Add(o.Duration + margin))
 			rs[i] = c
 		}
-		rr, err := meter.ReceiveTCPN(rs, closeAll)
+		var rr meter.Result
+		var err error
+		if lv != nil {
+			out := make(chan meter.Sample, meter.MaxSamples)
+			wait := lv.pump(out)
+			rr, err = meter.ReceiveTCPNSamples(rs, closeAll, o.Duration, out)
+			close(out)
+			wait()
+		} else {
+			rr, err = meter.ReceiveTCPN(rs, closeAll)
+		}
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
 		if err != nil {
 			return res, err
 		}
-		r, err := expect(codec, proto.TypeResult)
+		r, err := result()
 		if err != nil {
 			return res, err
 		}
@@ -433,21 +506,34 @@ func runPhase(ctx context.Context, ss *sess, o Options, dir string, rtt *RTT) (D
 		if r.Retrans != nil { // lo informa el emisor (servidor)
 			sent.Retrans, sent.RetransOK, sent.RetransEstimated = *r.Retrans, true, r.RetransEst
 		}
-		return Dir{Measured: true, Received: rr, Mbps: rr.Mbps(), Sent: sent}, nil
+		return lv.attach(Dir{Measured: true, Received: rr, Mbps: rr.Mbps(), Sent: sent}), nil
 	}
-	var err error
 	res.Sent, err = meter.SendTCPN(ctx, conns, o.Duration)
 	if err != nil {
 		return res, err
 	}
-	r, err := expect(codec, proto.TypeResult)
+	r, err := result()
 	if err != nil {
 		return res, err
 	}
 	res.Measured = true
 	res.Received = meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond}
 	res.Mbps = r.Mbps
-	return res, nil
+	return lv.attach(res), nil
+}
+
+// expectStart lee el "start"; en una sesión live descarta los pong sueltos de una sonda de la
+// fase anterior que el servidor contestó tarde.
+func expectStart(ss *sess) (proto.Message, error) {
+	for {
+		m, err := expect(ss.codec, proto.TypeStart)
+		if err != nil && ss.live && m.Type == proto.TypePong {
+			ss.latePong(m.Seq)
+			continue
+		}
+		ss.giveUpLate()
+		return m, err
+	}
 }
 
 func expect(c *proto.Codec, typ string) (proto.Message, error) {
@@ -464,7 +550,7 @@ func expect(c *proto.Codec, typ string) (proto.Message, error) {
 	return m, nil
 }
 
-func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.Codec, session string, o Options, rate float64, dir string) (Dir, error) {
+func runUDP(ctx context.Context, dialer *net.Dialer, addr string, session string, o Options, rate float64, dir string, lv *liveRun, result func() (proto.Message, error)) (Dir, error) {
 	var res Dir
 	uc, err := dialer.DialContext(ctx, "udp", addr)
 	if err != nil {
@@ -478,7 +564,17 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.C
 	}
 	if dir == proto.DirRev {
 		uc.SetReadDeadline(time.Now().Add(o.Duration + margin))
-		st, err := meter.ReceiveUDP(ctx, uc, time.Second)
+		var st meter.UDPRecvStats
+		var err error
+		if lv != nil {
+			out := make(chan meter.Sample, meter.MaxSamples)
+			wait := lv.pump(out)
+			st, err = meter.ReceiveUDPSamples(ctx, uc, time.Second, o.Duration, out)
+			close(out)
+			wait()
+		} else {
+			st, err = meter.ReceiveUDP(ctx, uc, time.Second)
+		}
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
@@ -488,21 +584,21 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.C
 		if st.Received == 0 {
 			return res, fmt.Errorf("no llegaron datagramas UDP del servidor")
 		}
-		r, err := expect(codec, proto.TypeResult)
+		r, err := result()
 		if err != nil {
 			return res, err
 		}
-		return Dir{Measured: true, Received: st.Result, Mbps: st.Mbps(),
+		return lv.attach(Dir{Measured: true, Received: st.Result, Mbps: st.Mbps(),
 			Sent: meter.Result{Bytes: r.Bytes, Elapsed: time.Duration(r.DurationMS) * time.Millisecond},
 			UDP: &UDPResult{SentMbps: r.Mbps, Packets: r.Packets, Expected: st.Expected, Lost: st.Lost,
-				LossPct: st.LossPercent(), JitterMS: float64(st.Jitter) / float64(time.Millisecond)}}, nil
+				LossPct: st.LossPercent(), JitterMS: float64(st.Jitter) / float64(time.Millisecond)}}), nil
 	}
 	st, err := meter.SendUDP(ctx, uc, rate, meter.DefaultUDPSize, o.Duration)
 	if err != nil {
 		return res, err
 	}
 	res.Sent = meter.Result{Bytes: st.Bytes, Elapsed: st.Elapsed}
-	r, err := expect(codec, proto.TypeResult)
+	r, err := result()
 	if err != nil {
 		return res, err
 	}
@@ -511,7 +607,7 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, codec *proto.C
 	res.Mbps = r.Mbps
 	res.UDP = &UDPResult{SentMbps: st.Mbps(), Packets: st.Packets, Expected: r.Expected,
 		Lost: r.Lost, LossPct: r.LossPct, JitterMS: r.JitterMS}
-	return res, nil
+	return lv.attach(res), nil
 }
 
 // greetUDP asocia el socket UDP con la sesión: envía el saludo hasta recibir el acuse.
