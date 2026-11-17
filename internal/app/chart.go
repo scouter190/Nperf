@@ -108,6 +108,10 @@ func (c *Chart) get(phase string) *ChartPhase {
 	return &c.Phases[len(c.Phases)-1]
 }
 
+// setLive fija si la fase tiene muestras en vivo (false = par antiguo: gráfica no disponible
+// desde el inicio de la fase).
+func (c *Chart) setLive(phase string, live bool) { c.get(phase).Available = live }
+
 func chartSample(iv client.Interval) ChartSample {
 	s := ChartSample{f64(iv.Start.Seconds()), f64(iv.Duration.Seconds()), f64(iv.Mbps)}
 	if iv.HasRTT {

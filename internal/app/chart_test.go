@@ -136,3 +136,12 @@ func TestChartNominalOldPeerCapAndRace(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestChartSetLive(t *testing.T) {
+	c := &Chart{local: "A", peer: "B"}
+	c.setLive("tcp_fwd", false)
+	c.setLive("tcp_rev", true)
+	if c.get("tcp_fwd").Available || !c.get("tcp_rev").Available {
+		t.Fatalf("setLive: %+v", c.Phases)
+	}
+}

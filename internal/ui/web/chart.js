@@ -118,9 +118,9 @@
         seg.push(Math.round(px(p[0]) * 100) / 100 + ',' + Math.round(py(p[1]) * 100) / 100);
       });
       flush();
-      s.points.forEach(p => {
-        if (num(p[1]) && num(p[0])) root.appendChild(marker(kind, px(p[0]), py(p[1]), cls));
-      });
+      // Con muchos puntos solo se marca el último valor (la serie se distingue por el trazo).
+      const valid = s.points.filter(p => num(p[1]) && num(p[0]));
+      (valid.length > 60 ? valid.slice(-1) : valid).forEach(p => root.appendChild(marker(kind, px(p[0]), py(p[1]), cls)));
     });
     wrap.appendChild(root);
 

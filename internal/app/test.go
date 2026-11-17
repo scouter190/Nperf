@@ -77,6 +77,9 @@ func (a *App) StartTest() error {
 		OnRTT: func(r client.RTT) {
 			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).setRTT(r) })
 		},
+		OnLive: func(ph string, live bool) {
+			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).setLive(ph, live) })
+		},
 		OnInterval: func(ph string, iv client.Interval) {
 			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).addInterval(ph, iv) })
 		},

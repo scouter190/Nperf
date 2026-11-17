@@ -65,6 +65,50 @@
     trace: { healthy: false, messages: ['MTU reducido en la ruta (1492 bytes): posibles cortes con paquetes grandes'] },
     mtu: { healthy: false, messages: ['MTU reducido en la ruta (1492 bytes): posibles cortes con paquetes grandes'] }
   };
+
+  // ---- gráficas de ejemplo (forma de State.test.chart) ----
+  // Muestras [t_s, dur_s, mbps, rtt_ms, loss_pct, jitter_ms]; rtt null = sonda sin respuesta.
+  function mkSamples(phase, bloat) {
+    const udp = phase.indexOf('udp') === 0, out = [];
+    for (let i = 0; i < 10; i++) {
+      const base = { tcp_fwd: 931, tcp_rev: 905, udp_fwd: 838 }[phase] || 800;
+      const mbps = base + Math.round(Math.sin(i * 1.7 + phase.length) * 25 * 10) / 10 - (i === 0 && !udp ? 120 : 0);
+      let rtt = bloat ? (phase.indexOf('fwd') > 0 ? 6 + i * 26 + (i % 3) * 7 : 8 + i * 3) : 4 + (i % 3);
+      out.push([i, 1, mbps, i === 6 ? null : rtt, udp ? (i % 4 === 3 ? 0.8 : 0.05) : null, udp ? 0.4 + (i % 3) * 0.3 : null]);
+    }
+    return out;
+  }
+  function loaded(ss) {
+    const v = ss.map(function (s) { return s[3]; }).filter(function (x) { return x !== null; }).sort(function (a, b) { return a - b; });
+    const sum = v.reduce(function (a, b) { return a + b; }, 0);
+    return { min_ms: v[0], avg_ms: sum / v.length, median_ms: v[Math.floor(v.length / 2)], max_ms: v[v.length - 1], samples: v.length, sent: ss.length };
+  }
+  const INIT = { min_ms: 2.1, avg_ms: 3.4, max_ms: 6.2 };
+  function phaseOf(name, label, old, n) {
+    if (old) return { phase: name, label: label, nominal_mbps: null, rtt_initial: null, samples: [], loaded_rtt: null, note: '', available: false };
+    const ss = mkSamples(name, true).slice(0, n === undefined ? 10 : n);
+    const l = ss.length ? loaded(ss) : null;
+    const note = l && l.median_ms - INIT.avg_ms >= 100 && n === undefined && name === 'tcp_fwd' ? 'la latencia sube ' + Math.round(l.median_ms - INIT.avg_ms) + ' ms con carga en TCP ida: colas llenas en el enlace (bufferbloat)' : '';
+    return { phase: name, label: label, nominal_mbps: 1000, rtt_initial: INIT, samples: ss, loaded_rtt: l, note: note, available: true };
+  }
+  function mkChart(peer, old, n) {
+    const me = st.alias, ph = [['tcp_fwd', 'TCP ' + me + ' → ' + peer], ['tcp_rev', 'TCP ' + peer + ' → ' + me], ['udp_fwd', 'UDP ' + me + ' → ' + peer]];
+    if (n !== undefined) ph.length = 1;
+    return { phases: ph.map(function (x) { return phaseOf(x[0], x[1], old, n); }) };
+  }
+  // Monitor: 300 puntos (1 por segundo) por tarjeta física, hasta ahora.
+  let monOn = false;
+  function monitorView() {
+    const now = Date.now(), mk = function (guid, name, kind, status, base) {
+      const pts = [];
+      if (status === 'up') for (let i = 299; i >= 0; i--) {
+        const t = now - i * 1000, k = 300 - i, gap = k === 120;
+        pts.push({ at_ms: t, in_bps: gap ? 0 : base * (0.15 + Math.max(0, Math.sin(k / 18)) * 0.8) + (k % 7) * base * 0.01, out_bps: gap ? 0 : base * 0.05 * (1 + Math.sin(k / 5)), gap: gap });
+      }
+      return { guid: guid, name: name, kind: kind, status: status, points: pts };
+    };
+    return { available: true, adapters: [mk('{1}', 'Ethernet', 'eth', 'up', 4e8), mk('{2}', 'Wi-Fi', 'wifi', 'up', 6e7), mk('{3}', 'Ethernet 2', 'eth', 'disconnected', 0)] };
+  }
   let timers = [];
   function sync() {
     const p = st.peers.concat(st.no_agent).filter(function (x) { return x.id === st.selected_id; })[0];
@@ -100,11 +144,14 @@
     addSubnet: function (s) { if (st.extra_subnets.indexOf(s) < 0) st.extra_subnets.push(s); return Promise.resolve(); },
     removeSubnet: function (s) { st.extra_subnets = st.extra_subnets.filter(function (x) { return x !== s; }); return Promise.resolve(); },
     startTest: function () {
+      const p = st.peers.filter(function (x) { return x.id === st.selected_id; })[0];
+      const peer = p ? p.alias : 'Servidor', old = !!p && p.id === 'p3'; // p3 simula un par antiguo
       st.test = { running: true, status: 'queued', queue_position: 2 };
       later(1500, function () { st.test = { running: true, status: 'queued', queue_position: 1 }; });
       later(3000, function () { st.test = { running: true, status: 'running', phase: 'rtt' }; });
-      later(4000, function () { st.test = { running: true, status: 'running', phase: 'tcp_fwd' }; });
-      later(6000, function () { st.test = { status: 'done', running: false, report: report, diagnosis: diagnosis }; });
+      later(4000, function () { st.test = { running: true, status: 'running', phase: 'tcp_fwd', chart: mkChart(peer, old, 0) }; });
+      for (let i = 1; i <= 10; i++) later(4000 + i * 400, function () { st.test = { running: true, status: 'running', phase: 'tcp_fwd', chart: mkChart(peer, old, i) }; });
+      later(8600, function () { st.test = { status: 'done', running: false, report: report, diagnosis: diagnosis, chart: mkChart(peer, old) }; });
       return Promise.resolve();
     },
     addHost: function (target, alias) {
@@ -141,9 +188,10 @@
       return Promise.resolve(v);
     },
     openLocationSettings: function () { view.location_denied = false; view.location_notice = ''; return Promise.resolve(); },
-    cancelTest: function () { timers.forEach(clearTimeout); timers = []; st.test = { running: false, status: 'cancelled' }; return Promise.resolve(); }
+    monitor: function (active) { monOn = !!active; return Promise.resolve(active ? monitorView() : { available: true, adapters: [] }); },
+    cancelTest: function () { timers.forEach(clearTimeout); timers = []; const ch = st.test.chart; if (ch) ch.cancelled = true; st.test = { running: false, status: 'cancelled', chart: ch }; return Promise.resolve(); }
   };
   window.nperf = api;
   // Control para pruebas: __mock.state es el estado mutable.
-  window.__mock = { probes: probes, state: st, view: view, report: report, sync: sync };
+  window.__mock = { monitorOn: function () { return monOn; }, mkChart: mkChart, probes: probes, state: st, view: view, report: report, sync: sync };
 })();

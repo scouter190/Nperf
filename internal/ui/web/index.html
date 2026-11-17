@@ -48,6 +48,9 @@
         <button id="location-open" type="button">Abrir Configuración de ubicación</button>
       </div>
       <div id="adapters" class="cards"></div>
+      <h3>Tráfico en vivo (últimos 5 min)</h3>
+      <p id="monitor-msg" class="muted" hidden></p>
+      <div id="monitor" class="monitor"></div>
     </details>
     <details class="settings" id="settings">
       <summary>Ajustes</summary>
@@ -76,6 +79,7 @@
       <span id="probe-blocked" class="blocked"></span>
     </div>
     <div id="detail"></div>
+    <div id="charts"></div>
   </section>
 </main>
 <script src="chart.js"></script>

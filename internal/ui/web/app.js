@@ -4,7 +4,7 @@
 // Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
 // El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
-const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe'];
+const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe', 'monitor'];
 if (!window.nperf) {
   const api = {};
   NPERF_METHODS.forEach(function (m) {
@@ -418,12 +418,16 @@ function startProbe(kind) {
   act(nperf.startProbe(kind, last.selected_id));
 }
 
+function testNoChart(t) {
+  const c = Object.assign({}, t); delete c.chart; return c;
+}
+
 function renderDetail(s) {
   const detailed = $('detailed').checked;
   document.body.classList.toggle('compact', !detailed);
   if (s.probe && s.probe.running) showProbe = true;
   if (s.test && s.test.running) showProbe = false;
-  if (!changed('detail', [s.test, s.probe, showProbe, s.directions, detailed, s.selected_id, s.no_agent])) return;
+  if (!changed('detail', [testNoChart(s.test), s.probe, showProbe, s.directions, detailed, s.selected_id, s.no_agent])) return;
   const c = $('detail'); clear(c);
   const t = s.test;
   const peer = selectedDevice(s);
@@ -482,9 +486,136 @@ function refreshAdapters() {
     .then(function () { adaptersBusy = false; });
 }
 
+// ---- gráficas del TEST! y monitor de tarjetas (NPerfChart) ----
+const CHART_MIN_MS = 1000; // redibujo como máximo 1 vez por segundo
+const openData = {};        // clave de gráfica -> "Valores" abierto (se conserva al redibujar)
+let chartDrawn = 0, chartPending = false;
+
+// Dibuja una gráfica en un contenedor propio y conserva el estado del desplegable de valores.
+function drawChart(parent, key, opts) {
+  const box = el('div', 'chart-box');
+  parent.appendChild(box);
+  const w = window.NPerfChart.render(box, opts);
+  const det = w.querySelector('.chart-data');
+  if (det) {
+    det.open = !!openData[key];
+    det.addEventListener('toggle', function () { openData[key] = det.open; });
+  }
+}
+function pts(samples, idx, endOfInterval) {
+  return (samples || []).map(function (x) {
+    const t = x[0] === null ? null : (endOfInterval ? x[0] + (x[1] || 0) : x[0]);
+    return [t, x[idx]];
+  });
+}
+function chartBlock(p, cancelled) {
+  const box = el('section', 'chart-phase');
+  box.appendChild(el('h3', '', p.label));
+  if (!p.available) {
+    box.appendChild(el('p', 'muted chart-na', 'gráfica no disponible: el otro equipo no envía muestras'));
+    return box;
+  }
+  const udp = p.phase.indexOf('udp') === 0;
+  const samples = p.samples || [];
+  if (!samples.length) { box.appendChild(el('p', 'muted', cancelled ? 'Cancelado antes de recibir muestras.' : 'Esperando muestras…')); return box; }
+  const refs = [];
+  if (typeof p.nominal_mbps === 'number') refs.push({ y: p.nominal_mbps, label: 'nominal ' + Math.round(p.nominal_mbps) + ' Mbps' });
+  drawChart(box, p.phase + ':v', { title: 'Velocidad · ' + p.label, xLabel: 'Tiempo', xUnit: 's', yUnit: 'Mbps', decimals: 1,
+    series: [{ name: 'Velocidad', points: pts(samples, 2, true) }], refs: refs });
+  if (udp) {
+    drawChart(box, p.phase + ':l', { title: 'Pérdida · ' + p.label, xLabel: 'Tiempo', xUnit: 's', yUnit: '%', decimals: 2,
+      series: [{ name: 'Pérdida', points: pts(samples, 4, true) }] });
+    drawChart(box, p.phase + ':j', { title: 'Jitter · ' + p.label, xLabel: 'Tiempo', xUnit: 's', yUnit: 'ms', decimals: 3,
+      series: [{ name: 'Jitter', points: pts(samples, 5, true) }] });
+  }
+  const lr = p.loaded_rtt, ri = p.rtt_initial;
+  if (samples.some(function (x) { return x[3] !== null && x[3] !== undefined; })) {
+    const lrefs = [];
+    if (ri && typeof ri.avg_ms === 'number') lrefs.push({ y: ri.avg_ms, label: 'RTT inicial ' + fmt(ri.avg_ms, 1) + ' ms' });
+    drawChart(box, p.phase + ':r', { title: 'Latencia bajo carga · ' + p.label, xLabel: 'Tiempo', xUnit: 's', yUnit: 'ms', decimals: 1,
+      series: [{ name: 'RTT bajo carga', points: pts(samples, 3, true) }], refs: lrefs });
+    if (lr) box.appendChild(el('p', 'muted chart-loaded', 'RTT bajo carga: mín ' + fmt(lr.min_ms, 1) + ' ms · mediana ' + fmt(lr.median_ms, 1) + ' ms · media ' + fmt(lr.avg_ms, 1) + ' ms · máx ' + fmt(lr.max_ms, 1) + ' ms (' + lr.samples + ' de ' + lr.sent + ' sondas)'));
+  } else {
+    box.appendChild(el('p', 'muted', 'Sin sondas de latencia respondidas.'));
+  }
+  if (p.note) box.appendChild(el('p', 'chart-note', 'Aviso: ' + p.note));
+  return box;
+}
+
+function renderCharts(s) {
+  const c = $('charts');
+  const ch = s.test && s.test.chart;
+  if (showProbe && s.probe && s.probe.status !== 'idle') { if (changed('charts', 'probe')) clear(c); return; }
+  if (!ch || !ch.phases || !ch.phases.length) { if (changed('charts', 'none')) clear(c); return; }
+  if (!changed('charts', [ch, s.test.status])) return;
+  const now = Date.now();
+  if (now - chartDrawn < CHART_MIN_MS) {
+    // Demasiado pronto: se reintenta con el siguiente sondeo (la firma se invalida).
+    delete sig.charts;
+    if (!chartPending) { chartPending = true; setTimeout(function () { chartPending = false; if (last) renderCharts(last); }, CHART_MIN_MS - (now - chartDrawn)); }
+    return;
+  }
+  chartDrawn = now;
+  clear(c);
+  const h = el('h2', '', 'Gráficas del TEST!');
+  c.appendChild(h);
+  if (ch.cancelled || s.test.status === 'cancelled') c.appendChild(el('p', 'muted chart-cancelled', 'Cancelado: se muestran las muestras recibidas antes de cancelar.'));
+  ch.phases.forEach(function (p) { c.appendChild(chartBlock(p, ch.cancelled)); });
+}
+
+let monitorBusy = false, monitorOn = false;
+function stopMonitor() {
+  if (!monitorOn) return;
+  monitorOn = false;
+  Promise.resolve().then(function () { return nperf.monitor(false); }).then(null, function () {});
+}
+function monitorPoints(a, key, last) {
+  const out = [];
+  (a.points || []).forEach(function (p, i) {
+    const x = (p.at_ms - last) / 1000;
+    if (p.gap && i > 0) out.push([x - 0.001, null]);
+    out.push([x, p.gap ? null : p[key] / 1e6]);
+  });
+  return out;
+}
+function renderMonitor(v) {
+  const msg = $('monitor-msg');
+  msg.hidden = v.available;
+  msg.textContent = v.available ? '' : (v.message || 'el monitor de tarjetas no está disponible');
+  if (!changed('monitor', v)) return;
+  const c = $('monitor'); clear(c);
+  let latest = 0;
+  (v.adapters || []).forEach(function (a) { (a.points || []).forEach(function (p) { if (p.at_ms > latest) latest = p.at_ms; }); });
+  (v.adapters || []).forEach(function (a) {
+    const box = el('div', 'mon-adapter');
+    const hd = el('div', 'card-head');
+    const kind = KINDS[a.kind] ? a.kind : 'unknown';
+    const ico = el('span', 'ico ' + kind); ico.title = KINDS[kind];
+    hd.appendChild(ico);
+    hd.appendChild(el('span', 'name', a.name));
+    hd.appendChild(el('span', 'card-speed', a.status === 'up' ? 'conectada' : 'desconectada'));
+    box.appendChild(hd);
+    if (!a.points || !a.points.length) box.appendChild(el('p', 'muted', 'Sin datos todavía.'));
+    else drawChart(box, 'mon:' + a.guid, { title: 'Tráfico de ' + a.name, xLabel: 'Hace', xUnit: 's', yUnit: 'Mbps', decimals: 2, width: 300, height: 190,
+      series: [{ name: 'Entrada', points: monitorPoints(a, 'in_bps', latest) }, { name: 'Salida', points: monitorPoints(a, 'out_bps', latest) }] });
+    c.appendChild(box);
+  });
+  if (!(v.adapters || []).length && v.available) c.appendChild(el('p', 'muted', 'No hay tarjetas físicas que monitorizar.'));
+}
+// Solo con el panel abierto y la ventana visible; si no, se detiene el muestreo.
+function refreshMonitor() {
+  if (!$('adapters-box').open || document.hidden) { stopMonitor(); return; }
+  if (monitorBusy) return;
+  monitorBusy = true; monitorOn = true;
+  Promise.resolve().then(function () { return nperf.monitor(true); })
+    .then(function (v) { if ($('adapters-box').open && !document.hidden) renderMonitor(v); },
+      function (e) { $('monitor-msg').hidden = false; $('monitor-msg').textContent = String(e && e.message ? e.message : e); delete sig.monitor; })
+    .then(function () { monitorBusy = false; });
+}
+
 function render(s) {
   last = s;
-  renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s);
+  renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s); renderCharts(s);
 }
 
 let polling = false;
@@ -521,7 +652,10 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   $('cancel').addEventListener('click', function () { act(nperf.cancelTest()); });
   $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); refreshAdapters(); });
-  $('adapters-box').addEventListener('toggle', refreshAdapters);
+  $('adapters-box').addEventListener('toggle', function () { refreshAdapters(); if ($('adapters-box').open) refreshMonitor(); else stopMonitor(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) stopMonitor(); else refreshMonitor(); });
+  window.addEventListener('pagehide', stopMonitor);
+  setInterval(refreshMonitor, 1000);
   $('location-open').addEventListener('click', function () { act(nperf.openLocationSettings()); });
   setInterval(refreshAdapters, 5000);
   $('alias-save').addEventListener('click', function () { act(nperf.setAlias($('alias').value)); });

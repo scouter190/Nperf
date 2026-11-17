@@ -111,8 +111,8 @@ func TestBindingsExistInApp(t *testing.T) {
 	}
 	typ := reflect.TypeOf(&app.App{})
 	names := regexp.MustCompile(`'(\w+)'`).FindAllStringSubmatch(m[1], -1)
-	if len(names) != 16 {
-		t.Fatalf("se esperaban 16 métodos, hay %d", len(names))
+	if len(names) != 17 {
+		t.Fatalf("se esperaban 17 métodos, hay %d", len(names))
 	}
 	for _, n := range names {
 		goName := strings.ToUpper(n[1][:1]) + n[1][1:]
@@ -128,7 +128,7 @@ func TestBindingsExistInApp(t *testing.T) {
 // La UI cubre iconos, panel de tarjetas, aviso de ubicación y semáforo, sin recursos externos.
 func TestNetworkDetectionUI(t *testing.T) {
 	js, css, html := read(t, "app.js"), read(t, "app.css"), read(t, "index.html")
-	for _, s := range []string{"nperf.adapters(", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "$('adapters-box').open", "d.ssid", "diagnosis", "'parcial'"} {
+	for _, s := range []string{"nperf.adapters(", "nperf.monitor(true)", "nperf.monitor(false)", "NPerfChart.render", "gráfica no disponible: el otro equipo no envía muestras", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "$('adapters-box').open", "d.ssid", "diagnosis", "'parcial'"} {
 		if !strings.Contains(js, s) {
 			t.Errorf("app.js no contiene %q", s)
 		}
