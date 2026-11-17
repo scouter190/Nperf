@@ -175,6 +175,17 @@ func TestLivePingBeforeResultThenNextPhase(t *testing.T) {
 		}
 		break
 	}
+	if pongs == 0 {
+		// El ping pudo salir tras enviar params (el test lo lanza con un sleep): entonces lo
+		// contesta el vigilante de la fase siguiente, justo después de start.
+		m, err := codec.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Type == proto.TypePong {
+			pongs++
+		}
+	}
 	if pongs != 1 {
 		t.Errorf("pongs=%d, esperado 1", pongs)
 	}
