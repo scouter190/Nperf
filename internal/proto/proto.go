@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -32,6 +33,7 @@ const (
 	TypeQueue  = "queue"  // servidor: en cola, con Position (1 = el siguiente)
 	TypeReady  = "ready"  // servidor: turno concedido; ya se puede medir
 	TypeStatus = "status" // cliente: consulta pública de estado, primer mensaje, antes del handshake
+	TypeSample = "sample" // servidor: muestra de 1 s durante una fase live
 )
 
 // Valores de params.
@@ -135,12 +137,20 @@ type Message struct {
 	JitterMS float64 `json:"jitter_ms,omitempty"`
 	// Link: enlace del emisor del mensaje (solo en turn y ready; opcional).
 	Link *Link `json:"link,omitempty"`
+	// Spec 005: live (params/start) pide y confirma muestras; seq numera ping/pong de fase;
+	// index y t_ms identifican la muestra (type sample; duration_ms, bytes, mbps y los
+	// campos UDP se reutilizan).
+	Live  bool  `json:"live,omitempty"`
+	Seq   int64 `json:"seq,omitempty"`
+	Index int   `json:"index,omitempty"`
+	TMS   int64 `json:"t_ms,omitempty"`
 }
 
 // Codec lee y escribe mensajes por línea sobre una conexión.
 type Codec struct {
-	r *bufio.Reader
-	w io.Writer
+	r  *bufio.Reader
+	wm sync.Mutex // serializa escrituras: muestras, pongs y result salen de goroutines distintas
+	w  io.Writer
 }
 
 func NewCodec(rw io.ReadWriter) *Codec {
@@ -155,6 +165,8 @@ func (c *Codec) Write(m Message) error {
 	if err != nil {
 		return err
 	}
+	c.wm.Lock()
+	defer c.wm.Unlock()
 	_, err = c.w.Write(append(b, '\n'))
 	return err
 }
@@ -226,6 +238,8 @@ func (c *Codec) WriteStatus(r StatusReply) error {
 	if err != nil {
 		return err
 	}
+	c.wm.Lock()
+	defer c.wm.Unlock()
 	_, err = c.w.Write(append(b, '\n'))
 	return err
 }
