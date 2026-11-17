@@ -85,3 +85,22 @@ func TestAdaptersUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestAdaptersVirtual(t *testing.T) {
+	useSource(t, fakeSrc{raw: []netinfo.RawAdapter{
+		{Name: "Tailscale", Description: "Tailscale Tunnel", IfType: 131, OperStatus: 1, TxBps: 10e9, RxBps: 10e9},
+		{Name: "Ethernet", Description: "Intel", IfType: 6, OperStatus: 1, TxBps: 1e9, RxBps: 1e9},
+	}})
+	out, _ := capture(t, t.TempDir())
+	if code := run([]string{"adapters"}); code != 0 {
+		t.Fatalf("código %d", code)
+	}
+	s := out.String()
+	if !strings.Contains(s, "virtual (10 Gbps nominal)") || strings.Index(s, "Ethernet") > strings.Index(s, "Tailscale") {
+		t.Errorf("salida: %q", s)
+	}
+	out.Reset()
+	if code := run([]string{"adapters", "-json"}); code != 0 || !strings.Contains(out.String(), `"virtual":true`) {
+		t.Errorf("json: %q", out.String())
+	}
+}

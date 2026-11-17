@@ -24,9 +24,12 @@
   };
   const view = {
     adapters: [
-      { name: 'Ethernet', kind: 'eth', kind_label: 'Ethernet', connected: true, speed: '1 Gbps', description: 'Intel(R) Ethernet I219-V', mac: 'AA:BB:CC:00:11:22', ipv4: ['192.168.1.10'], tx_rate: '1 Gbps', rx_rate: '1 Gbps' },
-      { name: 'Wi-Fi', kind: 'wifi', kind_label: 'WiFi', connected: true, speed: '↑ 300 Mbps / ↓ 433 Mbps', wifi: { available: true, ssid: 'Oficina-5G', band: '5 GHz', channel: '36', signal: '72 %', bssid: '11:22:33:44:55:66', rssi: '-55 dBm', standard: '802.11ac', tx_rate: '300 Mbps', rx_rate: '433 Mbps' }, description: 'Intel(R) Wi-Fi 6 AX200', mac: 'AA:BB:CC:00:11:33', ipv4: ['192.168.1.11'] },
-      { name: 'Ethernet 2', kind: 'eth', kind_label: 'Ethernet', connected: false, speed: 'desconectada', description: 'USB GbE', mac: 'AA:BB:CC:00:11:44' }
+      { name: 'Ethernet', kind: 'eth', kind_label: 'Ethernet', connected: true, virtual: false, speed: '1 Gbps', description: 'Intel(R) Ethernet I219-V', mac: 'AA:BB:CC:00:11:22', ipv4: ['192.168.1.10'], tx_rate: '1 Gbps', rx_rate: '1 Gbps' },
+      { name: 'Wi-Fi', kind: 'wifi', kind_label: 'WiFi', connected: true, virtual: false, speed: '↑ 300 Mbps / ↓ 433 Mbps', wifi: { available: true, ssid: 'Oficina-5G', band: '5 GHz', channel: '36', signal: '72 %', bssid: '11:22:33:44:55:66', rssi: '-55 dBm', standard: '802.11ac', tx_rate: '300 Mbps', rx_rate: '433 Mbps' }, description: 'Intel(R) Wi-Fi 6 AX200', mac: 'AA:BB:CC:00:11:33', ipv4: ['192.168.1.11'] },
+      { name: 'Ethernet 2', kind: 'eth', kind_label: 'Ethernet', connected: false, virtual: false, speed: 'desconectada', description: 'USB GbE', mac: 'AA:BB:CC:00:11:44' },
+      { name: 'Tailscale', kind: 'other', kind_label: 'Otro', connected: true, virtual: true, speed: '(10 Gbps nominal)', description: 'Tailscale Tunnel', ipv4: ['100.64.0.5'], tx_rate: '10 Gbps', rx_rate: '10 Gbps' },
+      { name: 'vEthernet (Default Switch)', kind: 'eth', kind_label: 'Ethernet', connected: true, virtual: true, speed: '(10 Gbps nominal)', description: 'Hyper-V Virtual Ethernet Adapter', ipv4: ['172.20.0.1'], tx_rate: '10 Gbps', rx_rate: '10 Gbps' },
+      { name: 'Conexión de área local* 10', kind: 'wifi', kind_label: 'WiFi', connected: false, virtual: true, speed: 'desconectada', description: 'Microsoft Wi-Fi Direct Virtual Adapter' }
     ],
     location_denied: false, location_notice: ''
   };

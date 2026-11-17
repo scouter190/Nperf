@@ -21,8 +21,8 @@ func sampleInfos() []Info {
 func TestCompactView(t *testing.T) {
 	v := BuildView(sampleInfos(), false)
 	b, _ := json.Marshal(v)
-	want := `{"adapters":[{"name":"Ethernet","kind":"eth","kind_label":"Ethernet","connected":true,"speed":"1 Gbps"},` +
-		`{"name":"Wi-Fi","kind":"wifi","kind_label":"WiFi","connected":true,"speed":"866 Mbps","wifi":{"available":true,"ssid":"Casa","band":"5 GHz","channel":"36","signal":"72 %"}}],"location_denied":false}`
+	want := `{"adapters":[{"name":"Ethernet","kind":"eth","kind_label":"Ethernet","connected":true,"virtual":false,"speed":"1 Gbps"},` +
+		`{"name":"Wi-Fi","kind":"wifi","kind_label":"WiFi","connected":true,"virtual":false,"speed":"866 Mbps","wifi":{"available":true,"ssid":"Casa","band":"5 GHz","channel":"36","signal":"72 %"}}],"location_denied":false}`
 	if string(b) != want {
 		t.Fatalf("got %s", b)
 	}
@@ -82,10 +82,10 @@ func TestJSONGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `{"format_version":1,"adapters":[` +
-		`{"name":"Wi-Fi","description":"Intel","mac":null,"ipv4":[],"type":"wifi","connected":true,"link_tx_bps":866000000,"link_rx_bps":866000000,"link_status":"ok",` +
+		`{"name":"Wi-Fi","description":"Intel","mac":null,"ipv4":[],"type":"wifi","connected":true,"virtual":false,"link_tx_bps":866000000,"link_rx_bps":866000000,"link_status":"ok",` +
 		`"wifi":{"status":"ok","reason":null,"ssid":"Casa","bssid":"11:22","band":"5 GHz","channel":36,"signal_pct":72,"rssi_dbm":-55,"standard":"802.11ac (WiFi 5)","tx_bps":780000000,"rx_bps":780000000}},` +
-		`{"name":"Eth","description":null,"mac":null,"ipv4":[],"type":"eth","connected":false,"link_tx_bps":null,"link_rx_bps":null,"link_status":"disconnected","wifi":null},` +
-		`{"name":"W2","description":null,"mac":null,"ipv4":[],"type":"wifi","connected":true,"link_tx_bps":null,"link_rx_bps":null,"link_status":"unavailable",` +
+		`{"name":"Eth","description":null,"mac":null,"ipv4":[],"type":"eth","connected":false,"virtual":false,"link_tx_bps":null,"link_rx_bps":null,"link_status":"disconnected","wifi":null},` +
+		`{"name":"W2","description":null,"mac":null,"ipv4":[],"type":"wifi","connected":true,"virtual":false,"link_tx_bps":null,"link_rx_bps":null,"link_status":"unavailable",` +
 		`"wifi":{"status":"unavailable","reason":"permiso de ubicación denegado","ssid":null,"bssid":null,"band":null,"channel":null,"signal_pct":null,"rssi_dbm":null,"standard":null,"tx_bps":null,"rx_bps":null}}],` +
 		`"location_denied":true}`
 	if string(b) != want {
@@ -101,5 +101,33 @@ func TestViewHasNoKey(t *testing.T) {
 		if strings.Contains(l, `"key`) || strings.Contains(l, "clave") || strings.Contains(l, "secret") {
 			t.Errorf("la vista contiene la clave: %s", s)
 		}
+	}
+}
+
+func TestVirtualLastAndNominal(t *testing.T) {
+	infos := []Info{
+		{Adapter: Adapter{Name: "Tailscale", Kind: KindOther, Virtual: true, Connected: true, TxBps: 10e9, RxBps: 10e9}},
+		sampleInfos()[0],
+		{Adapter: Adapter{Name: "vEthernet", Kind: KindEthernet, Virtual: true}},
+	}
+	v := BuildView(infos, false)
+	if v.Adapters[0].Name != "Ethernet" || v.Adapters[1].Name != "Tailscale" || v.Adapters[2].Name != "vEthernet" {
+		t.Fatalf("orden: %+v", v.Adapters)
+	}
+	if !v.Adapters[1].Virtual || v.Adapters[1].Speed != "(10 Gbps nominal)" || v.Adapters[2].Speed != "desconectada" {
+		t.Errorf("virtual: %+v", v.Adapters)
+	}
+	if !strings.Contains(v.Text(), "Tailscale [Otro] virtual (10 Gbps nominal)") {
+		t.Errorf("texto:\n%s", v.Text())
+	}
+	b, _ := JSON(infos)
+	var d struct {
+		Adapters []struct {
+			Name    string
+			Virtual bool
+		}
+	}
+	if err := json.Unmarshal(b, &d); err != nil || d.Adapters[0].Virtual || !d.Adapters[1].Virtual || d.Adapters[1].Name != "Tailscale" {
+		t.Errorf("json: %s %v", b, err)
 	}
 }

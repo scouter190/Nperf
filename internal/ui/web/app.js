@@ -437,12 +437,13 @@ function renderDetail(s) {
 }
 
 function adapterCard(a, detailed) {
-  const card = el('div', 'card' + (a.connected ? '' : ' off'));
+  const card = el('div', 'card' + (a.connected ? '' : ' off') + (a.virtual === true ? ' virtual' : ''));
   const head = el('div', 'card-head');
   const kind = KINDS[a.kind] ? a.kind : 'unknown';
   const ico = el('span', 'ico ' + kind); ico.title = a.kind_label || KINDS[kind];
   head.appendChild(ico);
   head.appendChild(el('span', 'name', a.name));
+  if (a.virtual === true) { const tag = el('span', 'tag-virtual', 'virtual'); tag.title = 'Adaptador virtual (VPN, máquina virtual...): su velocidad es nominal'; head.appendChild(tag); }
   head.appendChild(el('span', 'card-speed', a.speed));
   card.appendChild(head);
   const kv = function (k, v) { if (v) card.appendChild(el('div', 'kv', k + ': ' + v)); };

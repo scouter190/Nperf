@@ -46,7 +46,8 @@ type AdapterView struct {
 	Kind      string    `json:"kind"` // eth|wifi|other
 	KindLabel string    `json:"kind_label"`
 	Connected bool      `json:"connected"`
-	Speed     string    `json:"speed"` // "1 Gbps", "no disponible", "desconectada"
+	Virtual   bool      `json:"virtual"`
+	Speed     string    `json:"speed"` // "1 Gbps", "(10 Gbps nominal)" si virtual, "no disponible", "desconectada"
 	WiFi      *WiFiView `json:"wifi,omitempty"`
 	// Solo en vista detallada.
 	Description string   `json:"description,omitempty"`
@@ -70,7 +71,26 @@ func speedText(a Adapter) string {
 	if a.TxBps == 0 && a.RxBps == 0 {
 		return NotAvailable
 	}
+	if a.Virtual {
+		return "(" + rateText(a.TxBps, a.RxBps) + " nominal)"
+	}
 	return rateText(a.TxBps, a.RxBps)
+}
+
+// virtualLast ordena de forma estable: los adaptadores virtuales al final.
+func virtualLast(infos []Info) []Info {
+	out := make([]Info, 0, len(infos))
+	for _, in := range infos {
+		if !in.Virtual {
+			out = append(out, in)
+		}
+	}
+	for _, in := range infos {
+		if in.Virtual {
+			out = append(out, in)
+		}
+	}
+	return out
 }
 
 func rateText(tx, rx uint64) string {
@@ -130,10 +150,10 @@ func bpsOrNA(b uint64) string {
 // BuildView construye la vista compacta (detailed=false) o detallada.
 func BuildView(infos []Info, detailed bool) View {
 	v := View{Adapters: make([]AdapterView, 0, len(infos))}
-	for _, in := range infos {
+	for _, in := range virtualLast(infos) {
 		av := AdapterView{
 			Name: in.Name, Kind: string(in.Kind), KindLabel: KindLabel(in.Kind),
-			Connected: in.Connected, Speed: speedText(in.Adapter),
+			Connected: in.Connected, Virtual: in.Virtual, Speed: speedText(in.Adapter),
 			WiFi: wifiView(in.WiFi, detailed),
 		}
 		if in.WiFi != nil && in.WiFi.LocationDenied {
@@ -163,7 +183,11 @@ func (v View) Text() string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(a.Name + " [" + a.KindLabel + "] " + a.Speed + "\n")
+		b.WriteString(a.Name + " [" + a.KindLabel + "]")
+		if a.Virtual {
+			b.WriteString(" virtual")
+		}
+		b.WriteString(" " + a.Speed + "\n")
 		if a.Description != "" {
 			b.WriteString("  Descripción: " + a.Description + "\n")
 		}
@@ -214,6 +238,7 @@ type jsonAdapter struct {
 	IPv4        []string  `json:"ipv4"`
 	Type        string    `json:"type"`
 	Connected   bool      `json:"connected"`
+	Virtual     bool      `json:"virtual"`
 	LinkTxBps   *uint64   `json:"link_tx_bps"`
 	LinkRxBps   *uint64   `json:"link_rx_bps"`
 	LinkStatus  string    `json:"link_status"` // ok | unavailable | disconnected
@@ -243,10 +268,10 @@ func u64p(n uint64) *uint64 {
 // JSON devuelve la forma JSON v1 (detallada) de las tarjetas.
 func JSON(infos []Info) ([]byte, error) {
 	doc := jsonDoc{FormatVersion: FormatVersion, Adapters: []jsonAdapter{}}
-	for _, in := range infos {
+	for _, in := range virtualLast(infos) {
 		ja := jsonAdapter{
 			Name: in.Name, Description: strp(in.Description), MAC: strp(in.MAC),
-			IPv4: []string{}, Type: string(in.Kind), Connected: in.Connected,
+			IPv4: []string{}, Type: string(in.Kind), Connected: in.Connected, Virtual: in.Virtual,
 		}
 		for _, ip := range in.IPv4 {
 			ja.IPv4 = append(ja.IPv4, ip.String())
