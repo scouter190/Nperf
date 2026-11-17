@@ -74,8 +74,8 @@ func TestBindingsExistInApp(t *testing.T) {
 	}
 	typ := reflect.TypeOf(&app.App{})
 	names := regexp.MustCompile(`'(\w+)'`).FindAllStringSubmatch(m[1], -1)
-	if len(names) != 12 {
-		t.Fatalf("se esperaban 12 métodos, hay %d", len(names))
+	if len(names) != 16 {
+		t.Fatalf("se esperaban 16 métodos, hay %d", len(names))
 	}
 	for _, n := range names {
 		goName := strings.ToUpper(n[1][:1]) + n[1][1:]

@@ -4,7 +4,7 @@
 // Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
 // El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
-const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings'];
+const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe'];
 if (!window.nperf) {
   const api = {};
   NPERF_METHODS.forEach(function (m) {
@@ -23,6 +23,7 @@ const nperf = window.nperf;
 const $ = function (id) { return document.getElementById(id); };
 const PHASES = [['rtt', 'RTT'], ['tcp_fwd', 'TCP ida'], ['tcp_rev', 'TCP vuelta'], ['udp_fwd', 'UDP ida'], ['udp_rev', 'UDP vuelta']];
 let last = null;
+let showProbe = false;
 const sig = {};
 
 function el(tag, cls, text) {
@@ -57,18 +58,27 @@ function linkLine(d) {
   return parts.join(' · ');
 }
 
-function deviceRow(d, selectable, selected) {
-  const row = el('div', 'dev' + (selectable ? '' : ' self') + (selected ? ' sel' : '') + (d.status === 'unreachable' ? ' unreachable' : ''));
-  const kind = KINDS[d.link] ? d.link : 'unknown';
-  const ico = el('span', 'ico ' + kind); ico.title = KINDS[kind];
+const GATEWAY_ID = 'gateway';
+function deviceRow(d, selectable, selected, noAgent) {
+  const gw = noAgent && d.id === GATEWAY_ID;
+  const row = el('div', 'dev' + (selectable ? '' : ' self') + (selected ? ' sel' : '') + (d.status === 'unreachable' ? ' unreachable' : '') + (noAgent ? ' noagent' : '') + (gw ? ' gw' : ''));
+  const kind = noAgent ? 'noagent' : (KINDS[d.link] ? d.link : 'unknown');
+  const ico = el('span', 'ico ' + kind); ico.title = noAgent ? (gw ? 'Puerta de enlace (sin NPerf)' : 'Equipo sin NPerf') : KINDS[kind];
   row.appendChild(ico);
   const info = el('div', 'info');
   info.appendChild(el('span', 'name', d.alias));
   info.appendChild(el('span', 'ip', (d.ips || []).join(', ')));
-  const ln = linkLine(d);
+  const ln = noAgent ? '' : linkLine(d);
   if (ln) info.appendChild(el('span', 'ip', ln));
   row.appendChild(info);
   row.appendChild(el('span', 'badge ' + d.status, d.status_label));
+  if (noAgent && !gw) {
+    const rm = el('button', 'rm', 'Quitar'); rm.type = 'button';
+    rm.title = 'Quitar ' + d.alias + ' de la lista';
+    rm.addEventListener('click', function (e) { e.stopPropagation(); act(nperf.removeHost(d.id)); });
+    rm.addEventListener('keydown', function (e) { e.stopPropagation(); });
+    row.appendChild(rm);
+  }
   row.tabIndex = selectable && d.status !== 'unreachable' ? 0 : -1;
   if (selectable) {
     row.role = 'button';
@@ -94,8 +104,19 @@ function renderList(s) {
     const c = $('peers'); clear(c);
     s.peers.forEach(function (p) { c.appendChild(deviceRow(p, true, p.id === s.selected_id)); });
   }
+  const na = s.no_agent || [];
+  if (changed('noagent', [na, s.selected_id])) {
+    const c = $('noagent'); clear(c);
+    na.forEach(function (p) { c.appendChild(deviceRow(p, true, p.id === s.selected_id, true)); });
+  }
   $('empty').hidden = s.peers.length > 0;
 }
+
+function selectedDevice(s) {
+  const all = (s.peers || []).concat(s.no_agent || []);
+  return all.filter(function (p) { return p.id === s.selected_id; })[0];
+}
+function isNoAgent(s, id) { return (s.no_agent || []).some(function (p) { return p.id === id; }); }
 
 function renderBar(s) {
   if (changed('dirs', [s.directions, s.direction])) {
@@ -109,12 +130,12 @@ function renderBar(s) {
   if (document.activeElement !== dur) dur.value = s.duration_seconds;
   $('total').textContent = s.direction === 'both' ? s.total_label : '';
   const running = s.test.running;
-  $('test').hidden = running;
+  $('test').hidden = running || isNoAgent(s, s.selected_id);
   $('cancel').hidden = !running;
   $('cancel').disabled = s.test.status === 'cancelling';
   $('test').disabled = !s.can_test;
   $('test').title = s.can_test ? '' : s.test_blocked_reason;
-  $('blocked').textContent = s.can_test ? '' : s.test_blocked_reason;
+  $('blocked').textContent = s.can_test || isNoAgent(s, s.selected_id) ? '' : s.test_blocked_reason;
   $('direction').disabled = running;
   dur.disabled = running;
   const ce = $('config-error'); ce.hidden = !s.config_error; ce.textContent = s.config_error || '';
@@ -190,7 +211,7 @@ function linkText(l) {
 const SEMA = { green: 'Sin limitación detectada', amber: 'Limitación moderada', red: 'Limitación fuerte' };
 function diagnosisView(s) {
   const dg = s.test.diagnosis;
-  const peer = s.peers.filter(function (p) { return p.id === s.selected_id; })[0];
+  const peer = selectedDevice(s);
   const box = el('div', 'diag');
   box.appendChild(el('h3', '', 'Diagnóstico'));
   [['fwd', dg.fwd], ['rev', dg.rev]].forEach(function (x) {
@@ -260,19 +281,159 @@ function reportView(s, detailed) {
   return box;
 }
 
+// ---- diagnósticos sin agente ----
+const PROBES = [['ping', 'Ping', 'probe-ping'], ['trace', 'Traceroute', 'probe-trace'], ['mtu', 'MTU', 'probe-mtu'], ['ports', 'Puertos', 'probe-ports']];
+const PROBE_NAMES = { ping: 'Ping', trace: 'Traceroute', mtu: 'MTU de la ruta', ports: 'Puertos TCP' };
+const PORT_STATES = { open: 'abierto', closed: 'cerrado', filtered: 'filtrado', canceled: 'cancelado', cancelled: 'cancelado' };
+const REPLY_STATES = { ok: 'respuesta', timeout: 'tiempo agotado', ttl_expired: 'TTL expirado', host_unreachable: 'host inaccesible', net_unreachable: 'red inaccesible', port_unreachable: 'puerto inaccesible', frag_needed: 'fragmentación necesaria', other: 'sin respuesta' };
+
+function fmtMs(v) {
+  if (v === null || v === undefined) return 'no disponible';
+  return Number(v) < 1 ? '< 1 ms' : Number(v).toFixed(1) + ' ms';
+}
+function kvTable(rows) {
+  const t = el('table', 'kv-table');
+  rows.forEach(function (r) {
+    const tr = el('tr'); tr.appendChild(el('th', '', r[0])); tr.appendChild(el('td', 'num', r[1])); t.appendChild(tr);
+  });
+  return t;
+}
+function listOf(cls, items) {
+  const ul = el('ul', cls);
+  (items || []).forEach(function (n) { ul.appendChild(el('li', '', n)); });
+  return ul;
+}
+function pingView(r, detailed) {
+  const box = el('div');
+  const ok = r.rtt_status === 'ok';
+  box.appendChild(kvTable([
+    ['Enviados', r.sent], ['Recibidos', r.received], ['Pérdida', fmt(r.loss_pct, 1) + ' %'],
+    ['Mín', ok ? fmtMs(r.min_ms) : 'no disponible'], ['Media', ok ? fmtMs(r.avg_ms) : 'no disponible'], ['Máx', ok ? fmtMs(r.max_ms) : 'no disponible'],
+    ['Jitter', r.jitter_status === 'ok' ? fmtMs(r.jitter_ms) : 'no disponible']
+  ]));
+  if (r.last_error) box.appendChild(el('p', 'muted', 'Último error: ' + r.last_error));
+  if (detailed && r.replies && r.replies.length) {
+    const t = el('table'); const hr = el('tr');
+    ['N.º', 'Resultado', 'Desde', 'Tiempo'].forEach(function (c) { hr.appendChild(el('th', '', c)); });
+    t.appendChild(hr);
+    r.replies.forEach(function (p) {
+      const tr = el('tr');
+      cell(tr, p.seq, 'num'); cell(tr, REPLY_STATES[p.status] || p.status); cell(tr, p.from || '-');
+      cell(tr, p.rtt_ms === null || p.rtt_ms === undefined ? (p.reason || '*') : fmtMs(p.rtt_ms), 'num');
+      t.appendChild(tr);
+    });
+    box.appendChild(t);
+  }
+  return box;
+}
+function traceView(r) {
+  const box = el('div');
+  box.appendChild(el('p', r.reached ? 'status-line' : 'status-line err-text', r.reached ? 'Destino alcanzado.' : 'Destino no alcanzado.'));
+  const t = el('table', 'trace');
+  const hr = el('tr');
+  const n = (r.hops || []).reduce(function (m, h) { return Math.max(m, (h.probes || []).length); }, 0);
+  const cols = ['Salto', 'Equipo'];
+  for (let i = 1; i <= n; i++) cols.push('Sonda ' + i);
+  cols.push('Pérdida');
+  cols.forEach(function (c) { hr.appendChild(el('th', '', c)); });
+  t.appendChild(hr);
+  (r.hops || []).forEach(function (h) {
+    const tr = el('tr', h.from ? '' : 'silent');
+    cell(tr, h.ttl, 'num'); cell(tr, h.from || '*');
+    for (let i = 0; i < n; i++) {
+      const p = (h.probes || [])[i];
+      cell(tr, p && p.rtt_ms !== null && p.rtt_ms !== undefined ? fmtMs(p.rtt_ms) : '*', 'num');
+    }
+    cell(tr, fmt(h.loss_pct, 0) + ' %', 'num');
+    t.appendChild(tr);
+  });
+  box.appendChild(t);
+  if (r.findings && r.findings.length) { box.appendChild(el('h3', '', 'Análisis')); box.appendChild(listOf('findings', r.findings)); }
+  return box;
+}
+function mtuView(r) {
+  const box = el('div');
+  if (r.status !== 'ok') box.appendChild(el('p', 'err-text', 'MTU no disponible: ' + (r.reason || 'sin motivo')));
+  else box.appendChild(kvTable([['MTU de la ruta', r.mtu_bytes + ' bytes'], ['Carga ICMP máxima', r.max_payload_bytes + ' bytes']]));
+  box.appendChild(el('p', 'muted', 'Sondas enviadas: ' + r.probes + (r.interface_mtu_bytes ? ' · MTU de la interfaz local: ' + r.interface_mtu_bytes + ' bytes' : '')));
+  if (r.notes && r.notes.length) box.appendChild(listOf('notes warn-notes', r.notes));
+  return box;
+}
+function portsView(r) {
+  const t = el('table');
+  const hr = el('tr');
+  ['Puerto', 'Estado', 'Detalle'].forEach(function (c) { hr.appendChild(el('th', '', c)); });
+  t.appendChild(hr);
+  (r.ports || []).forEach(function (p) {
+    const tr = el('tr');
+    cell(tr, p.port, 'num');
+    const st = PORT_STATES[p.state] ? p.state : 'error';
+    tr.appendChild(el('td', 'port ' + st, PORT_STATES[p.state] || 'error'));
+    cell(tr, p.detail || '');
+    t.appendChild(tr);
+  });
+  return t;
+}
+function combinedView(c) {
+  const box = el('div', 'combined ' + (c.healthy ? 'healthy' : 'problem'));
+  box.appendChild(el('h3', '', 'Diagnóstico combinado'));
+  (c.messages || []).forEach(function (m) { box.appendChild(el('p', 'cmb-msg', m)); });
+  return box;
+}
+function probeDetail(s, c) {
+  const p = s.probe;
+  const dev = (s.peers || []).concat(s.no_agent || []).filter(function (x) { return x.id === p.target_id; })[0];
+  c.appendChild(el('p', 'status-line', (PROBE_NAMES[p.kind] || 'Diagnóstico') + (dev ? ' a ' + dev.alias + ' (' + (dev.ips || []).join(', ') + ')' : '')));
+  if (p.status === 'running') c.appendChild(el('p', 'muted', 'Ejecutando…'));
+  else if (p.status === 'cancelling') c.appendChild(el('p', 'muted', p.label || 'Cancelando…'));
+  else if (p.status === 'cancelled') c.appendChild(el('p', 'muted', 'Diagnóstico cancelado.'));
+  else if (p.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + p.error));
+  else if (p.status === 'done' && p.result) {
+    if (p.combined && p.combined.messages && p.combined.messages.length) c.appendChild(combinedView(p.combined));
+    const detailed = $('detailed').checked;
+    if (p.kind === 'ping') c.appendChild(pingView(p.result, detailed));
+    else if (p.kind === 'trace') c.appendChild(traceView(p.result));
+    else if (p.kind === 'mtu') c.appendChild(mtuView(p.result));
+    else if (p.kind === 'ports') c.appendChild(portsView(p.result));
+  }
+}
+
+function renderProbeBar(s) {
+  const p = s.probe || { running: false, status: 'idle' };
+  const hasSel = !!selectedDevice(s);
+  PROBES.forEach(function (x) {
+    const b = $(x[2]);
+    const own = p.running && p.kind === x[0];
+    b.textContent = own ? (p.status === 'cancelling' ? 'Cancelando…' : 'Cancelar') : x[1];
+    b.classList.toggle('danger', own);
+    b.disabled = own ? p.status === 'cancelling' : (!hasSel || !s.can_probe);
+    b.title = own ? '' : (!hasSel ? 'elija un equipo de destino' : (s.can_probe ? '' : s.probe_blocked_reason));
+  });
+  $('probe-blocked').textContent = !s.can_probe && !p.running ? s.probe_blocked_reason : (p.running ? '' : (hasSel ? '' : 'elija un equipo de destino'));
+}
+
+function startProbe(kind) {
+  if (!last) return;
+  showProbe = true; delete sig.detail;
+  act(nperf.startProbe(kind, last.selected_id));
+}
+
 function renderDetail(s) {
   const detailed = $('detailed').checked;
   document.body.classList.toggle('compact', !detailed);
-  if (!changed('detail', [s.test, s.directions, detailed, s.selected_id])) return;
+  if (s.probe && s.probe.running) showProbe = true;
+  if (s.test && s.test.running) showProbe = false;
+  if (!changed('detail', [s.test, s.probe, showProbe, s.directions, detailed, s.selected_id, s.no_agent])) return;
   const c = $('detail'); clear(c);
   const t = s.test;
-  const peer = s.peers.filter(function (p) { return p.id === s.selected_id; })[0];
+  const peer = selectedDevice(s);
+  if (showProbe && s.probe && s.probe.status !== 'idle') { probeDetail(s, c); return; }
   c.appendChild(el('p', 'status-line', peer ? 'Destino: ' + peer.alias + ' (' + (peer.ips || []).join(', ') + ')' : 'Sin destino seleccionado'));
   if (t.status === 'queued' || t.status === 'running' || t.status === 'cancelling') c.appendChild(progress(s));
   else if (t.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + t.error));
   else if (t.status === 'cancelled') c.appendChild(el('p', 'muted', 'Prueba cancelada.'));
   else if (t.status === 'done' && t.report) c.appendChild(reportView(s, detailed));
-  else c.appendChild(el('p', 'muted', 'Elija un equipo y pulse TEST!.'));
+  else c.appendChild(el('p', 'muted', peer && isNoAgent(s, peer.id) ? 'Equipo sin NPerf: use Ping, Traceroute, MTU o Puertos.' : 'Elija un equipo y pulse TEST! o un diagnóstico.'));
 }
 
 function adapterCard(a, detailed) {
@@ -322,7 +483,7 @@ function refreshAdapters() {
 
 function render(s) {
   last = s;
-  renderBar(s); renderList(s); renderSettings(s); renderDetail(s);
+  renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s);
 }
 
 let polling = false;
@@ -343,7 +504,20 @@ function commitDuration() {
 document.addEventListener('DOMContentLoaded', function () {
   $('direction').addEventListener('change', function () { act(nperf.setDirection($('direction').value)); });
   $('duration').addEventListener('change', commitDuration);
-  $('test').addEventListener('click', function () { act(nperf.startTest()); });
+  $('test').addEventListener('click', function () { showProbe = false; delete sig.detail; act(nperf.startTest()); });
+  PROBES.forEach(function (x) {
+    $(x[2]).addEventListener('click', function () {
+      if (last && last.probe && last.probe.running && last.probe.kind === x[0]) act(nperf.cancelProbe());
+      else startProbe(x[0]);
+    });
+  });
+  $('host-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const err = $('host-error'); err.hidden = true;
+    Promise.resolve().then(function () { return nperf.addHost($('host-target').value, $('host-alias').value); })
+      .then(function () { $('host-target').value = ''; $('host-alias').value = ''; return poll(); },
+        function (x) { err.textContent = String(x && x.message ? x.message : x); err.hidden = false; });
+  });
   $('cancel').addEventListener('click', function () { act(nperf.cancelTest()); });
   $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); refreshAdapters(); });
   $('adapters-box').addEventListener('toggle', refreshAdapters);

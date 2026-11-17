@@ -34,6 +34,13 @@
     <h3>En la red</h3>
     <div id="peers" class="devices"></div>
     <p id="empty" class="muted" hidden>Buscando equipos…</p>
+    <h3>Sin NPerf</h3>
+    <div id="noagent" class="devices"></div>
+    <form id="host-form" class="stack host-form" autocomplete="off">
+      <span class="row"><input id="host-target" type="text" maxlength="255" placeholder="IP o nombre" aria-label="IP o nombre del equipo"><input id="host-alias" type="text" maxlength="64" placeholder="Alias (opcional)" aria-label="Alias del equipo"></span>
+      <span class="row"><button id="host-add" type="submit">Añadir equipo</button></span>
+      <span id="host-error" class="err-text" hidden></span>
+    </form>
     <details class="settings" id="adapters-box">
       <summary>Tarjetas de red</summary>
       <div id="location-notice" class="banner warn" hidden>
@@ -60,6 +67,13 @@
     <div class="detail-head">
       <h2>Detalle</h2>
       <label class="check"><input id="detailed" type="checkbox"> Modo detallado</label>
+    </div>
+    <div id="probe-bar" class="probe-bar">
+      <button id="probe-ping" type="button" data-kind="ping">Ping</button>
+      <button id="probe-trace" type="button" data-kind="trace">Traceroute</button>
+      <button id="probe-mtu" type="button" data-kind="mtu">MTU</button>
+      <button id="probe-ports" type="button" data-kind="ports">Puertos</button>
+      <span id="probe-blocked" class="blocked"></span>
     </div>
     <div id="detail"></div>
   </section>
