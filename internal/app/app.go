@@ -11,6 +11,7 @@ import (
 
 	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/netinfo"
 	"nperf/internal/probe"
 	"nperf/internal/report"
 )
@@ -51,6 +52,7 @@ type Deps struct {
 	Net       InventorySource        // inventario de red local; nil = sin datos
 	OpenURL   func(string) error     // abridor de URL (solo recibe LocationSettingsURL); nil = no disponible
 	Router    probe.Router           // rutas del sistema (puerta de enlace); nil = sin puerta de enlace
+	Counters  netinfo.CounterSource  // contadores por tarjeta (monitor); nil = monitor no disponible
 	Probe     probe.Env              // entorno de los diagnósticos (T15 lo cablea); vacío = no disponibles
 }
 
@@ -145,6 +147,8 @@ type App struct {
 	probeCancel context.CancelFunc // nil si no hay diagnóstico
 	probeDone   chan struct{}      // se cierra al terminar la goroutine del diagnóstico
 	probeHook   func()             // solo pruebas: antes de fijar el estado final
+	monMu       sync.Mutex         // protege mon
+	mon         *netinfo.Monitor   // creado al primer Monitor(true)
 	rtErr       string             // último error al reiniciar el runtime ("" = ninguno)
 }
 
