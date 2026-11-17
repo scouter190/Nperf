@@ -52,12 +52,13 @@ func (s *Server) startSamples(w *liveWriter, live bool) (chan<- meter.Sample, fu
 			if failed {
 				continue // sigue vaciando; el control ya falló
 			}
-			var mbps float64
-			if sm.Duration > 0 {
-				mbps = float64(sm.Bytes) * 8 / sm.Duration.Seconds() / 1e6
+			mbps := sm.Mbps()                                       // duración mínima 1 ms (relojes gruesos)
+			durMS := (sm.Duration.Nanoseconds() + 999999) / 1000000 // hacia arriba
+			if durMS < 1 && sm.Bytes > 0 {
+				durMS = 1
 			}
 			m := proto.SampleMessage(proto.Sample{
-				Index: sm.Index, TMS: sm.Start.Milliseconds(), DurationMS: sm.Duration.Milliseconds(),
+				Index: sm.Index, TMS: sm.Start.Milliseconds(), DurationMS: durMS,
 				Bytes: sm.Bytes, Mbps: mbps, Received: sm.Received, Expected: sm.Expected,
 				Lost: sm.Lost, JitterMS: float64(sm.Jitter) / float64(time.Millisecond),
 				LossPct: lossPct(sm),

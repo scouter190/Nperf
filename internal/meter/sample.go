@@ -8,6 +8,9 @@ import (
 // IntervalWidth es el ancho nominal de cada ventana de muestreo.
 const IntervalWidth = time.Second
 
+// MinWindow es la duración mínima con la que se calcula la tasa y se informa una ventana.
+const MinWindow = time.Millisecond
+
 // MaxSamples es la capacidad del canal de muestras (300 s de fase máxima).
 const MaxSamples = 300
 
@@ -27,8 +30,13 @@ type Sample struct {
 }
 
 // Mbps devuelve la tasa de la ventana en megabits por segundo.
+// Las ventanas más cortas que MinWindow (reloj grueso) se calculan sobre MinWindow.
 func (s Sample) Mbps() float64 {
-	return Result{Bytes: s.Bytes, Elapsed: s.Duration}.Mbps()
+	d := s.Duration
+	if d < MinWindow {
+		d = MinWindow
+	}
+	return Result{Bytes: s.Bytes, Elapsed: d}.Mbps()
 }
 
 // LossPercent devuelve la pérdida de la ventana en porcentaje.

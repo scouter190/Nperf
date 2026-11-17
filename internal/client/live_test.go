@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"strings"
@@ -323,5 +324,67 @@ func TestLiveServerWithoutLiveUDP(t *testing.T) {
 	}
 	if !afterParams {
 		t.Fatal("el proxy no vio params")
+	}
+}
+
+// badSampleProxy inyecta, antes de cada "sample" del servidor, una copia fuera de rango.
+func badSampleProxy(t *testing.T, target string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	udpRelay(t, ln.Addr().String(), target)
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				s, err := net.Dial("tcp", target)
+				if err != nil {
+					return
+				}
+				defer s.Close()
+				go func() { io.Copy(s, c); s.Close() }()
+				br := bufio.NewReader(s)
+				for {
+					line, err := br.ReadBytes('\n')
+					if err != nil {
+						return
+					}
+					if bytes.Contains(line, []byte(`"type":"sample"`)) {
+						var m map[string]any
+						if json.Unmarshal(line, &m) == nil {
+							m["mbps"] = 1e12 // fuera de rango, mismo índice
+							bad, _ := json.Marshal(m)
+							c.Write(append(bad, '\n'))
+						}
+					}
+					c.Write(line)
+				}
+			}()
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func TestLiveInvalidPeerSampleIsDiscarded(t *testing.T) {
+	real, cancel, done := start(t)
+	defer func() { cancel(); <-done }()
+	addr := badSampleProxy(t, real)
+	var log phaseLog
+	res, err := client.Run(context.Background(), addr, client.Options{
+		Duration: 1500 * time.Millisecond, Direction: "fwd", Proto: "tcp", OnInterval: log.add,
+	})
+	if err != nil {
+		t.Fatalf("una muestra inválida abortó el TEST!: %v", err)
+	}
+	checkLive(t, "fwd", res.Fwd, 2, true, true, &log, "tcp_fwd")
+	if !strings.Contains(strings.Join(res.Notes, " "), "muestras descartadas por valores no válidos") {
+		t.Errorf("sin nota de descartadas: %v", res.Notes)
 	}
 }

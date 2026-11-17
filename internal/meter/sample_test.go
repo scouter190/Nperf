@@ -238,3 +238,14 @@ func TestSampleMbps(t *testing.T) {
 		t.Errorf("mbps = %v", s.Mbps())
 	}
 }
+
+func TestSampleMbpsMinWindow(t *testing.T) {
+	s := Sample{Bytes: 1000000, Duration: 0}
+	if got := s.Mbps(); got != 8000 { // 1 MB en 1 ms
+		t.Fatalf("Mbps con ventana 0 = %v, quería 8000", got)
+	}
+	s.Duration = 100 * time.Microsecond
+	if got := s.Mbps(); got != 8000 {
+		t.Fatalf("Mbps con ventana 0,1 ms = %v", got)
+	}
+}

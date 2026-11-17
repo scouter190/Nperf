@@ -76,6 +76,7 @@ type liveRun struct {
 	answered  []time.Duration
 	sent      int
 	noted     bool
+	discarded int // muestras inválidas descartadas
 }
 
 // newLive arranca la lectora y, salvo NoLoadRTT, el prober. Las goroutines cuelgan de ss.wg.
@@ -127,8 +128,11 @@ func (lv *liveRun) readLoop() {
 		case proto.TypeSample:
 			s, err := proto.SampleFromMessage(m, last, lv.durMS)
 			if err != nil {
-				fail(err)
-				return
+				// Una muestra inválida del par no aborta el TEST!: se descarta.
+				lv.mu.Lock()
+				lv.discarded++
+				lv.mu.Unlock()
+				continue
 			}
 			last = s.Index
 			lv.addSample(fromProto(s, lv.udp))
@@ -257,6 +261,7 @@ func (lv *liveRun) attach(d Dir) Dir {
 	lv.mu.Unlock()
 	lv.deliver(true)
 	lv.mu.Lock()
+	disc := lv.discarded
 	d.Live = true
 	d.Intervals = append([]Interval(nil), lv.delivered...)
 	if held != nil {
@@ -267,6 +272,9 @@ func (lv *liveRun) attach(d Dir) Dir {
 		d.LoadedRTT = NewLoadedRTT(answered, sent)
 	}
 	lv.mu.Unlock()
+	if disc > 0 {
+		lv.ss.addNote(fmt.Sprintf("%s: %d muestras descartadas por valores no válidos", lv.label(), disc))
+	}
 	lv.noted = lv.noteFor(d.LoadedRTT)
 	if held != nil {
 		lv.ss.late = &lateProbe{lv: lv, seq: lseq, sentAt: sentAt, iv: *held, answered: answered, sent: sent}
