@@ -3,10 +3,10 @@
 > Máximo 50 líneas. Se reescribe tras cada implementación aprobada (ver AGENTS.md).
 
 ## Fase actual
-**Fase 5 - Implementando spec 003 (detección de red y cuello de botella).** Specs 001 y 002 completas en código, a falta de validaciones manuales del usuario (docs/validacion-iperf3.md, docs/validacion-gui.md).
+**Fase 6 - Implementando spec 004 (equipos sin NPerf: ping, traceroute, MTU, puertos).** Specs 001-003 completas en código, a falta de validaciones manuales del usuario (docs/validacion-iperf3.md, validacion-gui.md, validacion-red.md).
 
 ## Spec activa
-`specs/003-deteccion-red/` (T1-T16 hechas, spec completa en código; decisiones §18; validación manual pendiente: docs/validacion-red.md). Spec 002: código completo, T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/004-equipos-sin-agente/` (aprobada; 0 de T1-T17; decisiones §19; paquete nuevo `internal/probe`). Spec 003: código completo, validación manual pendiente. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -38,7 +38,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Usuario: probar en Windows con docs/validacion-red.md (spec 003), docs/validacion-gui.md (T16/T17 de spec 002) y docs/validacion-iperf3.md. Luego cerrar specs y proponer spec 004.
+Spec 004 ola 1: T1, T2, T8, T12 → ola 2: T3-T7, T10, T13 → T9 → T11∥T14 → T15→T16→T17. Usuario: validaciones manuales de specs 001-003.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

@@ -147,3 +147,7 @@
 - Interfaz: grupo **"Sin NPerf"** en la misma lista, icono propio; los diagnósticos también se ofrecen para equipos con NPerf.
 - Análisis de traceroute: pérdida ≥ 20 % o subida de latencia ≥ 20 ms solo cuentan si persisten en los saltos siguientes.
 - CLI `ping|trace|mtu|ports`: código 0 completado, 1 no se pudo hacer (incluye ping con 100 % de pérdida), 2 uso; `-json` con `format_version: 1` y `command`.
+- Plan 004: lógica portable en `internal/probe` con entorno inyectable (`Echoer`, `Router`, `Resolver`, `Clock`, `Dialer`); Win32 solo en `icmp_windows.go` y `route_windows.go` (LazyDLL de iphlpapi, structs a mano con test de tamaño).
+- Plan 004: `IcmpSendEcho2` síncrono en una goroutine por eco; al cancelar, el runner vuelve en ≤ 1 s y no envía más; un handle ICMP por diagnóstico.
+- Plan 004: puerta de enlace = siguiente salto de `GetBestRoute2` hacia una IP pública de referencia (solo consulta la tabla de rutas, no envía paquetes). MTU de interfaz fuera de 576–9216 (p. ej. loopback) se trata como desconocido → 1500.
+- Plan 004: la interfaz lanza los diagnósticos con los valores por defecto de la spec (sin opciones en la ventana).
