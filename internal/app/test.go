@@ -32,6 +32,10 @@ func (a *App) StartTest() error {
 		a.mu.Unlock()
 		return errors.New("ya hay una prueba en curso")
 	}
+	if a.probe.Running {
+		a.mu.Unlock()
+		return errors.New(TestBlockedByProbe)
+	}
 	dir, dur := a.direction, a.duration
 	ctx, cancel := context.WithCancel(context.Background())
 	a.gen++

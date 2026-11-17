@@ -133,7 +133,9 @@ func runPing(ctx context.Context, args []string) int {
 		return c.runErr(ctx, err)
 	}
 	if *jsonOut {
-		probe.PingJSON(stdout, dest, st, replies)
+		if err := probe.PingJSON(stdout, dest, st, replies); err != nil {
+			return exitError
+		}
 	} else {
 		probe.PingText(stdout, dest, st, replies)
 	}
@@ -168,7 +170,9 @@ func runTrace(ctx context.Context, args []string) int {
 		return c.runErr(ctx, err)
 	}
 	if *jsonOut {
-		probe.TraceJSON(stdout, dest, res)
+		if err := probe.TraceJSON(stdout, dest, res); err != nil {
+			return exitError
+		}
 	} else {
 		probe.TraceText(stdout, dest, res)
 	}
@@ -203,7 +207,9 @@ func runMTU(ctx context.Context, args []string) int {
 		return c.runErr(ctx, err)
 	}
 	if *jsonOut {
-		probe.MTUJSON(stdout, dest, res)
+		if err := probe.MTUJSON(stdout, dest, res); err != nil {
+			return exitError
+		}
 	} else {
 		probe.MTUText(stdout, dest, res)
 	}
@@ -242,7 +248,9 @@ func runPorts(ctx context.Context, args []string) int {
 		return c.runErr(ctx, err)
 	}
 	if *jsonOut {
-		probe.PortsJSON(stdout, dest, res)
+		if err := probe.PortsJSON(stdout, dest, res); err != nil {
+			return exitError
+		}
 	} else {
 		probe.PortsText(stdout, dest, res)
 	}

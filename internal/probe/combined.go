@@ -30,6 +30,11 @@ type Combined struct {
 	Healthy  bool // pérdida 0 y RTT medio <= 20 ms en el tramo 1
 }
 
+// ReducedMTUMessage es el aviso de MTU de ruta inferior a 1500.
+func ReducedMTUMessage(mtu int) string {
+	return fmt.Sprintf("MTU reducido en la ruta (%d; VPN/PPPoE/túnel): posibles cortes con paquetes grandes", mtu)
+}
+
 // Diagnose combina tramo 1, tipo de interfaz y MTU. Función pura.
 func Diagnose(in CombinedInput) Combined {
 	var c Combined
@@ -61,7 +66,7 @@ func Diagnose(in CombinedInput) Combined {
 		c.Messages = append(c.Messages, "el primer tramo no muestra un problema claro")
 	}
 	if in.MTU > 0 && in.MTU < standardMTU {
-		c.Messages = append(c.Messages, fmt.Sprintf("MTU reducido en la ruta (%d; VPN/PPPoE/túnel): posibles cortes con paquetes grandes", in.MTU))
+		c.Messages = append(c.Messages, ReducedMTUMessage(in.MTU))
 	}
 	return c
 }

@@ -51,6 +51,7 @@ type Deps struct {
 	Net       InventorySource        // inventario de red local; nil = sin datos
 	OpenURL   func(string) error     // abridor de URL (solo recibe LocationSettingsURL); nil = no disponible
 	Router    probe.Router           // rutas del sistema (puerta de enlace); nil = sin puerta de enlace
+	Probe     probe.Env              // entorno de los diagnósticos (T15 lo cablea); vacío = no disponibles
 }
 
 // Device es un equipo de la lista.
@@ -113,6 +114,9 @@ type State struct {
 	ExtraSubnets    []string          `json:"extra_subnets"`
 	FirewallHint    string            `json:"firewall_hint"`
 	Test            TestState         `json:"test"`
+	Probe           ProbeState        `json:"probe"`
+	CanProbe        bool              `json:"can_probe"`
+	ProbeBlocked    string            `json:"probe_blocked_reason"`
 	CanTest         bool              `json:"can_test"`
 	TestBlocked     string            `json:"test_blocked_reason"`
 	ConfigError     string            `json:"config_error"`
@@ -124,19 +128,24 @@ type App struct {
 	d     Deps
 	start time.Time
 
-	cfgMu     sync.Mutex // serializa leer-modificar-escribir de la config
-	mu        sync.Mutex
-	selected  string
-	direction string
-	duration  int
-	test      TestState
-	gen       int                // identifica la prueba vigente
-	cancel    context.CancelFunc // nil si no hay prueba en curso
-	testHook  func()             // solo pruebas: se llama en la goroutine de la prueba antes de fijar el estado final
-	testDone  chan struct{}      // se cierra al terminar la goroutine de la prueba
-	gwMu      sync.Mutex
-	gw        gwCache
-	rtErr     string // último error al reiniciar el runtime ("" = ninguno)
+	cfgMu       sync.Mutex // serializa leer-modificar-escribir de la config
+	mu          sync.Mutex
+	selected    string
+	direction   string
+	duration    int
+	test        TestState
+	gen         int                // identifica la prueba vigente
+	cancel      context.CancelFunc // nil si no hay prueba en curso
+	testHook    func()             // solo pruebas: se llama en la goroutine de la prueba antes de fijar el estado final
+	testDone    chan struct{}      // se cierra al terminar la goroutine de la prueba
+	gwMu        sync.Mutex
+	gw          gwCache
+	probe       ProbeState         // estado del diagnóstico
+	probeGen    int                // identifica el diagnóstico vigente
+	probeCancel context.CancelFunc // nil si no hay diagnóstico
+	probeDone   chan struct{}      // se cierra al terminar la goroutine del diagnóstico
+	probeHook   func()             // solo pruebas: antes de fijar el estado final
+	rtErr       string             // último error al reiniciar el runtime ("" = ninguno)
 }
 
 // SetRuntimeError fija (o limpia con "") el error del último reinicio del runtime;
@@ -403,10 +412,13 @@ func (a *App) State() State {
 	cfg, cfgErr := a.cfg()
 	alias := a.aliasFrom(cfg)
 	a.mu.Lock()
-	sel, dir, dur, test, rtErr := a.selected, a.direction, a.duration, a.test, a.rtErr
+	sel, dir, dur, test, rtErr, pr := a.selected, a.direction, a.duration, a.test, a.rtErr, a.probe
 	a.mu.Unlock()
 	if test.Status == "" {
 		test.Status = TestIdle
+	}
+	if pr.Status == "" {
+		pr.Status = ProbeIdle
 	}
 
 	var ips []string
@@ -473,6 +485,8 @@ func (a *App) State() State {
 		canTest, blocked = false, "cancelando la prueba anterior"
 	case test.Running:
 		canTest, blocked = false, "hay una prueba en curso"
+	case pr.Running:
+		canTest, blocked = false, TestBlockedByProbe
 	case sel == "":
 		canTest, blocked = false, "elija un equipo de destino"
 	case selNoAgent:
@@ -484,7 +498,14 @@ func (a *App) State() State {
 			}
 		}
 	}
-	return State{HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
+	canProbe, probeBlocked := true, ""
+	switch {
+	case test.Running:
+		canProbe, probeBlocked = false, ProbeBlockedByTest
+	case pr.Running:
+		canProbe, probeBlocked = false, probeAlreadyRunning
+	}
+	return State{Probe: pr, CanProbe: canProbe, ProbeBlocked: probeBlocked, HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
 		DurationSeconds: dur, TotalSeconds: total, TotalLabel: label, Alias: alias, ExtraSubnets: subs,
 		FirewallHint: hint, Test: test}
 }
