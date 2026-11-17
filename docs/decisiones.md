@@ -138,3 +138,12 @@
 - Dúplex Ethernet fuera de la 003.
 - Compatibilidad (plan 003): el anuncio añade claves opcionales `link`, `tx`, `rx`, `ssid` (las versiones previas ya ignoran claves desconocidas). El resumen de enlace viaja como campo opcional `link` en `turn` (cliente) y `ready` (servidor), tras el handshake; sin campos BSSID/MAC por construcción. Par sin `link` → diagnóstico "parcial".
 - Lógica de red portable en `internal/netinfo` (fuente inyectable) y `internal/diag`; Win32 (GetAdaptersAddresses, wlanapi.dll por LazyDLL) solo en `_windows.go`.
+
+## 19. Spec 004 (equipos sin NPerf)
+- ICMP sin administrador con `IcmpSendEcho2` (iphlpapi.dll); TTL y DF con `IP_OPTION_INFORMATION`; sin sockets raw ni dependencias nuevas. **Solo IPv4**.
+- Puerta de enlace IPv4 por defecto: se añade **siempre** a la lista como "sin NPerf".
+- Destinos sin NPerf **solo a mano** en la 004 (guardados en `config.json`, máx. 64). Propuesta desde la tabla ARP: spec posterior. **Sin barridos** de subred.
+- Puertos TCP por defecto: 21, 22, 23, 53, 80, 443, 445, 3389, 8080, 8291; máx. 32 por ejecución, 4 conexiones simultáneas.
+- Interfaz: grupo **"Sin NPerf"** en la misma lista, icono propio; los diagnósticos también se ofrecen para equipos con NPerf.
+- Análisis de traceroute: pérdida ≥ 20 % o subida de latencia ≥ 20 ms solo cuentan si persisten en los saltos siguientes.
+- CLI `ping|trace|mtu|ports`: código 0 completado, 1 no se pudo hacer (incluye ping con 100 % de pérdida), 2 uso; `-json` con `format_version: 1` y `command`.
