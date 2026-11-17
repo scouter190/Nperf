@@ -151,3 +151,4 @@
 - Plan 004: `IcmpSendEcho2` síncrono en una goroutine por eco; al cancelar, el runner vuelve en ≤ 1 s y no envía más; un handle ICMP por diagnóstico.
 - Plan 004: puerta de enlace = siguiente salto de `GetBestRoute2` hacia una IP pública de referencia (solo consulta la tabla de rutas, no envía paquetes). MTU de interfaz fuera de 576–9216 (p. ej. loopback) se trata como desconocido → 1500.
 - Plan 004: la interfaz lanza los diagnósticos con los valores por defecto de la spec (sin opciones en la ventana).
+- Usuario: mientras corre un TEST! los diagnósticos (ping, traceroute, MTU, puertos) quedan desactivados (el TEST! satura la red y falsearía latencia y pérdida); y viceversa, no se inicia un TEST! con un diagnóstico en curso. "Enlace sano" = pérdida 0 y RTT medio ≤ 20 ms. `-timeout` de `ports`: 0.2–5 s.
