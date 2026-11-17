@@ -14,6 +14,7 @@ type RawWiFi struct {
 	QualityPct int  // 0-100
 	RSSI       *int // dBm; nil = desconocido
 	FreqKHz    int  // 0 = desconocida
+	Channel    int  // 0 = desconocido (WlanQueryInterface channel_number)
 	TxKbps     uint64
 	RxKbps     uint64
 	// Err es el código Win32 de la consulta (0 = correcta).
@@ -67,7 +68,7 @@ func wifiInfo(raw RawWiFi, err error) *WiFiInfo {
 		w.SSID = raw.SSID
 	}
 	w.BSSID = raw.BSSID
-	if band, ch, ok := BandChannel(raw.FreqKHz); ok {
+	if band, ch, ok := BandFromChannel(raw.Channel, raw.PHYType, raw.FreqKHz); ok {
 		w.Band = band
 		w.Channel = &ch
 	}

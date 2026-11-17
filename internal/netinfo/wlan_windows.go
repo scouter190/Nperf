@@ -21,6 +21,7 @@ var (
 
 const (
 	wlanClientVersion2       = 2
+	wlanIntfOpcodeChannel    = 8 // wlan_intf_opcode_channel_number (ULONG)
 	wlanIntfOpcodeCurrentCon = 7 // wlan_intf_opcode_current_connection
 	wlanStateConnected       = 1 // wlan_interface_state_connected
 	dot11BssTypeAny          = 3
@@ -158,26 +159,54 @@ func queryWiFi(guid string) (raw RawWiFi) {
 		RxKbps:     uint64(a.RxRate),
 	}
 	bssFreq(handle, &g, ca.Security.SecurityEnabled != 0, &a, &raw)
+	raw.Channel = queryChannel(handle, &g)
 	return raw
 }
 
 // bssFreq rellena frecuencia y RSSI del BSS actual; un fallo deja esos datos vacíos.
 // Usa el valor de seguridad de la conexión y, sin coincidencia, el opuesto.
 func bssFreq(h windows.Handle, g *windows.GUID, sec bool, a *wlanAssociationAttributes, raw *RawWiFi) {
-	if !bssLookup(h, g, sec, a, raw) {
-		bssLookup(h, g, !sec, a, raw)
+	if bssLookup(h, g, sec, a, raw, false) || bssLookup(h, g, !sec, a, raw, false) {
+		return
 	}
+	// Último intento: lista completa (sin filtrar por SSID).
+	bssLookup(h, g, sec, a, raw, true)
 }
 
-func bssLookup(h windows.Handle, g *windows.GUID, sec bool, a *wlanAssociationAttributes, raw *RawWiFi) bool {
+// queryChannel devuelve el canal actual (0 si no se puede obtener).
+func queryChannel(h windows.Handle, g *windows.GUID) int {
+	var size, valueType uint32
+	var data unsafe.Pointer
+	r, _, _ := procWlanQueryInterface.Call(uintptr(h), uintptr(unsafe.Pointer(g)),
+		wlanIntfOpcodeChannel, 0, uintptr(unsafe.Pointer(&size)),
+		uintptr(unsafe.Pointer(&data)), uintptr(unsafe.Pointer(&valueType)))
+	if r != 0 {
+		return 0
+	}
+	defer wlanFree(data)
+	if data == nil || size < 4 {
+		return 0
+	}
+	ch := *(*uint32)(data)
+	if ch == 0 || ch > 233 {
+		return 0
+	}
+	return int(ch)
+}
+
+func bssLookup(h windows.Handle, g *windows.GUID, sec bool, a *wlanAssociationAttributes, raw *RawWiFi, anySSID bool) bool {
 	ssid := a.SSID
+	ssidPtr := uintptr(unsafe.Pointer(&ssid))
+	if anySSID {
+		ssidPtr = 0
+	}
 	var secArg uintptr
 	if sec {
 		secArg = 1
 	}
 	var list unsafe.Pointer
 	r, _, _ := procWlanGetNetworkBss.Call(uintptr(h), uintptr(unsafe.Pointer(g)),
-		uintptr(unsafe.Pointer(&ssid)), dot11BssTypeAny, secArg, 0, uintptr(unsafe.Pointer(&list)))
+		ssidPtr, dot11BssTypeAny, secArg, 0, uintptr(unsafe.Pointer(&list)))
 	if r != 0 || list == nil {
 		return false
 	}
