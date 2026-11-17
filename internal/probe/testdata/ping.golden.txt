@@ -1,0 +1,7 @@
+Ping a servidor.lan (192.168.1.10)
+  1: respuesta de 192.168.1.10, < 1 ms
+  2: tiempo de espera agotado
+  3: respuesta de 192.168.1.10, 12.3 ms
+Enviados 3, recibidos 2, pérdida 33 %
+RTT mín/media/máx: < 1 ms / 6.4 ms / 12.3 ms
+Jitter: 11.9 ms

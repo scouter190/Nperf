@@ -1,0 +1,33 @@
+Ping a servidor.lan (192.168.1.10)
+  1: tiempo de espera agotado
+  2: tiempo de espera agotado
+Enviados 2, recibidos 0, pérdida 100 %
+RTT mín/media/máx: no disponible / no disponible / no disponible
+Jitter: no disponible
+{
+  "format_version": 1,
+  "command": "ping",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "sent": 2,
+  "received": 0,
+  "loss_pct": 100,
+  "min_ms": null,
+  "avg_ms": null,
+  "max_ms": null,
+  "rtt_status": "unavailable",
+  "jitter_ms": null,
+  "jitter_status": "unavailable",
+  "replies": [
+    {
+      "seq": 1,
+      "status": "timeout",
+      "rtt_ms": null
+    },
+    {
+      "seq": 2,
+      "status": "timeout",
+      "rtt_ms": null
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "command": "ports",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "ports": [
+    {
+      "port": 22,
+      "state": "open"
+    },
+    {
+      "port": 80,
+      "state": "closed"
+    },
+    {
+      "port": 443,
+      "state": "filtered",
+      "detail": "sin respuesta (timeout)"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+MTU de la ruta a servidor.lan (192.168.1.10)
+MTU: 1400 bytes (carga ICMP máxima 1372 bytes)
+Sondas enviadas: 9
+- posible agujero negro de MTU
+MTU de la ruta a servidor.lan (192.168.1.10)
+MTU: no disponible (el destino no responde a ICMP)
+Sondas enviadas: 2

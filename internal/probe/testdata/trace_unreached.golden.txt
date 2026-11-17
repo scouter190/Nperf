@@ -1,0 +1,73 @@
+Ruta a servidor.lan (192.168.1.10)
+  1  192.168.1.1  1.0 ms  2.0 ms  1.0 ms  pérdida 0 %
+  2  *  *  *  *  pérdida 100 %
+Destino no alcanzado.
+- el destino no responde o filtra ICMP a partir del salto 2
+{
+  "format_version": 1,
+  "command": "trace",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "reached": false,
+  "hops": [
+    {
+      "ttl": 1,
+      "from": "192.168.1.1",
+      "status": "ok",
+      "probes": [
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 1
+        },
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 2
+        },
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 1
+        }
+      ],
+      "sent": 3,
+      "received": 3,
+      "loss_pct": 0,
+      "min_ms": 1,
+      "avg_ms": 1.333,
+      "max_ms": 2,
+      "rtt_status": "ok",
+      "jitter_ms": 1,
+      "jitter_status": "ok"
+    },
+    {
+      "ttl": 2,
+      "from": null,
+      "status": "unavailable",
+      "probes": [
+        {
+          "status": "timeout",
+          "rtt_ms": null
+        },
+        {
+          "status": "timeout",
+          "rtt_ms": null
+        },
+        {
+          "status": "timeout",
+          "rtt_ms": null
+        }
+      ],
+      "sent": 3,
+      "received": 0,
+      "loss_pct": 100,
+      "min_ms": null,
+      "avg_ms": null,
+      "max_ms": null,
+      "rtt_status": "unavailable",
+      "jitter_ms": null,
+      "jitter_status": "unavailable"
+    }
+  ],
+  "findings": [
+    "el destino no responde o filtra ICMP a partir del salto 2"
+  ]
+}

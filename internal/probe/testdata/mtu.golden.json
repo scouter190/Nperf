@@ -1,0 +1,27 @@
+{
+  "format_version": 1,
+  "command": "mtu",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "status": "ok",
+  "mtu_bytes": 1400,
+  "max_payload_bytes": 1372,
+  "probes": 9,
+  "interface_mtu_bytes": 1500,
+  "notes": [
+    "posible agujero negro de MTU"
+  ]
+}
+{
+  "format_version": 1,
+  "command": "mtu",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "status": "unavailable",
+  "reason": "el destino no responde a ICMP",
+  "mtu_bytes": null,
+  "max_payload_bytes": null,
+  "probes": 2,
+  "interface_mtu_bytes": 1500,
+  "notes": []
+}

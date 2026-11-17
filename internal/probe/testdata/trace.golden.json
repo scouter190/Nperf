@@ -1,0 +1,96 @@
+{
+  "format_version": 1,
+  "command": "trace",
+  "host": "servidor.lan",
+  "ip": "192.168.1.10",
+  "reached": true,
+  "hops": [
+    {
+      "ttl": 1,
+      "from": "192.168.1.1",
+      "status": "ok",
+      "probes": [
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 0.5
+        },
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 0.7
+        },
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 0.6
+        }
+      ],
+      "sent": 3,
+      "received": 3,
+      "loss_pct": 0,
+      "min_ms": 0.5,
+      "avg_ms": 0.6,
+      "max_ms": 0.7,
+      "rtt_status": "ok",
+      "jitter_ms": 0.15,
+      "jitter_status": "ok"
+    },
+    {
+      "ttl": 2,
+      "from": "10.0.0.1",
+      "status": "ok",
+      "probes": [
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 3
+        },
+        {
+          "status": "timeout",
+          "rtt_ms": null
+        },
+        {
+          "status": "ttl_expired",
+          "rtt_ms": 4
+        }
+      ],
+      "sent": 3,
+      "received": 2,
+      "loss_pct": 33.333,
+      "min_ms": 3,
+      "avg_ms": 3.5,
+      "max_ms": 4,
+      "rtt_status": "ok",
+      "jitter_ms": 1,
+      "jitter_status": "ok"
+    },
+    {
+      "ttl": 3,
+      "from": "192.168.1.10",
+      "status": "ok",
+      "probes": [
+        {
+          "status": "ok",
+          "rtt_ms": 5
+        },
+        {
+          "status": "ok",
+          "rtt_ms": 6
+        },
+        {
+          "status": "ok",
+          "rtt_ms": 7
+        }
+      ],
+      "sent": 3,
+      "received": 3,
+      "loss_pct": 0,
+      "min_ms": 5,
+      "avg_ms": 6,
+      "max_ms": 7,
+      "rtt_status": "ok",
+      "jitter_ms": 1,
+      "jitter_status": "ok"
+    }
+  ],
+  "findings": [
+    "salto 2: el equipo limita respuestas ICMP (no es pérdida real)"
+  ]
+}
