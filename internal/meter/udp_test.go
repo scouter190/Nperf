@@ -273,3 +273,75 @@ func TestUDPSendStopsOnContext(t *testing.T) {
 		t.Fatal("quería error de contexto")
 	}
 }
+
+// scriptReader entrega datagramas guionizados y adelanta el reloj falso antes de cada uno.
+type scriptReader struct {
+	f    *fakeClock
+	pkts []scriptPkt
+	i    int
+}
+
+type scriptPkt struct {
+	at    time.Duration // avance del reloj desde el inicio
+	seq   uint64
+	fin   bool
+	delay time.Duration // tránsito simulado
+}
+
+func (s *scriptReader) SetReadDeadline(time.Time) error { return nil }
+
+func (s *scriptReader) Read(b []byte) (int, error) {
+	if s.i >= len(s.pkts) {
+		return 0, context.Canceled
+	}
+	p := s.pkts[s.i]
+	s.i++
+	now := time.Unix(1000, 0).Add(p.at)
+	s.f.t = now
+	var fl byte
+	if p.fin {
+		fl = flagFin
+	}
+	putHeader(b[:100], p.seq, fl, now.Add(-p.delay))
+	return 100, nil
+}
+
+func TestReceiveUDPSeriesMatchesPlain(t *testing.T) {
+	pkts := []scriptPkt{
+		{0, 0, false, 5 * time.Millisecond}, {300 * time.Millisecond, 1, false, 6 * time.Millisecond},
+		{300 * time.Millisecond, 1, false, 6 * time.Millisecond}, // duplicado
+		{1200 * time.Millisecond, 4, false, 9 * time.Millisecond},
+		{2100 * time.Millisecond, 5, false, 5 * time.Millisecond},
+		{2200 * time.Millisecond, 7, true, 0},
+	}
+	run := func(out chan Sample) UDPRecvStats {
+		f := &fakeClock{t: time.Unix(1000, 0)}
+		clk := f.clock(nil, 0)
+		var ser *Series
+		if out != nil {
+			ser = NewSeries(3*time.Second, out)
+		}
+		st, err := receiveUDPSeries(context.Background(), &scriptReader{f: f, pkts: pkts}, time.Second, clk, ser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	plain := run(nil)
+	out := make(chan Sample, 10)
+	with := run(out)
+	if plain != with {
+		t.Fatalf("stats distintas: %+v vs %+v", plain, with)
+	}
+	close(out)
+	var n int
+	var bytes, rec int64
+	for s := range out {
+		n++
+		bytes += s.Bytes
+		rec += s.Received
+	}
+	if n != 3 || bytes != with.Bytes || rec != with.Received {
+		t.Fatalf("muestras n=%d bytes=%d rec=%d, stats %+v", n, bytes, rec, with)
+	}
+}

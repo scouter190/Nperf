@@ -180,7 +180,17 @@ func ReceiveUDP(ctx context.Context, r PacketReader, idle time.Duration) (UDPRec
 	return receiveUDP(ctx, r, idle, realClock)
 }
 
+// ReceiveUDPSamples es ReceiveUDP que además entrega a out una muestra por ventana de 1 s
+// (fase de duración d). El resultado final es idéntico al de ReceiveUDP; out puede ser nil.
+func ReceiveUDPSamples(ctx context.Context, r PacketReader, idle, d time.Duration, out chan<- Sample) (UDPRecvStats, error) {
+	return receiveUDPSeries(ctx, r, idle, realClock, NewSeries(d, out))
+}
+
 func receiveUDP(ctx context.Context, r PacketReader, idle time.Duration, clk clock) (UDPRecvStats, error) {
+	return receiveUDPSeries(ctx, r, idle, clk, nil)
+}
+
+func receiveUDPSeries(ctx context.Context, r PacketReader, idle time.Duration, clk clock, ser *Series) (UDPRecvStats, error) {
 	if idle <= 0 {
 		idle = time.Second
 	}
@@ -251,6 +261,12 @@ func receiveUDP(ctx context.Context, r PacketReader, idle time.Duration, clk clo
 			jitter += (float64(dd) - jitter) / 16
 		}
 		prevTransit, havePrev = transit, true
+		if ser != nil {
+			ser.Packet(now, n, seq, time.Duration(transit))
+		}
+	}
+	if ser != nil && !first.IsZero() {
+		ser.Finish(last)
 	}
 	if haveSeq {
 		st.Expected = int64(maxSeq) + 1
