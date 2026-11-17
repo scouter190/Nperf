@@ -99,6 +99,8 @@ type TestState struct {
 	Report   *report.Report `json:"report,omitempty"`
 	// Diagnosis: semáforo por sentido y enlaces de ambos extremos (solo en "done").
 	Diagnosis *Diagnosis `json:"diagnosis,omitempty"`
+	// Chart: gráfica en vivo; se conserva en done/cancelled/error hasta el siguiente TEST!.
+	Chart *Chart `json:"chart,omitempty"`
 }
 
 // State es el snapshot serializable para la UI.
@@ -417,6 +419,7 @@ func (a *App) State() State {
 	alias := a.aliasFrom(cfg)
 	a.mu.Lock()
 	sel, dir, dur, test, rtErr, pr := a.selected, a.direction, a.duration, a.test, a.rtErr, a.probe
+	test.Chart = test.Chart.clone() // los callbacks la mutan bajo a.mu: la UI recibe una copia
 	a.mu.Unlock()
 	if test.Status == "" {
 		test.Status = TestIdle

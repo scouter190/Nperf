@@ -54,6 +54,7 @@ func (a *App) StartTest() error {
 		a.mu.Unlock()
 	}
 	port := p.Port
+	localAlias := a.Alias()
 	addr := net.JoinHostPort(p.IP.String(), strconv.Itoa(port))
 	o := client.Options{
 		Duration: time.Duration(dur) * time.Second, Proto: proto.ProtoBoth, Direction: dir,
@@ -63,7 +64,21 @@ func (a *App) StartTest() error {
 			set(func(t *TestState) { t.Status, t.Position, t.Phase = TestQueued, pos, "" })
 		},
 		OnPhase: func(ph string) {
-			set(func(t *TestState) { t.Status, t.Position, t.Phase = TestRunning, 0, ph })
+			set(func(t *TestState) {
+				t.Status, t.Position, t.Phase = TestRunning, 0, ph
+				if ph != client.PhaseRTT {
+					chartOf(t, localAlias, p.Alias).get(ph)
+				}
+			})
+		},
+		OnReady: func(local, remote *proto.Link) {
+			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).ready(local, remote) })
+		},
+		OnRTT: func(r client.RTT) {
+			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).setRTT(r) })
+		},
+		OnInterval: func(ph string, iv client.Interval) {
+			set(func(t *TestState) { chartOf(t, localAlias, p.Alias).addInterval(ph, iv) })
 		},
 	}
 	go func() {
@@ -82,18 +97,32 @@ func (a *App) StartTest() error {
 		}
 		a.mu.Lock()
 		if a.gen == gen && a.test.Running {
+			ch := a.test.Chart // se conserva hasta el siguiente TEST!
 			switch {
 			case a.test.Status == TestCancelling:
-				a.test = TestState{Status: TestCancelled}
+				if ch != nil {
+					ch.Cancelled = true
+				}
+				a.test = TestState{Status: TestCancelled, Chart: ch}
 			case err != nil:
-				a.test = TestState{Status: TestError, Error: err.Error()}
+				a.test = TestState{Status: TestError, Error: err.Error(), Chart: ch}
 			default:
-				a.test = TestState{Status: TestDone, Report: &rp, Diagnosis: dg}
+				ch = chartOf(&a.test, localAlias, p.Alias)
+				ch.finish(res, res.Notes)
+				a.test = TestState{Status: TestDone, Report: &rp, Diagnosis: dg, Chart: ch}
 			}
 		}
 		a.mu.Unlock()
 	}()
 	return nil
+}
+
+// chartOf devuelve la gráfica del estado, creándola si falta (llamar con a.mu tomado).
+func chartOf(t *TestState, local, peer string) *Chart {
+	if t.Chart == nil {
+		t.Chart = &Chart{local: local, peer: peer}
+	}
+	return t.Chart
 }
 
 // CancelTest pide cancelar y vuelve de inmediato: el estado pasa a "cancelando" y la goroutine
@@ -102,7 +131,7 @@ func (a *App) CancelTest() {
 	a.mu.Lock()
 	cancel := a.cancel
 	if a.test.Running && a.test.Status != TestCancelling {
-		a.test = TestState{Running: true, Status: TestCancelling, Label: "Cancelando…"}
+		a.test = TestState{Running: true, Status: TestCancelling, Label: "Cancelando…", Chart: a.test.Chart}
 	}
 	a.mu.Unlock()
 	if cancel != nil {
