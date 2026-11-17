@@ -24,6 +24,8 @@ type TrayActions struct {
 	Show func() // muestra y trae al frente la ventana
 	Hide func() // oculta la ventana
 	Quit func() // termina el bucle de la UI (la app se detiene limpiamente)
+	// StopMonitor detiene el muestreo de tarjetas al ocultar la ventana o salir (opcional).
+	StopMonitor func()
 }
 
 // TrayController es la lógica de la bandeja, independiente de Win32.
@@ -47,6 +49,7 @@ func (c *TrayController) OnClose() bool {
 		return false
 	}
 	c.act.Hide()
+	c.stopMonitor()
 	return true
 }
 
@@ -78,6 +81,13 @@ func (c *TrayController) Quit() {
 	c.quiting = true
 	c.mu.Unlock()
 	if first {
+		c.stopMonitor()
 		c.act.Quit()
+	}
+}
+
+func (c *TrayController) stopMonitor() {
+	if c.act.StopMonitor != nil {
+		c.act.StopMonitor()
 	}
 }

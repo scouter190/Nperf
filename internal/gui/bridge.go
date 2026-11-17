@@ -30,6 +30,7 @@ type Backend interface {
 	RemoveHost(id string) error
 	StartProbe(kind, id string) error
 	CancelProbe()
+	Monitor(active bool) (any, error)
 }
 
 // Bridge despacha las llamadas de la UI (window.nperfCall) a Backend con una lista
@@ -143,6 +144,12 @@ func (b *Bridge) Call(secret, name string, args ...json.RawMessage) (any, error)
 			return nil, err
 		}
 		return b.B.Adapters(d)
+	case "monitor":
+		var a bool
+		if a, err = boolArg(name, args); err != nil {
+			return nil, err
+		}
+		return b.B.Monitor(a)
 	case "openLocationSettings":
 		if err = noArgs(name, args); err == nil {
 			err = b.B.OpenLocationSettings()

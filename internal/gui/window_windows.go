@@ -21,7 +21,7 @@ func init() {
 // go-webview2 no expone NavigationStarting; la protección del puente es el secreto por
 // sesión + CSP sin enlaces externos. call recibe el secreto como primer argumento de
 // nperfCall y lo verifica (Bridge.Call): una página externa no puede leerlo.
-func RunWindow(url, dataDir string, call func(secret, name string, args ...json.RawMessage) (any, error)) error {
+func RunWindow(url, dataDir string, call func(secret, name string, args ...json.RawMessage) (any, error), stopMonitor func()) error {
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: dataDir,
 		WindowOptions: webview2.WindowOptions{
@@ -49,7 +49,7 @@ func RunWindow(url, dataDir string, call func(secret, name string, args ...json.
 	// Bandeja: cerrar oculta la ventana; "Salir" termina el bucle y Run vuelve (el
 	// llamador detiene server y anuncio al salir). Si la bandeja falla, la ventana
 	// funciona como antes (cerrar = salir).
-	ctl := NewTrayController(TrayActions{Quit: w.Terminate})
+	ctl := NewTrayController(TrayActions{Quit: w.Terminate, StopMonitor: stopMonitor})
 	if tr, err := installTray(uintptr(w.Window()), ctl); err == nil {
 		ctl.act.Show, ctl.act.Hide = tr.showMain, tr.hideMain
 		defer tr.remove()

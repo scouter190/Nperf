@@ -54,5 +54,5 @@ func run() error {
 	defer closeUI()
 
 	b := &gui.Bridge{Secret: secret, B: svc.Backend(), OnConfigChange: func() { svc.RestartAsync() }}
-	return gui.RunWindow(url, webviewDir, b.Call)
+	return gui.RunWindow(url, webviewDir, b.Call, svc.App.StopMonitor)
 }

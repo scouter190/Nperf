@@ -41,6 +41,12 @@ func (f *fake) RemoveHost(id string) error { return f.rec("removeHost:" + id) }
 func (f *fake) StartProbe(k, id string) error {
 	return f.rec("startProbe:" + k + "|" + id)
 }
+func (f *fake) Monitor(a bool) (any, error) {
+	if a {
+		return "on", f.rec("monitor:true")
+	}
+	return "off", f.rec("monitor:false")
+}
 func (f *fake) CancelProbe()                { f.calls = append(f.calls, "cancelProbe") }
 func (f *fake) OpenLocationSettings() error { return f.rec("openLocationSettings") }
 
@@ -210,5 +216,24 @@ func TestNewSecretUnique(t *testing.T) {
 	c, _ := NewSecret()
 	if len(a) != 64 || a == c {
 		t.Fatalf("secretos: %q %q", a, c)
+	}
+}
+
+func TestBridgeMonitor(t *testing.T) {
+	f := &fake{}
+	b := &Bridge{Secret: sec, B: f}
+	if v, err := b.Call(sec, "monitor", raw(`true`)...); err != nil || v != "on" {
+		t.Fatalf("monitor true: %v %v", v, err)
+	}
+	if v, err := b.Call(sec, "monitor", raw(`false`)...); err != nil || v != "off" {
+		t.Fatalf("monitor false: %v %v", v, err)
+	}
+	for _, a := range [][]json.RawMessage{nil, raw(`"true"`), raw(`1`), raw(`null`), raw(`true`, `false`)} {
+		if _, err := b.Call(sec, "monitor", a...); err == nil {
+			t.Errorf("monitor %v debía fallar", a)
+		}
+	}
+	if len(f.calls) != 2 {
+		t.Errorf("llamadas inesperadas: %v", f.calls)
 	}
 }

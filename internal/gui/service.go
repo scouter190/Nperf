@@ -64,7 +64,7 @@ func NewService(ctx context.Context, configDir string, base func() app.RuntimeOp
 	a, err := app.New(app.Deps{
 		Probe: penv, Router: penv.Router,
 		ConfigDir: configDir, Table: s.table, SelfID: id, SelfState: s.selfState,
-		Net: s.net, OpenURL: OpenURL,
+		Net: s.net, OpenURL: OpenURL, Counters: netinfo.NewSystemCounters(),
 		SelfIPs: func() []string {
 			ifs, err := ifaces()
 			if err != nil {
@@ -162,6 +162,7 @@ func (s *Service) Stop() {
 	s.stoped = true
 	s.App.CancelTest()
 	s.App.CancelProbe()
+	s.App.StopMonitor()
 	s.stopRuntime()
 	if s.closeProbe != nil {
 		s.closeProbe()
@@ -175,5 +176,7 @@ func (s *Service) Backend() Backend { return backend{s.App} }
 type backend struct{ *app.App }
 
 func (b backend) State() any { return b.App.State() }
+
+func (b backend) Monitor(active bool) (any, error) { return b.App.Monitor(active) }
 
 func (b backend) Adapters(detailed bool) (any, error) { return b.App.Adapters(detailed) }
