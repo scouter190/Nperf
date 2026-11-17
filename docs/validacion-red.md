@@ -21,6 +21,14 @@ Objetivo: SSID, banda, canal, señal y velocidad coinciden con las herramientas 
 Esperado: SSID, banda, canal y velocidad iguales; señal % dentro de ±5 puntos (varía segundo a segundo, repite la lectura); en cable la velocidad es la de Windows.
 - [ ] OK  [ ] Fallo: ______
 
+### 12b. Banda/canal reales y adaptadores virtuales (correcciones T17-T19)
+1. En B con WiFi conectado, compara Banda y Canal del panel (modo detallado) y de `.\nperf.exe adapters` con `netsh wlan show interfaces`: no deben salir "no disponible".
+2. En un equipo con Tailscale, Hyper-V ("vEthernet (Default Switch)") o Wi-Fi Direct ("Conexión de área local* N"), ejecuta `Get-NetAdapter | Format-Table Name, InterfaceDescription` y revisa esos adaptadores en el panel y en `nperf adapters`.
+3. Haz TEST! desde ese equipo hacia otro y revisa **Diagnóstico**.
+
+Esperado: banda y canal iguales a `netsh`; los virtuales aparecen como "virtual" con la velocidad entre paréntesis, Wi-Fi Direct no figura como "WiFi: sin conexión"; el enlace del equipo y el semáforo usan la tarjeta física (si la conexión sale por un virtual, enlace "desconocido"/parcial).
+- [ ] OK  [ ] Fallo: ______
+
 ### 13. Ubicación desactivada (Windows 11 24H2+)
 Objetivo: aviso con botón y el resto de datos visibles.
 1. En B: Configuración > Privacidad y seguridad > Ubicación. Desactiva **Permitir que las aplicaciones de escritorio accedan a su ubicación** (o el interruptor general de Ubicación).

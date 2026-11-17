@@ -138,6 +138,7 @@
 - Dúplex Ethernet fuera de la 003.
 - Compatibilidad (plan 003): el anuncio añade claves opcionales `link`, `tx`, `rx`, `ssid` (las versiones previas ya ignoran claves desconocidas). El resumen de enlace viaja como campo opcional `link` en `turn` (cliente) y `ready` (servidor), tras el handshake; sin campos BSSID/MAC por construcción. Par sin `link` → diagnóstico "parcial".
 - Lógica de red portable en `internal/netinfo` (fuente inyectable) y `internal/diag`; Win32 (GetAdaptersAddresses, wlanapi.dll por LazyDLL) solo en `_windows.go`.
+- Correcciones tras validación en Windows 11 (usuario): canal WiFi por `WlanQueryInterface` (channel_number) y banda deducida de canal+PHY (BSS preferente para la frecuencia); Wi-Fi Direct (tipo 71 virtual) es "otro", no WiFi; adaptadores virtuales (Hyper-V/vEthernet, Tailscale, WireGuard, TAP, VPN, VirtualBox, VMware, Loopback, Wi-Fi Direct) se muestran como "virtual" con velocidad nominal entre paréntesis y nunca cuentan para el resumen de enlace ni el semáforo (IP local en virtual → desconocido/parcial); Bluetooth PAN sigue como "otro" físico.
 
 ## 19. Spec 004 (equipos sin NPerf)
 - ICMP sin administrador con `IcmpSendEcho2` (iphlpapi.dll); TTL y DF con `IP_OPTION_INFORMATION`; sin sockets raw ni dependencias nuevas. **Solo IPv4**.
