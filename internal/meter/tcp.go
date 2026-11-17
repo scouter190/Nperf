@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nperf/internal/tcpinfo"
@@ -138,6 +139,68 @@ func SendTCPN(ctx context.Context, conns []net.Conn, d time.Duration) (Result, e
 // conecta tarde no distorsiona la duración. Si un flujo falla se llama a abort (si no es
 // nil) para liberar a los demás y se devuelve el error: no hay suma parcial válida.
 func ReceiveTCPN(rs []io.Reader, abort func()) (Result, error) {
+	return receiveTCPN(rs, abort, nil)
+}
+
+// tcpSampleTick es el periodo de lectura de los contadores en ReceiveTCPNSamples.
+const tcpSampleTick = 10 * time.Millisecond
+
+// ReceiveTCPNSamples es ReceiveTCPN con muestreo: además del Result idéntico, entrega a out
+// (sin bloquear) las muestras de 1 s de una fase de duración d. Cada flujo solo suma un
+// contador atómico por lectura; una goroutine lee la suma y alimenta la Series. Antes de
+// volver cierra la serie (Finish) y entrega la última muestra. out puede ser nil.
+func ReceiveTCPNSamples(rs []io.Reader, abort func(), d time.Duration, out chan<- Sample) (Result, error) {
+	tk := time.NewTicker(tcpSampleTick)
+	defer tk.Stop()
+	return receiveTCPN(rs, abort, &tcpSampler{
+		series: NewSeries(d, out), now: time.Now, tick: tk.C,
+	})
+}
+
+// tcpSampler agrupa la serie, el reloj y los bordes (inyectables en tests).
+type tcpSampler struct {
+	series *Series
+	now    func() time.Time
+	tick   <-chan time.Time
+}
+
+// run lee la suma de contadores en cada tick hasta stop; al final suma lo pendiente y cierra.
+func (s *tcpSampler) run(counters []atomic.Int64, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+	var prev int64
+	poll := func(now time.Time) {
+		var sum int64
+		for i := range counters {
+			sum += counters[i].Load()
+		}
+		if sum > prev {
+			s.series.Add(now, sum-prev)
+			prev = sum
+		} else {
+			s.series.Observe(now)
+		}
+	}
+	for {
+		select {
+		case <-s.tick:
+			poll(s.now())
+		case <-stop:
+			now := s.now()
+			poll(now)
+			s.series.Finish(now)
+			return
+		}
+	}
+}
+
+func receiveTCPN(rs []io.Reader, abort func(), smp *tcpSampler) (Result, error) {
+	var counters []atomic.Int64
+	var stop, done chan struct{}
+	if smp != nil {
+		counters = make([]atomic.Int64, len(rs))
+		stop, done = make(chan struct{}), make(chan struct{})
+		go smp.run(counters, stop, done)
+	}
 	var (
 		wg          sync.WaitGroup
 		mu          sync.Mutex
@@ -153,10 +216,17 @@ func ReceiveTCPN(rs []io.Reader, abort func()) (Result, error) {
 			var n64 int64
 			var f, l time.Time
 			var err error
+			var ctr *atomic.Int64
+			if counters != nil {
+				ctr = &counters[i]
+			}
 			for {
 				var n int
 				n, err = r.Read(buf)
 				if n > 0 {
+					if ctr != nil {
+						ctr.Add(int64(n))
+					}
 					l = time.Now()
 					if f.IsZero() {
 						f = l
@@ -185,6 +255,10 @@ func ReceiveTCPN(rs []io.Reader, abort func()) (Result, error) {
 		}(i, r)
 	}
 	wg.Wait()
+	if smp != nil {
+		close(stop)
+		<-done
+	}
 	res := Result{Bytes: total}
 	if !first.IsZero() {
 		res.Elapsed = last.Sub(first)
