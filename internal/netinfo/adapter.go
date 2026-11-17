@@ -50,36 +50,52 @@ type Adapter struct {
 	IPv4        []netip.Addr
 	Kind        Kind
 	Connected   bool
-	TxBps       uint64
-	RxBps       uint64
+	// Virtual: VPN, hipervisor, Wi-Fi Direct... Nunca alimenta el enlace anunciado.
+	Virtual bool
+	TxBps   uint64
+	RxBps   uint64
 }
 
-var virtualMarks = []string{"hyper-v", "virtual", "vpn", "tap", "wsl", "vmware", "virtualbox"}
+var virtualMarks = []string{"hyper-v", "virtual", "vethernet", "vpn", "wsl", "vmware", "virtualbox",
+	"tailscale", "wireguard", "wi-fi direct", "wifi direct", "loopback", "zerotier"}
 
+// isVirtual indica si el adaptador es virtual (VPN, hipervisor, Wi-Fi Direct...).
+// Se mira descripción y nombre; "tap" solo como palabra entera.
 func isVirtual(r RawAdapter) bool {
 	if r.Physical != nil && !*r.Physical {
 		return true
 	}
-	d := strings.ToLower(r.Description)
-	for _, m := range virtualMarks {
-		if strings.Contains(d, m) {
-			return true
+	for _, text := range []string{r.Description, r.Name} {
+		d := strings.ToLower(text)
+		for _, m := range virtualMarks {
+			if strings.Contains(d, m) {
+				return true
+			}
+		}
+		for _, w := range strings.FieldsFunc(d, func(c rune) bool {
+			return !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9')
+		}) {
+			if w == "tap" {
+				return true
+			}
 		}
 	}
 	return false
 }
 
 // Classify devuelve el tipo del adaptador; ok es false si debe omitirse (loopback).
+// Un adaptador virtual es siempre KindOther (aunque sea IfType WiFi).
 func Classify(r RawAdapter) (Kind, bool) {
-	switch r.IfType {
-	case IfTypeLoopback:
+	if r.IfType == IfTypeLoopback {
 		return "", false
+	}
+	if isVirtual(r) {
+		return KindOther, true
+	}
+	switch r.IfType {
 	case IfTypeWiFi:
 		return KindWiFi, true
 	case IfTypeEthernet:
-		if isVirtual(r) {
-			return KindOther, true
-		}
 		return KindEthernet, true
 	}
 	return KindOther, true
@@ -95,7 +111,7 @@ func ClassifyAll(raw []RawAdapter) []Adapter {
 		}
 		out = append(out, Adapter{
 			Name: r.Name, GUID: r.GUID, Description: r.Description, MAC: r.MAC,
-			IPv4: r.IPv4, Kind: k, Connected: r.OperStatus == OperStatusUp,
+			IPv4: r.IPv4, Kind: k, Virtual: isVirtual(r), Connected: r.OperStatus == OperStatusUp,
 			TxBps: r.TxBps, RxBps: r.RxBps,
 		})
 	}

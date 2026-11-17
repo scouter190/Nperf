@@ -8,10 +8,13 @@ import (
 )
 
 // ForLocalIP elige el adaptador que tiene la IPv4 dada (dirección local de la
-// conexión de control). ok=false si ninguno coincide (interfaz desconocida).
+// conexión de control), ignorando los virtuales. ok=false si ninguno coincide (interfaz desconocida).
 func ForLocalIP(infos []Info, ip netip.Addr) (Info, bool) {
 	ip = ip.Unmap()
 	for _, in := range infos {
+		if in.Virtual {
+			continue
+		}
 		for _, a := range in.IPv4 {
 			if a.Unmap() == ip {
 				return in, true

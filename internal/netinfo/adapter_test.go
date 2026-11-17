@@ -1,6 +1,9 @@
 package netinfo
 
-import "testing"
+import (
+	"net/netip"
+	"testing"
+)
 
 func bp(b bool) *bool { return &b }
 
@@ -77,5 +80,52 @@ func TestValidSSID(t *testing.T) {
 		if ValidSSID(c.s) != c.ok {
 			t.Errorf("%q: want %v", c.s, c.ok)
 		}
+	}
+}
+
+func TestVirtualTable(t *testing.T) {
+	cases := []struct {
+		name string
+		r    RawAdapter
+		kind Kind
+		virt bool
+	}{
+		{"wifi direct", RawAdapter{IfType: 71, Name: "Conexión de área local* 1", Description: "Microsoft Wi-Fi Direct Virtual Adapter"}, KindOther, true},
+		{"wifi direct 2", RawAdapter{IfType: 71, Name: "Conexión de área local* 10", Description: "Microsoft Wi-Fi Direct Virtual Adapter #2"}, KindOther, true},
+		{"vethernet", RawAdapter{IfType: 6, Name: "vEthernet (Default Switch)", Description: "Hyper-V Virtual Ethernet Adapter"}, KindOther, true},
+		{"vethernet nombre", RawAdapter{IfType: 6, Name: "vEthernet (Default Switch)", Description: "Adaptador"}, KindOther, true},
+		{"tailscale", RawAdapter{IfType: 53, Name: "Tailscale", Description: "Tailscale Tunnel"}, KindOther, true},
+		{"tailscale nombre", RawAdapter{IfType: 6, Name: "Tailscale", Description: "Wintun"}, KindOther, true},
+		{"wireguard", RawAdapter{IfType: 6, Name: "wg0", Description: "WireGuard Tunnel"}, KindOther, true},
+		{"tap", RawAdapter{IfType: 6, Description: "TAP-Windows Adapter V9"}, KindOther, true},
+		{"vbox", RawAdapter{IfType: 6, Description: "VirtualBox Host-Only Ethernet Adapter"}, KindOther, true},
+		{"vmware", RawAdapter{IfType: 6, Description: "VMware Virtual Ethernet Adapter for VMnet8"}, KindOther, true},
+		{"loopback", RawAdapter{IfType: 6, Name: "Loopback Pseudo-Interface 1"}, KindOther, true},
+		{"intel eth", RawAdapter{IfType: 6, Name: "Ethernet", Description: "Intel(R) Ethernet Connection (7) I219-V"}, KindEthernet, false},
+		{"realtek", RawAdapter{IfType: 6, Name: "Ethernet 2", Description: "Realtek PCIe GbE Family Controller"}, KindEthernet, false},
+		{"intel wifi", RawAdapter{IfType: 71, Name: "Wi-Fi", Description: "Intel(R) Wi-Fi 6 AX201 160MHz"}, KindWiFi, false},
+		{"mediatek", RawAdapter{IfType: 71, Name: "Wi-Fi", Description: "MediaTek Wi-Fi 6E MT7922 160MHz Wireless LAN Card"}, KindWiFi, false},
+		{"bluetooth pan", RawAdapter{IfType: 6, Name: "Conexión de red Bluetooth", Description: "Bluetooth Device (Personal Area Network)"}, KindEthernet, false},
+		{"bluetooth pan otro", RawAdapter{IfType: 71 + 100, Name: "Bluetooth", Description: "Bluetooth Device (Personal Area Network)"}, KindOther, false},
+	}
+	for _, c := range cases {
+		k, ok := Classify(c.r)
+		if !ok || k != c.kind {
+			t.Errorf("%s: kind %q ok=%v", c.name, k, ok)
+		}
+		if got := isVirtual(c.r); got != c.virt {
+			t.Errorf("%s: virtual=%v", c.name, got)
+		}
+		if a := ClassifyAll([]RawAdapter{c.r}); a[0].Virtual != c.virt {
+			t.Errorf("%s: Adapter.Virtual=%v", c.name, a[0].Virtual)
+		}
+	}
+}
+
+func TestSummaryIgnoresVirtual(t *testing.T) {
+	ip := netip.MustParseAddr("100.64.0.5")
+	in := []Info{{Adapter: Adapter{Virtual: true, Kind: KindOther, Connected: true, TxBps: 100e9, RxBps: 100e9, IPv4: []netip.Addr{ip}}}}
+	if SummaryForLocalIP(in, ip) != nil {
+		t.Error("IP en virtual debe dar enlace desconocido")
 	}
 }
