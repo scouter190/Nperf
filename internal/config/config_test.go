@@ -162,3 +162,49 @@ func TestLoadKeyIgnoresBadRanges(t *testing.T) {
 		t.Fatalf("LoadFull rango: %v", err)
 	}
 }
+
+func TestManualHostsRoundTripAndLimits(t *testing.T) {
+	dir := t.TempDir()
+	p := Path(dir)
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	os.WriteFile(p, []byte(`{"key":"k","futuro":{"a":1}}`), 0o600)
+	c, err := LoadFull(dir)
+	if err != nil || len(c.ManualHosts) != 0 {
+		t.Fatalf("archivo previo: %v %v", c, err)
+	}
+	if err := Save(dir, c); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "manual_hosts") || !strings.Contains(string(b), "futuro") {
+		t.Fatalf("contenido: %s", b)
+	}
+	c.ManualHosts = []ManualHost{{"192.168.1.1", "router"}, {"example.com", ""}}
+	if err := Save(dir, c); err != nil {
+		t.Fatal(err)
+	}
+	g, err := LoadFull(dir)
+	if err != nil || len(g.ManualHosts) != 2 || g.ManualHosts[0] != c.ManualHosts[0] {
+		t.Fatalf("ida y vuelta: %v %v", g, err)
+	}
+	if b, _ := os.ReadFile(p); !strings.Contains(string(b), "futuro") {
+		t.Fatalf("campo desconocido perdido: %s", b)
+	}
+	if l, err := Load(dir); err != nil || l.Key != "k" {
+		t.Fatalf("Load: %v %v", l, err)
+	}
+	c.ManualHosts = make([]ManualHost, 65)
+	for i := range c.ManualHosts {
+		c.ManualHosts[i].Target = "h"
+	}
+	if Save(dir, c) == nil {
+		t.Fatal("65 debe fallar")
+	}
+	c.ManualHosts = c.ManualHosts[:64]
+	if err := Save(dir, c); err != nil {
+		t.Fatal(err)
+	}
+	c.ManualHosts[0].Target = ""
+	if Save(dir, c) == nil {
+		t.Fatal("target vacío debe fallar")
+	}
+}

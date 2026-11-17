@@ -31,6 +31,14 @@ type Config struct {
 	Duration      int      `json:"duration"`       // segundos, 3-300
 	DiscoveryPort int      `json:"discovery_port"` // 1-65535
 	ExtraSubnets  []string `json:"extra_subnets"`
+	// ManualHosts son los equipos sin agente añadidos a mano (máx. MaxManualHosts).
+	ManualHosts []ManualHost `json:"manual_hosts"`
+}
+
+// ManualHost es un equipo sin agente añadido a mano: nombre o IP y alias opcional.
+type ManualHost struct {
+	Target string `json:"target"`
+	Alias  string `json:"alias"`
 }
 
 // Valores por defecto y límites.
@@ -39,6 +47,10 @@ const (
 	DefaultDiscoveryPort = 5301
 	MinDuration          = 3
 	MaxDuration          = 300
+
+	MaxManualHosts   = 64
+	MaxHostTargetLen = 253
+	MaxHostAliasLen  = 64
 )
 
 // Defaults devuelve una Config con los valores por defecto.
@@ -54,7 +66,27 @@ func (c Config) Validate() error {
 	if c.DiscoveryPort < 1 || c.DiscoveryPort > 65535 {
 		return fmt.Errorf("discovery_port debe estar entre 1 y 65535 (es %d)", c.DiscoveryPort)
 	}
+	if len(c.ManualHosts) > MaxManualHosts {
+		return fmt.Errorf("manual_hosts admite como máximo %d equipos (hay %d)", MaxManualHosts, len(c.ManualHosts))
+	}
+	for i, h := range c.ManualHosts {
+		if h.Target == "" || len(h.Target) > MaxHostTargetLen || hasControl(h.Target) {
+			return fmt.Errorf("manual_hosts[%d].target inválido (1-%d caracteres, sin control)", i, MaxHostTargetLen)
+		}
+		if len(h.Alias) > MaxHostAliasLen || hasControl(h.Alias) {
+			return fmt.Errorf("manual_hosts[%d].alias inválido (máx. %d bytes, sin control)", i, MaxHostAliasLen)
+		}
+	}
 	return nil
+}
+
+func hasControl(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return true
+		}
+	}
+	return false
 }
 
 // Path devuelve la ruta de config.json dentro de userConfigDir.
@@ -128,7 +160,7 @@ func LoadFull(userConfigDir string) (Config, error) {
 		return Config{}, err
 	}
 	for name, dst := range map[string]any{"key": &c.Key, "alias": &c.Alias, "duration": &c.Duration,
-		"discovery_port": &c.DiscoveryPort, "extra_subnets": &c.ExtraSubnets} {
+		"discovery_port": &c.DiscoveryPort, "extra_subnets": &c.ExtraSubnets, "manual_hosts": &c.ManualHosts} {
 		if err := field(m, name, dst); err != nil {
 			return Config{}, fmt.Errorf("archivo de configuración inválido %s: campo %q: %v", p, name, err)
 		}
@@ -160,12 +192,15 @@ func Save(userConfigDir string, c Config) error {
 		m = map[string]json.RawMessage{}
 	}
 	for name, v := range map[string]any{"key": c.Key, "alias": c.Alias, "duration": c.Duration,
-		"discovery_port": c.DiscoveryPort, "extra_subnets": c.ExtraSubnets} {
+		"discovery_port": c.DiscoveryPort, "extra_subnets": c.ExtraSubnets, "manual_hosts": c.ManualHosts} {
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return err
 		}
 		m[name] = raw
+	}
+	if len(c.ManualHosts) == 0 { // no añade el campo a archivos que no lo tenían
+		delete(m, "manual_hosts")
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
