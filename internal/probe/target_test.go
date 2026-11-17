@@ -25,14 +25,10 @@ func TestParseTargetRejects(t *testing.T) {
 		"10.0.0.1-10.0.0.5", "a b", "a,b", "::1", "999.1.1.1", "1.2.3", "-a.com", "a..com", "a/b",
 		strings.Repeat("a", 254), "10.0.0.*", "a\x01b"}
 	for _, s := range bad {
-		spy := &spyResolver{}
 		tg, err := ParseTarget(s)
 		if err == nil {
 			t.Errorf("%q aceptado: %+v", s, tg)
 			continue
-		}
-		if spy.calls != 0 {
-			t.Errorf("%q: resolver llamado", s)
 		}
 	}
 }
