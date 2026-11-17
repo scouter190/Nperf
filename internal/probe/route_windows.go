@@ -51,7 +51,11 @@ func (s *sockaddrInet) addr() netip.Addr {
 	if s.Family != windows.AF_INET {
 		return netip.Addr{}
 	}
-	return netip.AddrFrom4([4]byte(s.Data[2:6]))
+	a := netip.AddrFrom4([4]byte(s.Data[2:6]))
+	if a.IsUnspecified() {
+		return netip.Addr{} // 0.0.0.0 = enlace directo
+	}
+	return a
 }
 
 type systemRouter struct{}

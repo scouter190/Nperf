@@ -26,7 +26,7 @@ var (
 type Route struct {
 	IfIndex uint32
 	Source  netip.Addr // IP local de origen
-	NextHop netip.Addr // vacío si el destino está en enlace directo
+	NextHop netip.Addr // inválido (netip.Addr{}) si el destino está en enlace directo; 0.0.0.0 se normaliza a vacío
 	MTU     int        // MTU de la interfaz; 0 = desconocido
 }
 
