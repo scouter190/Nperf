@@ -6,7 +6,7 @@
 **Fase 7 - Implementando spec 005 (gráficas en vivo).** Specs 001-004 completas en código; validaciones manuales pendientes (iperf3, gui, red, sin-agente). Spec 003: banda/canal WiFi y virtuales validados por el usuario en Windows 11.
 
 ## Spec activa
-`specs/005-graficas-en-vivo/` (aprobada; 0 de T1-T18; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/005-graficas-en-vivo/` (aprobada; hechas T1, T2, T5, T11, T16 de T1-T18; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -32,6 +32,9 @@
 ## Estado del código (spec 004)
 - `internal/probe`: `ParseTarget` (sin resolver; rechaza CIDR/rangos/broadcast/multicast/0.0.0.0/esquemas), tipos ICMP (`Echoer`, `Reply`, `Status` + tabla Win32), estadística (jitter, "< 1 ms"), `Route`/`Router` con `GetBestRoute2` (NextHop 0.0.0.0 = enlace directo: normalizar en addr()). `Env` (env.go: Echoer/Router/Resolver/Clock/Dialer; Dialer en ports.go), `Ping`, `Trace`+`Analyze`, `MTU`, `Ports` (≤4 simultáneos), `Diagnose` (combinado), `NewWinEchoer` (Close espera ecos en vuelo ≤5 s), report.go (Ping/Trace/MTU/Ports Text+JSON, `Dest`, `JSONError` → report.JSONError). Config: `ManualHosts` (máx. 64). App: `AddHost`/`RemoveHost`, `Deps.Router`, gateway id `gateway` (caché 5 s), manuales `host:<target>`, `State.NoAgent`. CLI `nperf ping|trace|mtu|ports` (probe.System()). App: `StartProbe/CancelProbe/WaitProbe`, `State.Probe` (resultado JSON + combinado; MTU < 1500 → `probe.ReducedMTUMessage`), exclusión TEST!/diagnóstico (CanProbe/CanTest). Puente: addHost, removeHost, startProbe(kind lista blanca, id), cancelProbe; probe.System() una vez en NewService, se cierra en Stop. Decisión usuario: sin diagnósticos durante un TEST! ni al revés; sano = pérdida 0 y RTT ≤ 20 ms.
 
+## Estado del código (spec 005)
+- `proto`: TypeSample, campos live/seq/index/t_ms omitempty, `SampleFromMessage` (tope 300, cotas: pérdida ≤100, ≤100 Gbps, jitter ≤60 s), Codec.Write con mutex. `meter.Series` (Add TCP, Packet UDP). `client.Prober` (1 sonda/s, una en vuelo, envío fuera del lock), `LoadedRTT`/`BufferbloatNote` (+100 ms). `netinfo.Monitor` (5 min, sin virtuales, solo con Touch). UI `chart.js` (`NPerfChart.render`, único setAttribute en attr() con lista fija; servido en gui/static.go).
+
 ## Decisiones cerradas
 Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola máx. 5 · ±10 % vs iperf3 · CLI: comandos y flags en inglés, mensajes en español · interfaz WebView2 (no Walk) · origen siempre "Este equipo".
 
@@ -41,7 +44,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Spec 005 olas: 1 = T1,T2,T5,T11,T16 · 2 = T3,T4,T12,T14 · 3 = T6 · 4 = T7 · 5 = T8,T9,T13 · 6 = T10∥T15 · 7 = T17 · T18. Usuario: validaciones manuales de specs 001-004.
+Spec 005 olas: 2 = T3,T4,T12,T14 · 3 = T6 · 4 = T7 · 5 = T8,T9,T13 · 6 = T10∥T15 · 7 = T17 · T18. Usuario: validaciones manuales de specs 001-004.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

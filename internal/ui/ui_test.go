@@ -23,7 +23,7 @@ func read(t *testing.T, name string) string {
 }
 
 func TestEmbedded(t *testing.T) {
-	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js"} {
+	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js"} {
 		read(t, n)
 	}
 }
@@ -50,6 +50,43 @@ func TestNoUnsafeDOM(t *testing.T) {
 	for _, n := range []string{"app.js", "mock.js"} {
 		if bad := unsafeUse(read(t, n)); len(bad) > 0 {
 			t.Errorf("%s usa API insegura: %v", n, bad)
+		}
+	}
+}
+
+// chart.js necesita atributos SVG (x, y, points...). Única ampliación: exactamente un setAttribute,
+// dentro de attr(), con lista fija de nombres y valores numéricos finitos o de caracteres seguros.
+// El resto de la lista de APIs peligrosas sigue prohibida.
+func TestChartJSSafe(t *testing.T) {
+	js := read(t, "chart.js")
+	if bad := unsafeUse(strings.Replace(js, "el.setAttribute(name, s)", "", 1)); len(bad) > 0 {
+		t.Errorf("chart.js usa API insegura: %v", bad)
+	}
+	for _, s := range []string{"createElementNS", "role: 'img'", "'aria-label'", "ATTRS.indexOf(name) < 0", "isFinite(v)", "FIXED.test(s)"} {
+		if !strings.Contains(js, s) {
+			t.Errorf("chart.js no contiene %q", s)
+		}
+	}
+	m := regexp.MustCompile(`ATTRS = \[([^\]]*)\]`).FindStringSubmatch(js)
+	if m == nil {
+		t.Fatal("ATTRS no encontrado en chart.js")
+	}
+	for _, n := range regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(m[1], -1) {
+		if l := strings.ToLower(n[1]); l == "href" || l == "src" || l == "style" || strings.HasPrefix(l, "xlink") || strings.HasPrefix(l, "on") {
+			t.Errorf("ATTRS contiene el atributo peligroso %q", n[1])
+		}
+	}
+	if !strings.Contains(read(t, "index.html"), `<script src="chart.js"></script>`) {
+		t.Error("index.html no carga chart.js")
+	}
+	// El espacio de nombres SVG es un identificador, no una carga de red.
+	if ext := strings.ReplaceAll(js, "http://www.w3.org/2000/svg", ""); strings.Contains(ext, "https:") || strings.Contains(ext, "http:") {
+		t.Error("chart.js no debe tener URLs externas")
+	}
+	css := read(t, "app.css")
+	for _, s := range []string{".chart-svg .ref", ".mk.s3", "--c3"} {
+		if !strings.Contains(css, s) {
+			t.Errorf("app.css sin %q", s)
 		}
 	}
 }
