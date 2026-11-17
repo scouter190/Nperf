@@ -86,6 +86,7 @@ func TestLiveTCPFwdRev(t *testing.T) {
 	if ready != 1 || rtt != 0 {
 		t.Errorf("OnReady=%d OnRTT=%d", ready, rtt)
 	}
+	t.Logf("notas: %q", res.Notes)
 	checkLive(t, "fwd", res.Fwd, 2, true, true, &log, "tcp_fwd")
 	checkLive(t, "rev", res.Rev, 2, true, true, &log, "tcp_rev")
 }
@@ -105,6 +106,7 @@ func TestLiveFullBoth(t *testing.T) {
 	if rtt != 10 || res.RTT == nil {
 		t.Errorf("OnRTT acumuló %d muestras", rtt)
 	}
+	t.Logf("notas: %q", res.Notes)
 	checkLive(t, "tcp fwd", res.Fwd, 2, true, true, &log, "tcp_fwd")
 	checkLive(t, "tcp rev", res.Rev, 2, true, true, &log, "tcp_rev")
 	checkLive(t, "udp fwd", res.UDPFwd, 2, false, true, &log, "udp_fwd")
@@ -126,6 +128,7 @@ func TestLiveNoLoadRTT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("notas: %q", res.Notes)
 	checkLive(t, "fwd", res.Fwd, 2, true, false, &log, "tcp_fwd")
 	checkLive(t, "rev", res.Rev, 2, true, false, &log, "tcp_rev")
 	for _, iv := range append(res.Fwd.Intervals, res.Rev.Intervals...) {

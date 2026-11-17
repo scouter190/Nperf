@@ -68,15 +68,16 @@ type liveRun struct {
 	pdone  chan struct{} // se cierra al terminar el prober
 	res    chan ctlResult
 
-	deliverMu sync.Mutex // serializa los callbacks
-	mu        sync.Mutex
-	pending   []Interval
-	probes    map[int]probeOut
-	delivered []Interval
-	answered  []time.Duration
-	sent      int
-	noted     bool
-	discarded int // muestras inválidas descartadas
+	deliverMu    sync.Mutex // serializa los callbacks
+	mu           sync.Mutex
+	pending      []Interval
+	probes       map[int]probeOut
+	delivered    []Interval
+	answered     []time.Duration
+	sent         int
+	noted        bool
+	discarded    int // muestras inválidas descartadas
+	firstDiscard string
 }
 
 // newLive arranca la lectora y, salvo NoLoadRTT, el prober. Las goroutines cuelgan de ss.wg.
@@ -95,7 +96,7 @@ func newLive(ctx context.Context, ss *sess, o *Options, phase string, udp bool) 
 		if count > proto.MaxSamples {
 			count = proto.MaxSamples
 		}
-		lv.prober = NewProber(time.Now(), count, func(seq int) error {
+		lv.prober = NewProber(hrNow(), count, func(seq int) error {
 			lv.mu.Lock()
 			lv.sent++
 			lv.mu.Unlock()
@@ -131,6 +132,9 @@ func (lv *liveRun) readLoop() {
 				// Una muestra inválida del par no aborta el TEST!: se descarta.
 				lv.mu.Lock()
 				lv.discarded++
+				if lv.firstDiscard == "" {
+					lv.firstDiscard = err.Error()
+				}
 				lv.mu.Unlock()
 				continue
 			}
@@ -138,7 +142,7 @@ func (lv *liveRun) readLoop() {
 			lv.addSample(fromProto(s, lv.udp))
 		case proto.TypePong:
 			if lv.prober != nil {
-				if r, ok := lv.prober.Pong(int(m.Seq), time.Now()); ok {
+				if r, ok := lv.prober.Pong(int(m.Seq), hrNow()); ok {
 					lv.addProbe(r.Seq, r.RTT, true)
 					select {
 					case lv.wake <- struct{}{}:
@@ -246,7 +250,7 @@ func (lv *liveRun) attach(d Dir) Dir {
 		late   bool
 	)
 	if lv.prober != nil {
-		if seq, at, ok := lv.prober.Pending(); ok && time.Since(at) < probeTimeout {
+		if seq, at, ok := lv.prober.Pending(); ok && hrNow().Sub(at) < probeTimeout {
 			lseq, sentAt, late = seq, at, true
 		}
 	}
@@ -261,7 +265,7 @@ func (lv *liveRun) attach(d Dir) Dir {
 	lv.mu.Unlock()
 	lv.deliver(true)
 	lv.mu.Lock()
-	disc := lv.discarded
+	disc, why := lv.discarded, lv.firstDiscard
 	d.Live = true
 	d.Intervals = append([]Interval(nil), lv.delivered...)
 	if held != nil {
@@ -273,7 +277,7 @@ func (lv *liveRun) attach(d Dir) Dir {
 	}
 	lv.mu.Unlock()
 	if disc > 0 {
-		lv.ss.addNote(fmt.Sprintf("%s: %d muestras descartadas por valores no válidos", lv.label(), disc))
+		lv.ss.addNote(fmt.Sprintf("%s: %d muestras descartadas por valores no válidos (primera: %s)", lv.label(), disc, why))
 	}
 	lv.noted = lv.noteFor(d.LoadedRTT)
 	if held != nil {
@@ -316,7 +320,7 @@ func (s *sess) latePong(seq int64) {
 	if l == nil || int64(l.seq) != seq {
 		return
 	}
-	if rtt := time.Since(l.sentAt); rtt < probeTimeout {
+	if rtt := hrNow().Sub(l.sentAt); rtt < probeTimeout {
 		l.finish(rtt, true)
 	} else {
 		l.finish(0, false)

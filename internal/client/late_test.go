@@ -12,7 +12,7 @@ func lateFixture(sentAgo time.Duration) (*sess, *Dir, *[]Interval) {
 	ss := lv.ss
 	d := &Dir{Intervals: []Interval{{Index: 0, HasRTT: true, RTT: time.Millisecond}, {Index: 1}},
 		LoadedRTT: NewLoadedRTT([]time.Duration{time.Millisecond}, 2)}
-	ss.late = &lateProbe{lv: lv, seq: 1, sentAt: time.Now().Add(-sentAgo), iv: Interval{Index: 1},
+	ss.late = &lateProbe{lv: lv, seq: 1, sentAt: hrNow().Add(-sentAgo), iv: Interval{Index: 1},
 		answered: []time.Duration{time.Millisecond}, sent: 2, dst: d}
 	return ss, d, &got
 }

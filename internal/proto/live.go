@@ -11,10 +11,10 @@ const MaxSamples = 300
 
 // Cotas de validación de una muestra recibida.
 const (
-	maxSampleMbps       = 100000 // 100 Gbps
-	maxSampleMS         = 60000  // jitter y RTT
+	maxSampleMbps       = 1000000 // 1 Tbps (el loopback supera 100 Gbps)
+	maxSampleMS         = 60000   // jitter y RTT
 	maxSampleDurMS      = 300000
-	maxSampleBytesPerMS = 12500000 // 100 Gbps en bytes por ms
+	maxSampleBytesPerMS = 125000000 // 1 Tbps en bytes por ms
 )
 
 // Sample es una muestra de un intervalo recibida por el control (spec 005).

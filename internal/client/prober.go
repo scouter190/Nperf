@@ -4,7 +4,13 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"nperf/internal/hrtime"
 )
+
+// hrNow es la hora de alta resolución (QPC en Windows) como time.Time sin reloj de pared:
+// solo sirve para diferencias. Evita RTT 0 con el reloj grueso de Windows.
+func hrNow() time.Time { return time.Unix(0, hrtime.Now()) }
 
 const (
 	probeInterval = time.Second
@@ -20,7 +26,7 @@ type Clock interface {
 
 type realClock struct{}
 
-func (realClock) Now() time.Time                         { return time.Now() }
+func (realClock) Now() time.Time                         { return hrNow() }
 func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
 
 // ProbeResult es el desenlace de la sonda Seq: OK con RTT, o sin respuesta.

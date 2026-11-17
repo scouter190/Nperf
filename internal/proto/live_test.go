@@ -70,9 +70,9 @@ func TestSampleRejections(t *testing.T) {
 		{"mbps negativo", Message{Type: TypeSample, Mbps: -1}, -1, 5000},
 		{"lost negativo", Message{Type: TypeSample, Lost: -1}, -1, 5000},
 		{"loss > 100", Message{Type: TypeSample, LossPct: 100.1}, -1, 5000},
-		{"mbps > 100G", Message{Type: TypeSample, Mbps: 100001}, -1, 5000},
+		{"mbps > 1T", Message{Type: TypeSample, Mbps: 1000001}, -1, 5000},
 		{"jitter > 60 s", Message{Type: TypeSample, JitterMS: 60001}, -1, 5000},
-		{"bytes incoherentes", Message{Type: TypeSample, DurationMS: 1000, Bytes: 12500000001 * 1000 / 1000}, -1, 5000},
+		{"bytes incoherentes", Message{Type: TypeSample, DurationMS: 1000, Bytes: 125000000001}, -1, 5000},
 		{"bytes sin duración", Message{Type: TypeSample, Bytes: 1}, -1, 5000},
 		{"duración > 300 s", Message{Type: TypeSample, DurationMS: 300001}, -1, 5000},
 		{"jitter negativo", Message{Type: TypeSample, JitterMS: -0.1}, -1, 5000},
@@ -109,5 +109,13 @@ func TestConcurrentWrites(t *testing.T) {
 		if !strings.HasPrefix(l, `{"type":"sample"`) || !strings.HasSuffix(l, "}") {
 			t.Fatalf("línea mezclada: %q", l)
 		}
+	}
+}
+
+// Un loopback rápido (> 100 Gbps) o una ventana de 1 ms no son muestras inválidas.
+func TestSampleFromMessageFastLoopback(t *testing.T) {
+	m := Message{Type: TypeSample, DurationMS: 1000, Bytes: 20e9, Mbps: 160000}
+	if _, err := SampleFromMessage(m, -1, 5000); err != nil {
+		t.Fatal(err)
 	}
 }

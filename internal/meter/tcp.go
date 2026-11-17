@@ -153,7 +153,7 @@ func ReceiveTCPNSamples(rs []io.Reader, abort func(), d time.Duration, out chan<
 	tk := time.NewTicker(tcpSampleTick)
 	defer tk.Stop()
 	return receiveTCPN(rs, abort, &tcpSampler{
-		series: NewSeries(d, out), now: time.Now, tick: tk.C,
+		series: NewSeries(d, out), now: realClock.now, tick: tk.C,
 	})
 }
 
