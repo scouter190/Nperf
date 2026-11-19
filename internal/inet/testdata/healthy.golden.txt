@@ -1,0 +1,5 @@
+Latencia a internet
+  Puerta de enlace 192.168.1.1: RTT medio 2.0 ms, jitter < 1 ms, pérdida 0 %
+  1.1.1.1: RTT medio 12.0 ms, jitter 1.0 ms, pérdida 0 %
+  8.8.8.8: RTT medio 15.0 ms, jitter 2.0 ms, pérdida 0 %
+Veredicto: sin problemas detectados

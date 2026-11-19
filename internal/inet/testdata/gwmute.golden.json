@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "command": "internet",
+  "gateway": {
+    "ip": "192.168.1.1",
+    "status": "unavailable",
+    "sent": 4,
+    "received": 0,
+    "loss_pct": 0,
+    "min_ms": null,
+    "avg_ms": null,
+    "max_ms": null,
+    "rtt_status": "unavailable",
+    "jitter_ms": null,
+    "jitter_status": "unavailable"
+  },
+  "targets": [
+    {
+      "ip": "1.1.1.1",
+      "status": "ok",
+      "sent": 100,
+      "received": 100,
+      "loss_pct": 0,
+      "min_ms": 0,
+      "avg_ms": 12,
+      "max_ms": 0,
+      "rtt_status": "ok",
+      "jitter_ms": 1,
+      "jitter_status": "ok",
+      "tcp443": null,
+      "tcp443_status": "unavailable"
+    },
+    {
+      "ip": "8.8.8.8",
+      "status": "ok",
+      "sent": 100,
+      "received": 100,
+      "loss_pct": 0,
+      "min_ms": 0,
+      "avg_ms": 15,
+      "max_ms": 0,
+      "rtt_status": "ok",
+      "jitter_ms": 2,
+      "jitter_status": "ok",
+      "tcp443": null,
+      "tcp443_status": "unavailable"
+    }
+  ],
+  "verdict": {
+    "kind": "healthy",
+    "message": "sin problemas detectados",
+    "notes": [
+      "puerta de enlace no responde a ping"
+    ]
+  },
+  "trace": null,
+  "trace_notes": []
+}

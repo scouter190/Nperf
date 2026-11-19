@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "command": "internet",
+  "gateway": {
+    "ip": "192.168.1.1",
+    "status": "ok",
+    "sent": 100,
+    "received": 100,
+    "loss_pct": 0,
+    "min_ms": 0,
+    "avg_ms": 2,
+    "max_ms": 0,
+    "rtt_status": "ok",
+    "jitter_ms": 0.5,
+    "jitter_status": "ok"
+  },
+  "targets": [
+    {
+      "ip": "1.1.1.1",
+      "status": "unavailable",
+      "sent": 4,
+      "received": 0,
+      "loss_pct": 0,
+      "min_ms": null,
+      "avg_ms": null,
+      "max_ms": null,
+      "rtt_status": "unavailable",
+      "jitter_ms": null,
+      "jitter_status": "unavailable",
+      "tcp443": false,
+      "tcp443_status": "ok"
+    },
+    {
+      "ip": "8.8.8.8",
+      "status": "unavailable",
+      "sent": 4,
+      "received": 0,
+      "loss_pct": 0,
+      "min_ms": null,
+      "avg_ms": null,
+      "max_ms": null,
+      "rtt_status": "unavailable",
+      "jitter_ms": null,
+      "jitter_status": "unavailable",
+      "tcp443": false,
+      "tcp443_status": "ok"
+    }
+  ],
+  "verdict": {
+    "kind": "no_internet",
+    "message": "sin salida a internet",
+    "notes": []
+  },
+  "trace": null,
+  "trace_notes": []
+}

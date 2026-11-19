@@ -1,0 +1,10 @@
+Latencia a internet
+  Puerta de enlace 192.168.1.1: RTT medio 2.0 ms, jitter < 1 ms, pérdida 0 %
+  1.1.1.1: RTT medio 150.0 ms, jitter 40.0 ms, pérdida 5 %
+  8.8.8.8: RTT medio 15.0 ms, jitter 2.0 ms, pérdida 0 %
+Veredicto: el problema está después del router (proveedor)
+Ruta a 1.1.1.1
+  1  192.168.1.1  2.0 ms  pérdida 0 %
+  2  *  no disponible  pérdida 0 %
+  3  1.1.1.1  150.0 ms  pérdida 5 %
+- el salto 3 pierde paquetes

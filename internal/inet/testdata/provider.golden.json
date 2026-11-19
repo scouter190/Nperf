@@ -1,0 +1,105 @@
+{
+  "format_version": 1,
+  "command": "internet",
+  "gateway": {
+    "ip": "192.168.1.1",
+    "status": "ok",
+    "sent": 100,
+    "received": 100,
+    "loss_pct": 0,
+    "min_ms": 0,
+    "avg_ms": 2,
+    "max_ms": 0,
+    "rtt_status": "ok",
+    "jitter_ms": 0.5,
+    "jitter_status": "ok"
+  },
+  "targets": [
+    {
+      "ip": "1.1.1.1",
+      "status": "ok",
+      "sent": 100,
+      "received": 100,
+      "loss_pct": 5,
+      "min_ms": 0,
+      "avg_ms": 150,
+      "max_ms": 0,
+      "rtt_status": "ok",
+      "jitter_ms": 40,
+      "jitter_status": "ok",
+      "tcp443": null,
+      "tcp443_status": "unavailable"
+    },
+    {
+      "ip": "8.8.8.8",
+      "status": "ok",
+      "sent": 100,
+      "received": 100,
+      "loss_pct": 0,
+      "min_ms": 0,
+      "avg_ms": 15,
+      "max_ms": 0,
+      "rtt_status": "ok",
+      "jitter_ms": 2,
+      "jitter_status": "ok",
+      "tcp443": null,
+      "tcp443_status": "unavailable"
+    }
+  ],
+  "verdict": {
+    "kind": "provider",
+    "message": "el problema está después del router (proveedor)",
+    "notes": []
+  },
+  "trace": {
+    "target": "1.1.1.1",
+    "reached": true,
+    "hops": [
+      {
+        "ttl": 1,
+        "from": "192.168.1.1",
+        "status": "ok",
+        "sent": 100,
+        "received": 100,
+        "loss_pct": 0,
+        "min_ms": 0,
+        "avg_ms": 2,
+        "max_ms": 0,
+        "rtt_status": "ok",
+        "jitter_ms": 0.5,
+        "jitter_status": "ok"
+      },
+      {
+        "ttl": 2,
+        "from": null,
+        "status": "unavailable",
+        "sent": 4,
+        "received": 0,
+        "loss_pct": 0,
+        "min_ms": null,
+        "avg_ms": null,
+        "max_ms": null,
+        "rtt_status": "unavailable",
+        "jitter_ms": null,
+        "jitter_status": "unavailable"
+      },
+      {
+        "ttl": 3,
+        "from": "1.1.1.1",
+        "status": "ok",
+        "sent": 100,
+        "received": 100,
+        "loss_pct": 5,
+        "min_ms": 0,
+        "avg_ms": 150,
+        "max_ms": 0,
+        "rtt_status": "ok",
+        "jitter_ms": 40,
+        "jitter_status": "ok"
+      }
+    ]
+  },
+  "trace_notes": [
+    "el salto 3 pierde paquetes"
+  ]
+}

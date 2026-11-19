@@ -1,0 +1,6 @@
+Latencia a internet
+  Puerta de enlace: no detectada
+  1.1.1.1: sin respuesta (enviados 4)
+    TCP 443: abre
+Veredicto: ICMP filtrado (sin veredicto de latencia)
+- puerta de enlace no responde a ping

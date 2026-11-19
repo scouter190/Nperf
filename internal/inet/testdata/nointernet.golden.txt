@@ -1,0 +1,7 @@
+Latencia a internet
+  Puerta de enlace 192.168.1.1: RTT medio 2.0 ms, jitter < 1 ms, pérdida 0 %
+  1.1.1.1: sin respuesta (enviados 4)
+    TCP 443: sin conexión
+  8.8.8.8: sin respuesta (enviados 4)
+    TCP 443: sin conexión
+Veredicto: sin salida a internet
