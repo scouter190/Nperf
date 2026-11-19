@@ -264,3 +264,55 @@ func TestLoadFullRejects65HostsOnDisk(t *testing.T) {
 		t.Fatalf("65 en disco: %v", err)
 	}
 }
+
+func TestHistoryAndInternetTargets(t *testing.T) {
+	dir := t.TempDir()
+	write := func(s string) {
+		if err := os.MkdirAll(filepath.Dir(Path(dir)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(Path(dir), []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`{"key":"k"}`)
+	for _, load := range []func(string) (Config, error){Load, LoadFull} {
+		c, err := load(dir)
+		if err != nil || !c.HistoryOn() || len(c.Targets()) != 2 || c.Targets()[0] != "1.1.1.1" || c.Targets()[1] != "8.8.8.8" {
+			t.Fatalf("defaults: %+v %v", c, err)
+		}
+	}
+	write(`{"key":"k","history_enabled":false,"internet_targets":["9.9.9.9"],"x":1}`)
+	c, err := LoadFull(dir)
+	if err != nil || c.HistoryOn() || len(c.Targets()) != 1 {
+		t.Fatalf("valores: %+v %v", c, err)
+	}
+	if err := Update(dir, func(c *Config) { c.Alias = "a" }); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(Path(dir))
+	for _, w := range []string{`"x"`, `"history_enabled": false`, `9.9.9.9`} {
+		if !strings.Contains(string(b), w) {
+			t.Fatalf("falta %s en %s", w, b)
+		}
+	}
+	for _, bad := range []string{
+		`["1.1.1.1","8.8.8.8","9.9.9.9","1.0.0.1","8.8.4.4"]`, `["10.0.0.1"]`, `["::1"]`, `["example.com"]`,
+		`["127.0.0.1"]`, `["224.0.0.1"]`, `["255.255.255.255"]`, `["0.0.0.0"]`, `["100.64.0.1"]`, `[5]`,
+	} {
+		write(`{"internet_targets":` + bad + `}`)
+		if _, err := LoadFull(dir); err == nil {
+			t.Errorf("%s debería rechazarse", bad)
+		}
+		if _, err := Load(dir); err != nil {
+			t.Errorf("Load tolerante %s: %v", bad, err)
+		}
+	}
+	write(`{"history_enabled":"si"}`)
+	if _, err := LoadFull(dir); err == nil {
+		t.Error("history_enabled inválido")
+	}
+	if c, err := Load(dir); err != nil || !c.HistoryOn() {
+		t.Errorf("Load tolerante: %+v %v", c, err)
+	}
+}

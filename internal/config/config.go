@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 )
@@ -33,6 +34,48 @@ type Config struct {
 	ExtraSubnets  []string `json:"extra_subnets"`
 	// ManualHosts son los equipos sin agente añadidos a mano (máx. MaxManualHosts).
 	ManualHosts []ManualHost `json:"manual_hosts"`
+	// HistoryEnabled: nil (ausente) = activado. Usar HistoryOn.
+	HistoryEnabled *bool `json:"history_enabled"`
+	// InternetTargets: destinos públicos IPv4 (máx. MaxInternetTargets); vacío = DefaultInternetTargets. Usar Targets.
+	InternetTargets []string `json:"internet_targets"`
+}
+
+// DefaultInternetTargets son los destinos públicos por defecto.
+var DefaultInternetTargets = []string{"1.1.1.1", "8.8.8.8"}
+
+// HistoryOn indica si el historial está activado (ausente = true).
+func (c Config) HistoryOn() bool { return c.HistoryEnabled == nil || *c.HistoryEnabled }
+
+// Targets devuelve los destinos de internet efectivos (copia).
+func (c Config) Targets() []string {
+	if len(c.InternetTargets) == 0 {
+		return append([]string(nil), DefaultInternetTargets...)
+	}
+	return append([]string(nil), c.InternetTargets...)
+}
+
+// validPublicIPv4 acepta solo una IPv4 unicast pública en notación literal.
+func validPublicIPv4(s string) bool {
+	a, err := netip.ParseAddr(s)
+	if err != nil || !a.Is4() || a.String() != s {
+		return false
+	}
+	if !a.IsGlobalUnicast() || a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsMulticast() {
+		return false
+	}
+	for _, p := range nonPublic {
+		if p.Contains(a) {
+			return false
+		}
+	}
+	return true
+}
+
+var nonPublic = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"), netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"), netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"), netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"), netip.MustParsePrefix("240.0.0.0/4"),
 }
 
 // ManualHost es un equipo sin agente añadido a mano: nombre o IP y alias opcional.
@@ -48,9 +91,10 @@ const (
 	MinDuration          = 3
 	MaxDuration          = 300
 
-	MaxManualHosts   = 64
-	MaxHostTargetLen = 253
-	MaxHostAliasLen  = 64
+	MaxManualHosts     = 64
+	MaxInternetTargets = 4
+	MaxHostTargetLen   = 253
+	MaxHostAliasLen    = 64
 )
 
 // Defaults devuelve una Config con los valores por defecto.
@@ -75,6 +119,14 @@ func (c Config) Validate() error {
 		}
 		if len(h.Alias) > MaxHostAliasLen || hasControl(h.Alias) {
 			return fmt.Errorf("manual_hosts[%d].alias inválido (máx. %d bytes, sin control)", i, MaxHostAliasLen)
+		}
+	}
+	if len(c.InternetTargets) > MaxInternetTargets {
+		return fmt.Errorf("internet_targets admite como máximo %d destinos (hay %d)", MaxInternetTargets, len(c.InternetTargets))
+	}
+	for i, t := range c.InternetTargets {
+		if !validPublicIPv4(t) {
+			return fmt.Errorf("internet_targets[%d] debe ser una IPv4 pública (unicast): %q", i, t)
 		}
 	}
 	return nil
@@ -147,6 +199,12 @@ func Load(userConfigDir string) (Config, error) {
 	if field(m, "extra_subnets", &c.ExtraSubnets) != nil {
 		c.ExtraSubnets = nil
 	}
+	if field(m, "history_enabled", &c.HistoryEnabled) != nil {
+		c.HistoryEnabled = nil
+	}
+	if field(m, "internet_targets", &c.InternetTargets) != nil {
+		c.InternetTargets = nil
+	}
 	return c, nil
 }
 
@@ -160,7 +218,8 @@ func LoadFull(userConfigDir string) (Config, error) {
 		return Config{}, err
 	}
 	for name, dst := range map[string]any{"key": &c.Key, "alias": &c.Alias, "duration": &c.Duration,
-		"discovery_port": &c.DiscoveryPort, "extra_subnets": &c.ExtraSubnets, "manual_hosts": &c.ManualHosts} {
+		"discovery_port": &c.DiscoveryPort, "extra_subnets": &c.ExtraSubnets, "manual_hosts": &c.ManualHosts,
+		"history_enabled": &c.HistoryEnabled, "internet_targets": &c.InternetTargets} {
 		if err := field(m, name, dst); err != nil {
 			return Config{}, fmt.Errorf("archivo de configuración inválido %s: campo %q: %v", p, name, err)
 		}
@@ -192,7 +251,8 @@ func Save(userConfigDir string, c Config) error {
 		m = map[string]json.RawMessage{}
 	}
 	for name, v := range map[string]any{"key": c.Key, "alias": c.Alias, "duration": c.Duration,
-		"discovery_port": c.DiscoveryPort, "extra_subnets": c.ExtraSubnets, "manual_hosts": c.ManualHosts} {
+		"discovery_port": c.DiscoveryPort, "extra_subnets": c.ExtraSubnets, "manual_hosts": c.ManualHosts,
+		"history_enabled": c.HistoryEnabled, "internet_targets": c.InternetTargets} {
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return err
@@ -201,6 +261,12 @@ func Save(userConfigDir string, c Config) error {
 	}
 	if len(c.ManualHosts) == 0 { // no añade el campo a archivos que no lo tenían
 		delete(m, "manual_hosts")
+	}
+	if c.HistoryEnabled == nil {
+		delete(m, "history_enabled")
+	}
+	if len(c.InternetTargets) == 0 {
+		delete(m, "internet_targets")
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
