@@ -59,7 +59,8 @@ func (q *Quota) Reserve(now time.Time) (int, error) {
 	day := now.Format("2006-01-02")
 	path := filepath.Join(q.Dir, quotaFile)
 	st := quotaState{Day: day}
-	data, err := os.ReadFile(path)
+	var data []byte
+	err = retry(func() (err error) { data, err = os.ReadFile(path); return })
 	switch {
 	case err == nil:
 		var read quotaState
@@ -102,19 +103,33 @@ func writeAtomic(path string, st quotaState) error {
 		}
 		return cerr
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := retry(func() error { return os.Rename(name, path) }); err != nil {
 		os.Remove(name)
 		return err
 	}
 	return nil
 }
 
+// retry repite fn mientras falle con un error transitorio (Windows), hasta
+// lockWait. Los errores reales se devuelven sin tocar.
+func retry(fn func() error) error {
+	deadline := time.Now().Add(lockWait)
+	for {
+		err := fn()
+		if err == nil || !isTransient(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(lockInterval + time.Duration(rand.Intn(5))*time.Millisecond)
+	}
+}
+
 // releaseLock borra el bloqueo solo si aún contiene nuestro token, para no
 // quitar el de otro proceso que rompió el nuestro por huérfano. Queda una
 // ventana residual mínima entre leer y borrar (aceptable: límite de cortesía).
 func releaseLock(path, token string) {
-	if b, err := os.ReadFile(path); err == nil && string(b) == token {
-		os.Remove(path)
+	var b []byte
+	if retry(func() (err error) { b, err = os.ReadFile(path); return }) == nil && string(b) == token {
+		retry(func() error { return os.Remove(path) })
 	}
 }
 
@@ -135,11 +150,10 @@ func (q *Quota) lock() (func(), error) {
 			}
 			return func() { releaseLock(path, token) }, nil
 		}
-		if !errors.Is(err, os.ErrExist) {
-			// En Windows un archivo pendiente de borrar da acceso denegado: reintentar.
-			if _, serr := os.Stat(path); serr != nil && !errors.Is(serr, os.ErrNotExist) {
-				return nil, err
-			}
+		// En Windows un bloqueo abierto o pendiente de borrar da acceso
+		// denegado o violación de uso compartido: se trata como ocupado.
+		if !errors.Is(err, os.ErrExist) && !isTransient(err) {
+			return nil, err
 		}
 		if fi, serr := os.Stat(path); serr == nil && q.now().Sub(fi.ModTime()) > lockStale {
 			os.Remove(path)
