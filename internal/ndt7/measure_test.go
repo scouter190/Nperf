@@ -1,0 +1,217 @@
+package ndt7
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"nperf/internal/ndt7/ndt7test"
+	"nperf/internal/version"
+	"nperf/internal/ws"
+)
+
+func opts(s *ndt7test.Server, path string) MeasureOptions {
+	return MeasureOptions{
+		URL:        "wss://" + s.Addr() + "/ndt/v7/" + path + "?access_token=" + ndt7test.Token + "&index=0",
+		WS:         ws.Options{TLS: s.TLSConfig()},
+		UploadTime: time.Second,
+		MinNormal:  900 * time.Millisecond,
+	}
+}
+
+func srv(t *testing.T, f func(*ndt7test.Config)) *ndt7test.Server {
+	t.Helper()
+	s, err := ndt7test.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	s.Configure(func(c *ndt7test.Config) {
+		c.DownloadTime = time.Second
+		c.UploadTime = time.Second
+		c.LateClose = 1500 * time.Millisecond
+		c.MeasureInterval = 50 * time.Millisecond
+		if f != nil {
+			f(c)
+		}
+	})
+	return s
+}
+
+func within(t *testing.T, got, want, tol float64) {
+	t.Helper()
+	if math.Abs(got-want) > want*tol {
+		t.Fatalf("got %.2f, want %.2f ±%.0f%%", got, want, tol*100)
+	}
+}
+
+func TestDownloadRate(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.DownloadRate = 5e6 }) // 40 Mbps
+	d, err := Download(context.Background(), opts(s, "download"))
+	if err != nil || d.Incomplete {
+		t.Fatalf("%v %+v", err, d)
+	}
+	within(t, d.Mbps, 40, 0.05)
+	if d.MinRTTms == nil || *d.MinRTTms != 12 {
+		t.Fatalf("min rtt %v", d.MinRTTms)
+	}
+	if st := s.Stats(); st.DownloadConns != 1 || st.Connections != 1 {
+		t.Fatalf("%+v", st)
+	}
+}
+
+func TestUploadUsesServerBytes(t *testing.T) {
+	s := srv(t, nil)
+	d, err := Upload(context.Background(), opts(s, "upload"))
+	if err != nil || d.Incomplete {
+		t.Fatalf("%v %+v", err, d)
+	}
+	st := s.Stats()
+	if st.UploadConns != 1 || d.Bytes != st.BytesReceived {
+		t.Fatalf("bytes %d, servidor %d, %+v", d.Bytes, st.BytesReceived, st)
+	}
+	within(t, d.Mbps, float64(st.BytesReceived)*8/1e6/1.0, 0.05)
+	for _, n := range d.Notes {
+		if n == "estimado por el cliente" {
+			t.Fatal("no debía estimar")
+		}
+	}
+}
+
+func TestDownloadNoCloseCut(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.NoClose; c.DownloadRate = 5e6 })
+	o := opts(s, "download")
+	o.MaxTotal = 2 * time.Second
+	t0 := time.Now()
+	d, err := Download(context.Background(), o)
+	if err != nil || d.Incomplete || len(d.Notes) == 0 {
+		t.Fatalf("%v %+v", err, d)
+	}
+	if el := time.Since(t0); el > 4*time.Second {
+		t.Fatalf("tardó %v", el)
+	}
+	within(t, d.Mbps, 40, 0.1)
+}
+
+func TestDownloadLateClose(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.LateClose })
+	d, err := Download(context.Background(), opts(s, "download"))
+	if err != nil || d.Incomplete || d.Bytes == 0 {
+		t.Fatalf("%v %+v", err, d)
+	}
+}
+
+func TestCutMidway(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.CutMidway })
+	for _, dir := range []string{"download", "upload"} {
+		var d Direction
+		var err error
+		if dir == "download" {
+			d, err = Download(context.Background(), opts(s, dir))
+		} else {
+			d, err = Upload(context.Background(), opts(s, dir))
+		}
+		if err != nil || !d.Incomplete || d.Reason == "" || d.Bytes == 0 {
+			t.Fatalf("%s: %v %+v", dir, err, d)
+		}
+	}
+}
+
+func TestGiantAndInvalidJSON(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.GiantFrame })
+	for _, dir := range []string{"download", "upload"} {
+		var d Direction
+		var err error
+		if dir == "download" {
+			d, err = Download(context.Background(), opts(s, dir))
+		} else {
+			d, err = Upload(context.Background(), opts(s, dir))
+		}
+		if err != nil || !d.Incomplete || d.Reason == "" {
+			t.Fatalf("%s gigante: %v %+v", dir, err, d)
+		}
+	}
+	s.Configure(func(c *ndt7test.Config) { c.Fail = ndt7test.InvalidJSON })
+	d, err := Download(context.Background(), opts(s, "download"))
+	if err != nil || d.Incomplete || d.Bytes == 0 {
+		t.Fatalf("json inválido: %v %+v", err, d)
+	}
+	d, err = Upload(context.Background(), opts(s, "upload"))
+	if err != nil || d.Incomplete || d.Bytes == 0 {
+		t.Fatalf("json inválido subida: %v %+v", err, d)
+	}
+}
+
+func TestWrongSubprotocolAndCancel(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.WrongSubprotocol })
+	if _, err := Download(context.Background(), opts(s, "download")); err == nil {
+		t.Fatal("esperaba error")
+	}
+	s.Configure(func(c *ndt7test.Config) { c.Fail = ndt7test.Normal; c.DownloadTime = 10 * time.Second })
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	d, err := Download(ctx, opts(s, "download"))
+	if err != nil || !d.Incomplete {
+		t.Fatalf("%v %+v", err, d)
+	}
+}
+
+func TestFakeClock(t *testing.T) {
+	s := srv(t, nil)
+	o := opts(s, "download")
+	var n int64
+	o.Now = func() int64 { n += int64(time.Millisecond); return n }
+	if _, err := Download(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("no usó el reloj inyectado")
+	}
+}
+
+func TestEarlyNormalClose(t *testing.T) {
+	s := srv(t, func(c *ndt7test.Config) {
+		c.DownloadTime = 300 * time.Millisecond
+		c.UploadTime = 300 * time.Millisecond
+	})
+	d, err := Download(context.Background(), opts(s, "download"))
+	if err != nil || !d.Incomplete || d.Reason == "" {
+		t.Fatalf("descarga: %v %+v", err, d)
+	}
+	o := opts(s, "upload")
+	o.UploadTime = 5 * time.Second
+	d, err = Upload(context.Background(), o)
+	if err != nil || !d.Incomplete || d.Reason == "" {
+		t.Fatalf("subida: %v %+v", err, d)
+	}
+}
+
+func TestUserAgentDefault(t *testing.T) {
+	var got string
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.UserAgent()
+		c, err := ws.Accept(w, r, ws.Options{Subprotocol: Subprotocol})
+		if err == nil {
+			_ = c.Close(ws.CloseNormal, "")
+		}
+	}))
+	ts.EnableHTTP2 = false
+	ts.StartTLS()
+	defer ts.Close()
+	pool := x509.NewCertPool()
+	pool.AddCert(ts.Certificate())
+	u := strings.Replace(ts.URL, "https://", "wss://", 1) + "/ndt/v7/download"
+	o := MeasureOptions{URL: u, WS: ws.Options{TLS: &tls.Config{RootCAs: pool}}}
+	if _, err := Download(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if got != "NPerf/"+version.Current {
+		t.Fatalf("User-Agent %q", got)
+	}
+}
