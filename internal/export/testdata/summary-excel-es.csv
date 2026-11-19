@@ -1,0 +1,13 @@
+﻿id;time;kind;status;error;source_alias;source_ip;source_ssid;dest_alias;dest_ip;dest_ssid;phase;direction;measure_status;throughput_mbps;bytes;duration_s;retransmissions;retransmissions_estimated;loss_pct;jitter_ms;rtt_min_ms;rtt_avg_ms;rtt_max_ms;mtu_bytes
+20260101-000000-aaaaaaaa;2026-01-01T00:00:00Z;test;done;;"'=HYPERLINK(""http://x"")";10.0.0.1;;"a;b,c ""q""
+linea";10.0.0.2;'@SUM(1);tcp;fwd;ok;941,123;1000;10;3;true;;;1;2,5;4;
+20260101-000000-aaaaaaaa;2026-01-01T00:00:00Z;test;done;;"'=HYPERLINK(""http://x"")";10.0.0.1;;"a;b,c ""q""
+linea";10.0.0.2;'@SUM(1);tcp;rev;unavailable;;;;;;;;1;2,5;4;
+20260101-000000-aaaaaaaa;2026-01-01T00:00:00Z;test;done;;"'=HYPERLINK(""http://x"")";10.0.0.1;;"a;b,c ""q""
+linea";10.0.0.2;'@SUM(1);udp;fwd;ok;90,5;5;10;;;0,25;0,5;1;2,5;4;
+20260101-000000-aaaaaaaa;2026-01-01T00:00:00Z;test;done;;"'=HYPERLINK(""http://x"")";10.0.0.1;;"a;b,c ""q""
+linea";10.0.0.2;'@SUM(1);udp;rev;unavailable;;;;;;;;1;2,5;4;
+20260101-000001-bbbbbbbb;2026-01-01T00:00:01Z;ping;error;'+cmd|' /C calc'!A0;;;;'-2+3;'	x;;ping;;ok;;;;;;0;0,5;1;2;3;
+20260101-000002-cccccccc;2026-01-01T00:00:02Z;speed;done;;;;;;;;speed;download;ok;50,5;9;10;;;;;12;;;
+20260101-000002-cccccccc;2026-01-01T00:00:02Z;speed;done;;;;;;;;speed;upload;not_measured;;;;;;;;;;;
+20260101-000003-dddddddd;2026-01-01T00:00:03Z;mtu;cancelled;;;;;;;;mtu;;not_measured;;;;;;;;;;;

@@ -6,7 +6,7 @@
 **Fase 8 - Implementando spec 006 (historial, exportar, internet con M-Lab).** Spec 005 completa en código. Specs 001-004 completas en código; validaciones manuales pendientes (iperf3, gui, red, sin-agente). Spec 003: banda/canal WiFi y virtuales validados por el usuario en Windows 11.
 
 ## Spec activa
-`specs/006-historial-exportar-internet/` (aprobada; hechas T1-T7 de T1-T27; decisiones §21; 22 criterios; condiciones M-Lab: consentimiento previo, privacidad propia docs/privacidad.md, 40 pruebas/día, Locate v2). `specs/005-graficas-en-vivo/` (T1-T18 hechas, CI Windows verde (hrtime en sondas y tcpSampler); validación manual pendiente: docs/validacion-graficas.md; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/006-historial-exportar-internet/` (aprobada; hechas T1-T12 de T1-T27; decisiones §21; 22 criterios; condiciones M-Lab: consentimiento previo, privacidad propia docs/privacidad.md, 40 pruebas/día, Locate v2). `specs/005-graficas-en-vivo/` (T1-T18 hechas, CI Windows verde (hrtime en sondas y tcpSampler); validación manual pendiente: docs/validacion-graficas.md; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
@@ -44,7 +44,7 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 - UI (`internal/ui`, T14): HTML/CSS/JS plano embebido, CSP estricta, todo dato de la red como texto (test que prohíbe innerHTML y similares), puente `window.nperfCall(nombre, ...args)` → Promise; mock.js solo para previsualizar.
 
 ## Próximo paso
-Spec 006: ola 2 según tasks.md. Paquetes nuevos: internal/history (Record, IDs seguros, tope 2 MB), internal/ws (WebSocket propio, plazos lectura/escritura separados), internal/inet (Verdict, ParseTargets), internal/ndt7 (Quota 40/día por perfil, bloqueo con token), internal/export (SVG escapado, acotado). Config HistoryOn()/Targets(). docs/privacidad.md. Usuario: validaciones manuales de specs 001-005.
+Spec 006: ola 2 según tasks.md. Paquetes nuevos: internal/history (Record, IDs seguros, tope 2 MB), internal/ws (WebSocket propio, plazos lectura/escritura separados), internal/inet (Verdict, ParseTargets), internal/ndt7 (Quota 40/día por perfil, bloqueo con token), internal/export (SVG escapado, acotado; CSV std/excel-es, columnas genéricas loss_pct/jitter_ms, anti-fórmulas), history.Store (Save con Link+respaldo, Prune 90 d/50 MB, List/Get/Delete), inet.Run (latencia + veredicto), ndt7test (servidor de prueba). Config HistoryOn()/Targets(). docs/privacidad.md. Usuario: validaciones manuales de specs 001-005.
 
 ## Pendientes
 - Flaky TestStreamsOutOfRangeRejected (1 vez, "connection reset"), no reproducido; si reaparece, analizar ese mensaje.

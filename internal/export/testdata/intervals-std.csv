@@ -1,0 +1,3 @@
+﻿id,time,phase,direction,t_s,duration_s,bytes,throughput_mbps,rtt_ms,datagrams_received,datagrams_lost,loss_pct,jitter_ms
+20260101-000000-aaaaaaaa,2026-01-01T00:00:00Z,tcp,fwd,0,1,100,-1.5,,,,,
+20260101-000000-aaaaaaaa,2026-01-01T00:00:00Z,udp,fwd,1,1,5,90,1.5,10,1,9.1,0.2

@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.exe binary
 *.bundle binary
+internal/export/testdata/*.csv -text
