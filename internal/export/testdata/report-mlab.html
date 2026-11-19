@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Informe de red - NPerf</title>
+<style>
+@page { size: A4; margin: 15mm; }
+* { box-sizing: border-box; }
+body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; color: #111; background: #fff; margin: 0 auto; max-width: 190mm; padding: 8mm; }
+h1 { font-size: 20pt; margin: 0 0 4mm; }
+h2 { font-size: 14pt; margin: 0 0 2mm; }
+h3 { font-size: 11pt; margin: 4mm 0 1mm; }
+h4 { font-size: 10pt; margin: 3mm 0 0; }
+.meta { border: 1px solid #999; padding: 3mm; margin-bottom: 5mm; }
+.meta p { margin: 0 0 1mm; }
+.rec { border-top: 2px solid #1f4e9c; padding-top: 3mm; margin-top: 6mm; break-inside: avoid-page; }
+table { border-collapse: collapse; width: 100%; margin: 2mm 0; }
+th, td { border: 1px solid #999; padding: 1.5mm 2mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+th { background: #eee; }
+.ends td:nth-child(1), .ends td:nth-child(3) { white-space: nowrap; }
+table { table-layout: auto; max-width: 100%; }
+.light { display: flex; gap: 3mm; align-items: baseline; margin: 1mm 0; }
+.dot { display: inline-block; width: 4mm; height: 4mm; border-radius: 50%; flex: none; border: 1px solid #000; }
+.err { color: #b3261e; font-weight: bold; }
+.notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+svg { max-width: 100%; height: auto; margin: 2mm 0; break-inside: avoid; }
+.mlab { border: 1px solid #999; padding: 3mm; margin-top: 6mm; font-size: 10pt; }
+footer { margin-top: 6mm; font-size: 9pt; color: #444; }
+h2, h3, h4 { break-after: avoid; }
+@media print { h2, h3, h4 { break-after: avoid; break-inside: avoid; } body { padding: 0; max-width: none; } .rec { break-inside: auto; } table, svg { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<h1>Informe de red</h1>
+<div class="meta">
+<p>Generado: 05/03/2026 10:30</p>
+<p>Cliente: Cliente &lt;script&gt;c&lt;/script&gt;</p>
+<p>Técnico: Téc &#34;x&#34;</p>
+<p>Notas:</p><p class="notes">Línea 1
+&lt;script&gt;alert(3)&lt;/script&gt;
+Línea 3</p>
+</div>
+
+
+<section class="rec">
+<h2>Prueba de velocidad en la red local</h2>
+<p>01/01/2026 09:00:00 &#43;01:00 - Completado</p>
+
+<table class="ends">
+<tr><th>Equipo</th><th>Nombre</th><th>IP</th><th>Wi-Fi (SSID)</th><th>Enlace</th></tr>
+<tr><td>Origen</td><td>&lt;script&gt;alert(&#39;a&#39;)&lt;/script&gt;</td><td>10.0.0.1</td><td>&lt;script&gt;ssid&lt;/script&gt;</td><td>Wi-Fi, 866 Mbps nominales</td></tr>
+<tr><td>Destino</td><td>&#34;&gt;&lt;img src=x onerror=alert(2)&gt;</td><td>10.0.0.2</td><td></td><td>Cable, 1000 Mbps nominales</td></tr>
+</table>
+<table>
+<tr><th>Latencia inicial (mín / media / máx)</th><td>1,00 / 2,50 / 4,00 ms</td></tr>
+</table>
+<table>
+<tr><th>Protocolo</th><th>Sentido</th><th>Velocidad</th><th>Detalle</th></tr>
+<tr><td>TCP</td><td>Cliente a servidor</td><td>941,12 Mbps</td><td>retransmisiones 3 (estimadas)</td></tr>
+<tr><td>TCP</td><td>Servidor a cliente</td><td>no medido</td><td>no disponible</td></tr>
+<tr><td>UDP</td><td>Cliente a servidor</td><td>90,50 Mbps</td><td>pérdida 0,25 %, jitter 0,50 ms</td></tr>
+<tr><td>UDP</td><td>Servidor a cliente</td><td>no medido</td><td>no disponible</td></tr>
+</table>
+<h3>Diagnóstico</h3>
+<div class="light"><span class="dot" style="background:#1b7f3b"></span><span><strong>Cliente a servidor: Verde, 94 %.</strong> Va bien &lt;b&gt;negrita&lt;/b&gt;</span></div>
+<div class="light"><span class="dot" style="background:#b3261e"></span><span><strong>Servidor a cliente: Rojo, 20 %.</strong> Muy lento (diagnóstico parcial)</span></div>
+
+<h3>Gráficas</h3>
+<h4>Velocidad · TCP · Cliente a servidor</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" width="640" height="300" role="img" aria-label="Velocidad · &lt;script&gt;alert(1)&lt;/script&gt; &#34;A&#34; → B. mín 900.00 · prom 930.00 · máx 950.00 Mbps · nominal 1000 Mbps"><title>Velocidad · &lt;script&gt;alert(1)&lt;/script&gt; &#34;A&#34; → B</title><desc>mín 900.00 · prom 930.00 · máx 950.00 Mbps · nominal 1000 Mbps</desc><g stroke="#888" stroke-width="1" fill="none"><rect x="60" y="34" width="564" height="200"/></g><g font-family="sans-serif" font-size="11" fill="#222"><line x1="60" y1="234" x2="624" y2="234" stroke="#ddd"/><text x="54" y="238" text-anchor="end">0</text><line x1="60" y1="134" x2="624" y2="134" stroke="#ddd"/><text x="54" y="138" text-anchor="end">500</text><line x1="60" y1="34" x2="624" y2="34" stroke="#ddd"/><text x="54" y="38" text-anchor="end">1000</text><line x1="60" y1="234" x2="60" y2="238" stroke="#888"/><text x="60" y="250" text-anchor="middle">0.0</text><line x1="154" y1="234" x2="154" y2="238" stroke="#888"/><text x="154" y="250" text-anchor="middle">0.5</text><line x1="248" y1="234" x2="248" y2="238" stroke="#888"/><text x="248" y="250" text-anchor="middle">1.0</text><line x1="342" y1="234" x2="342" y2="238" stroke="#888"/><text x="342" y="250" text-anchor="middle">1.5</text><line x1="436" y1="234" x2="436" y2="238" stroke="#888"/><text x="436" y="250" text-anchor="middle">2.0</text><line x1="530" y1="234" x2="530" y2="238" stroke="#888"/><text x="530" y="250" text-anchor="middle">2.5</text><line x1="624" y1="234" x2="624" y2="238" stroke="#888"/><text x="624" y="250" text-anchor="middle">3.0</text><text x="342" y="266" text-anchor="middle">Tiempo (s)</text><text x="60" y="26">Mbps</text><text x="60" y="292">mín 900.00 · prom 930.00 · máx 950.00 Mbps · nominal 1000 Mbps</text></g><line x1="60" y1="34" x2="624" y2="34" stroke="#000" stroke-width="1.5" stroke-dasharray="2 4"/><text x="624" y="30" text-anchor="end" font-family="sans-serif" font-size="10" fill="#000">nominal 1000 Mbps</text><polyline fill="none" stroke="#1f4e9c" stroke-width="2" points="248,54 436,46 624,44"/><circle cx="248" cy="54" r="3.5" fill="#1f4e9c" stroke="#fff" stroke-width="0.5"/><circle cx="436" cy="46" r="3.5" fill="#1f4e9c" stroke="#fff" stroke-width="0.5"/><circle cx="624" cy="44" r="3.5" fill="#1f4e9c" stroke="#fff" stroke-width="0.5"/></svg>
+<h4>Latencia bajo carga · TCP · Cliente a servidor</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" width="640" height="300" role="img" aria-label="Latencia bajo carga · &lt;script&gt;alert(1)&lt;/script&gt; &#34;A&#34; → B. mín 2.5 · prom 2.8 · máx 3.0 ms · RTT inicial 2 ms"><title>Latencia bajo carga · &lt;script&gt;alert(1)&lt;/script&gt; &#34;A&#34; → B</title><desc>mín 2.5 · prom 2.8 · máx 3.0 ms · RTT inicial 2 ms</desc><g stroke="#888" stroke-width="1" fill="none"><rect x="60" y="34" width="564" height="200"/></g><g font-family="sans-serif" font-size="11" fill="#222"><line x1="60" y1="234" x2="624" y2="234" stroke="#ddd"/><text x="54" y="238" text-anchor="end">0</text><line x1="60" y1="167.33" x2="624" y2="167.33" stroke="#ddd"/><text x="54" y="171.33" text-anchor="end">1</text><line x1="60" y1="100.67" x2="624" y2="100.67" stroke="#ddd"/><text x="54" y="104.67" text-anchor="end">2</text><line x1="60" y1="34" x2="624" y2="34" stroke="#ddd"/><text x="54" y="38" text-anchor="end">3</text><line x1="60" y1="234" x2="60" y2="238" stroke="#888"/><text x="60" y="250" text-anchor="middle">0.0</text><line x1="154" y1="234" x2="154" y2="238" stroke="#888"/><text x="154" y="250" text-anchor="middle">0.5</text><line x1="248" y1="234" x2="248" y2="238" stroke="#888"/><text x="248" y="250" text-anchor="middle">1.0</text><line x1="342" y1="234" x2="342" y2="238" stroke="#888"/><text x="342" y="250" text-anchor="middle">1.5</text><line x1="436" y1="234" x2="436" y2="238" stroke="#888"/><text x="436" y="250" text-anchor="middle">2.0</text><line x1="530" y1="234" x2="530" y2="238" stroke="#888"/><text x="530" y="250" text-anchor="middle">2.5</text><line x1="624" y1="234" x2="624" y2="238" stroke="#888"/><text x="624" y="250" text-anchor="middle">3.0</text><text x="342" y="266" text-anchor="middle">Tiempo (s)</text><text x="60" y="26">ms</text><text x="60" y="292">mín 2.5 · prom 2.8 · máx 3.0 ms · RTT inicial 2 ms</text></g><line x1="60" y1="100.67" x2="624" y2="100.67" stroke="#000" stroke-width="1.5" stroke-dasharray="2 4"/><text x="624" y="96.67" text-anchor="end" font-family="sans-serif" font-size="10" fill="#000">RTT inicial 2 ms</text><rect x="244.5" y="63.83" width="7" height="7" fill="#fff" stroke="#a14a00" stroke-width="1.5"/><rect x="620.5" y="30.5" width="7" height="7" fill="#fff" stroke="#a14a00" stroke-width="1.5"/></svg>
+<h4>Velocidad · UDP · Cliente a servidor</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" width="640" height="300" role="img" aria-label="Velocidad · UDP. gráfica no disponible"><title>Velocidad · UDP</title><desc>gráfica no disponible</desc><rect x="1" y="1" width="638" height="100" fill="none" stroke="#888"/><text x="320" y="54" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#222">Velocidad · UDP: gráfica no disponible</text></svg>
+<h4>Latencia bajo carga · UDP · Cliente a servidor</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" width="640" height="300" role="img" aria-label="Latencia bajo carga · UDP. gráfica no disponible"><title>Latencia bajo carga · UDP</title><desc>gráfica no disponible</desc><rect x="1" y="1" width="638" height="100" fill="none" stroke="#888"/><text x="320" y="54" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#222">Latencia bajo carga · UDP: gráfica no disponible</text></svg>
+
+<h3>Notas del resultado</h3><ul><li class="notes">nota &lt;script&gt;x&lt;/script&gt;</li></ul>
+</section>
+
+<section class="rec">
+<h2>Ping</h2>
+<p>01/01/2026 09:05:00 &#43;00:00 - Con error</p>
+<p class="err">Error: fallo &lt;b&gt;x&lt;/b&gt;</p>
+<table class="ends">
+<tr><th>Equipo</th><th>Nombre</th><th>IP</th></tr>
+<tr><td>Destino</td><td>router</td><td>192.168.1.1</td></tr>
+</table>
+<table>
+<tr><th>Pérdida</th><td>1,50 %</td></tr>
+<tr><th>Latencia (mín / media / máx)</th><td>1,00 / 2,00 / 3,00 ms</td></tr>
+<tr><th>Jitter</th><td>0,50 ms</td></tr>
+</table>
+
+
+
+
+</section>
+
+<section class="rec">
+<h2>MTU de la ruta</h2>
+<p>01/01/2026 09:06:00 &#43;00:00 - Cancelado</p>
+
+
+
+
+
+
+
+</section>
+
+<section class="rec">
+<h2>Velocidad de internet (M-Lab NDT7)</h2>
+<p>01/01/2026 09:07:00 &#43;00:00 - Completado</p>
+
+
+<table>
+<tr><th>Descarga</th><td>50,50 Mbps, RTT mínimo 12,0 ms</td></tr>
+<tr><th>Subida</th><td>10,00 Mbps (incompleta)</td></tr>
+</table>
+
+
+
+
+</section>
+
+<div class="mlab">
+<p><strong>Aviso.</strong> M-Lab publica en sus datos abiertos la IP pública de quien mide. La prueba de velocidad consume datos.</p>
+<p>Medición realizada con M-Lab NDT7 (Measurement Lab). Más información: <a href="https://www.measurementlab.net/">https://www.measurementlab.net/</a></p>
+</div>
+<footer>Informe generado por NPerf.</footer>
+</body>
+</html>
