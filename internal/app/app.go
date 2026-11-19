@@ -12,6 +12,7 @@ import (
 	"nperf/internal/config"
 	"nperf/internal/discovery"
 	"nperf/internal/history"
+	"nperf/internal/ndt7"
 	"nperf/internal/netinfo"
 	"nperf/internal/probe"
 	"nperf/internal/report"
@@ -56,6 +57,7 @@ type Deps struct {
 	Counters  netinfo.CounterSource  // contadores por tarjeta (monitor); nil = monitor no disponible
 	Probe     probe.Env              // entorno de los diagnósticos (T15 lo cablea); vacío = no disponibles
 	History   *history.Store         // almacén del historial; nil = sin historial
+	Speed     *ndt7.RunOptions       // plantilla de la prueba M-Lab (Consent se ignora); nil = no disponible
 }
 
 // Device es un equipo de la lista.
