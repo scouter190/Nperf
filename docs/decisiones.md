@@ -77,7 +77,7 @@
 - Prueba hacia internet: **opcional**.
 
 ## 13. Histórico y alertas
-- **Solo en vivo**; botón para **exportar la sesión** en CSV o JSON.
+- ~~**Solo en vivo**~~ Cambiado por el usuario en la spec 006: **historial automático en disco** (ver §21). Exportar en CSV, JSON e informe HTML.
 - Alertas: color en pantalla, sonido opcional.
 - Notificación de Windows **solo si hay cuello** en prueba programada.
 - Registro de eventos en **archivo de texto** con fecha y hora.
@@ -168,3 +168,24 @@
 - Plan 005, JSON: sentido `not_measured` → `intervals` y `loaded_rtt` null; medido sin muestras → `intervals` null y `loaded_rtt.status` `unavailable`. Las líneas por intervalo de la consola van en minúsculas ("tcp ida 3-4 s: …, rtt …"), sin "TCP fwd" ni "RTT:", para no alterar el resumen.
 - Plan 005, monitor: emparejado por GUID con el inventario de §18. Se activa con un permiso de 3 s que renueva la UI (`monitor(true)` cada 1 s con el panel visible); sin renovar, no se consulta. Ocultar a la bandeja lo para. `MIB_IF_ROW2` a mano con test de tamaño. Hueco > 3 s → el punto solo fija la base.
 - Plan 005, prueba de "sondas sin efecto" en CI: conexiones con tasa limitada en el test (token bucket), 3 + 3 TEST! alternos, mediana y bytes por intervalo < 1 %.
+
+## 21. Spec 006 (historial, exportar e internet)
+- Usuario: historial automático **activado por defecto**, desactivable en Ajustes; retención **90 días o 50 MB** (se borra lo más antiguo). Reemplaza "solo en vivo" de §13. En `%LocalAppData%\NPerf\historial`, un JSON por resultado.
+- Usuario: informe para el cliente en **HTML autocontenido** (SVG embebido, sin recursos externos), PDF desde el navegador. Incluye **siempre IPs y SSID** (sin casilla); clave, MAC y BSSID **nunca** (tampoco en el historial).
+- CSV UTF-8 con BOM: ventana en formato Excel español (`;`, coma decimal); CLI estándar (`,`, punto) con `-csv excel-es` opcional. Fórmulas neutralizadas.
+- Latencia a internet: destinos por defecto 1.1.1.1 y 8.8.8.8, editables (máx. 4, IPv4); TCP 443 si no hay ICMP; traceroute solo con veredicto "proveedor". Internet degradado: pérdida ≥ 2 %, RTT medio > 100 ms o jitter > 30 ms (**supuesto**, se revisa tras la validación).
+- Usuario: velocidad de descarga/subida con **M-Lab NDT7** (locate API, WebSocket sobre TLS), solo con botón explícito o `nperf internet -speed`; ~10 s por sentido, tope 15 s; fallos → "no disponible" con motivo; sin proxy. Cliente WebSocket/NDT7 propio con la librería estándar (sin dependencias nuevas). Riesgo aceptado por el usuario: M-Lab publica la IP pública de quien mide; aviso visible en UI, CLI e informe. Términos de uso de M-Lab a confirmar en el plan.
+- CLI: `nperf history list|show|export`, `nperf internet [-speed]`; la CLI solo guarda en el historial con `-save`.
+- Exclusión de §19 ampliada a las pruebas hacia internet.
+- Usuario (aprobación de la spec), condiciones de M-Lab verificadas en sus páginas oficiales:
+  - **Consentimiento informado antes de cada prueba** de velocidad (https://www.measurementlab.net/develop/: "prior to installation of the client or initiation of the test"): diálogo en la UI; en la CLI confirmación por stdin salvo `-accept-mlab`. Enlaces a la política de M-Lab (https://www.measurementlab.net/privacy/) y a la de NPerf.
+  - **Política de privacidad propia** publicada (`docs/privacidad.md`), compatible con la AUP (https://www.measurementlab.net/aup/): NPerf no envía datos fuera del equipo salvo la prueba a M-Lab; M-Lab publica IP pública, fecha/hora y metadatos como CC0 con retención indefinida.
+  - **Máx. 40 pruebas interactivas al día por equipo** (AUP): contador local persistente; sin pruebas M-Lab automáticas ni programadas.
+  - **Locate v2** (https://www.measurementlab.net/develop/locate-v2) con las URLs devueltas sin tocar (`access_token`); identificación del cliente (`NPerf/<versión>`) según ndt7 (https://github.com/m-lab/ndt-server/blob/main/spec/ndt7-protocol.md); hasta ~10 s por sentido (el servidor puede cerrar a los 13 s).
+  - Prohibido alterar resultados, compensar por medir o interferir con la plataforma.
+  - **Pendiente de producto (no bloquea)**: si NPerf se comercializa, la AUP pide a integradores comerciales una contribución a M-Lab (patrocinio o en especie).
+- Plan 006, paquetes portables `history`, `export`, `inet`, `ws`, `ndt7` (+ `ndt7test`, servidor TLS local para CI); Win32 solo en el diálogo de guardar (`GetSaveFileNameW`).
+- Plan 006, historial: id `AAAAMMDD-HHMMSS-<8 hex>` (UTC) = nombre de archivo; tope 2 MB por registro; sin índice (caché en la app); config `history_enabled` (ausente = true) e `internet_targets`.
+- Plan 006, M-Lab: una prueba = descarga + subida; se cuenta al iniciarse aunque falle; contador en `%LocalAppData%\NPerf\mlab-diario.json` (por perfil de Windows), día local. Subida medida con lo que informa el servidor (`BytesReceived`/`ElapsedTime`); sin él, estimación del cliente con nota. Un servidor, una conexión por sentido, sin reintentos; sin proxy (`Transport.Proxy = nil`).
+- Plan 006, app: latencia (`internet`) y velocidad (`speed`) usan el mismo hueco que los diagnósticos; `StartSpeed(consent)` exige `true` en cada llamada.
+- Plan 006, CLI `internet`: con `-speed` el consentimiento se pide al principio; 0 si la latencia se completó (velocidad "no disponible" va en la salida), 1 si no se midió nada o no se acepta, 2 uso (incluye sin terminal y sin `-accept-mlab`, o `-accept-mlab` sin `-speed`).
