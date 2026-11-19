@@ -11,6 +11,7 @@ import (
 
 	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/history"
 	"nperf/internal/netinfo"
 	"nperf/internal/probe"
 	"nperf/internal/report"
@@ -54,6 +55,7 @@ type Deps struct {
 	Router    probe.Router           // rutas del sistema (puerta de enlace); nil = sin puerta de enlace
 	Counters  netinfo.CounterSource  // contadores por tarjeta (monitor); nil = monitor no disponible
 	Probe     probe.Env              // entorno de los diagnósticos (T15 lo cablea); vacío = no disponibles
+	History   *history.Store         // almacén del historial; nil = sin historial
 }
 
 // Device es un equipo de la lista.
@@ -125,6 +127,8 @@ type State struct {
 	TestBlocked     string            `json:"test_blocked_reason"`
 	ConfigError     string            `json:"config_error"`
 	HasKey          bool              `json:"has_key"` // la clave nunca se expone
+	HistoryEnabled  bool              `json:"history_enabled"`
+	HistoryWarning  string            `json:"history_warning,omitempty"`
 }
 
 // App es el backend de la interfaz. Seguro para uso concurrente.
@@ -152,6 +156,8 @@ type App struct {
 	monMu       sync.Mutex         // protege mon
 	mon         *netinfo.Monitor   // creado al primer Monitor(true)
 	rtErr       string             // último error al reiniciar el runtime ("" = ninguno)
+	histMu      sync.Mutex         // serializa Save y cambios de Enabled del almacén
+	histWarn    string             // aviso del último guardado fallido ("" = ninguno)
 }
 
 // SetRuntimeError fija (o limpia con "") el error del último reinicio del runtime;
@@ -174,13 +180,15 @@ func New(d Deps) (*App, error) {
 		d.Now = time.Now
 	}
 	a := &App{d: d, start: d.Now(), direction: DirBoth, duration: config.DefaultDuration}
+	c := config.Defaults()
 	if d.ConfigDir != "" {
-		c, err := config.LoadFull(d.ConfigDir)
-		if err != nil {
+		var err error
+		if c, err = config.LoadFull(d.ConfigDir); err != nil {
 			return nil, err
 		}
 		a.duration = c.Duration
 	}
+	a.initHistory(c, d.ConfigDir != "")
 	return a, nil
 }
 
@@ -418,7 +426,7 @@ func (a *App) State() State {
 	cfg, cfgErr := a.cfg()
 	alias := a.aliasFrom(cfg)
 	a.mu.Lock()
-	sel, dir, dur, test, rtErr, pr := a.selected, a.direction, a.duration, a.test, a.rtErr, a.probe
+	sel, dir, dur, test, rtErr, pr, hw := a.selected, a.direction, a.duration, a.test, a.rtErr, a.probe, a.histWarn
 	test.Chart = test.Chart.clone() // los callbacks la mutan bajo a.mu: la UI recibe una copia
 	a.mu.Unlock()
 	if test.Status == "" {
@@ -512,7 +520,7 @@ func (a *App) State() State {
 	case pr.Running:
 		canProbe, probeBlocked = false, probeAlreadyRunning
 	}
-	return State{Probe: pr, CanProbe: canProbe, ProbeBlocked: probeBlocked, HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
+	return State{HistoryEnabled: a.historyOn(cfg), HistoryWarning: hw, Probe: pr, CanProbe: canProbe, ProbeBlocked: probeBlocked, HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
 		DurationSeconds: dur, TotalSeconds: total, TotalLabel: label, Alias: alias, ExtraSubnets: subs,
 		FirewallHint: hint, Test: test}
 }

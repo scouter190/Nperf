@@ -134,15 +134,28 @@ func (a *App) StartProbe(kind, id string) error {
 			a.probeHook()
 		}
 		a.mu.Lock()
+		if a.probeGen != gen || !a.probe.Running {
+			a.mu.Unlock()
+			return
+		}
+		var final ProbeState
+		switch {
+		case a.probe.Status == ProbeCancelling || ctx.Err() != nil:
+			final = ProbeState{Status: ProbeCancelled, Kind: kind, TargetID: id}
+		case err != nil:
+			final = ProbeState{Status: ProbeError, Kind: kind, TargetID: id, Error: err.Error()}
+		default:
+			final = ProbeState{Status: ProbeDone, Kind: kind, TargetID: id, Result: res, Combined: cmb}
+		}
+		a.mu.Unlock()
+
+		// Se guarda antes de publicar, para que el registro sea igual a State().
+		herr := a.saveRecord(a.probeRecord(final, tgt.Raw))
+
+		a.mu.Lock()
+		a.histWarn = histWarning(herr)
 		if a.probeGen == gen && a.probe.Running {
-			switch {
-			case a.probe.Status == ProbeCancelling || ctx.Err() != nil:
-				a.probe = ProbeState{Status: ProbeCancelled, Kind: kind, TargetID: id}
-			case err != nil:
-				a.probe = ProbeState{Status: ProbeError, Kind: kind, TargetID: id, Error: err.Error()}
-			default:
-				a.probe = ProbeState{Status: ProbeDone, Kind: kind, TargetID: id, Result: res, Combined: cmb}
-			}
+			a.probe = final
 		}
 		a.mu.Unlock()
 	}()

@@ -10,6 +10,7 @@ import (
 
 	"nperf/internal/client"
 	"nperf/internal/diag"
+	"nperf/internal/history"
 	"nperf/internal/netinfo"
 	"nperf/internal/proto"
 	"nperf/internal/report"
@@ -98,22 +99,46 @@ func (a *App) StartTest() error {
 		if a.testHook != nil {
 			a.testHook()
 		}
+		// Se decide el estado final y se guarda antes de publicarlo, para que el registro
+		// sea idéntico a lo que muestra State().
 		a.mu.Lock()
-		if a.gen == gen && a.test.Running {
-			ch := a.test.Chart // se conserva hasta el siguiente TEST!
-			switch {
-			case a.test.Status == TestCancelling:
-				if ch != nil {
-					ch.Cancelled = true
-				}
-				a.test = TestState{Status: TestCancelled, Chart: ch}
-			case err != nil:
-				a.test = TestState{Status: TestError, Error: err.Error(), Chart: ch}
-			default:
-				ch = chartOf(&a.test, localAlias, p.Alias)
-				ch.finish(res, res.Notes)
-				a.test = TestState{Status: TestDone, Report: &rp, Diagnosis: dg, Chart: ch}
+		if a.gen != gen || !a.test.Running {
+			a.mu.Unlock()
+			return
+		}
+		var final TestState
+		ch := a.test.Chart // se conserva hasta el siguiente TEST!
+		switch {
+		case a.test.Status == TestCancelling:
+			if ch != nil {
+				ch.Cancelled = true
 			}
+			final = TestState{Status: TestCancelled, Chart: ch}
+		case err != nil:
+			final = TestState{Status: TestError, Error: err.Error(), Chart: ch}
+		default:
+			ch = chartOf(&a.test, localAlias, p.Alias)
+			ch.finish(res, res.Notes)
+			final = TestState{Status: TestDone, Report: &rp, Diagnosis: dg, Chart: ch}
+		}
+		var src, dst *history.Endpoint
+		var selfIP string
+		if a.d.SelfIPs != nil {
+			if ips := a.d.SelfIPs(); len(ips) > 0 {
+				selfIP = ips[0]
+			}
+		}
+		src, dst = endpoint(localAlias, selfIP, res.LocalLink), endpoint(p.Alias, p.IP.String(), res.RemoteLink)
+		rec := a.testRecord(final, report.JSONParams{Host: p.IP.String(), Port: port, Proto: proto.ProtoBoth,
+			Direction: dir, DurationS: o.Duration.Seconds(), Streams: o.Streams, Version: version.Current}, src, dst)
+		a.mu.Unlock()
+
+		herr := a.saveRecord(rec)
+
+		a.mu.Lock()
+		a.histWarn = histWarning(herr)
+		if a.gen == gen && a.test.Running {
+			a.test = final
 		}
 		a.mu.Unlock()
 	}()
