@@ -6,7 +6,7 @@ import (
 	"io/fs"
 )
 
-//go:embed web/index.html web/app.css web/app.js web/mock.js web/chart.js
+//go:embed web/index.html web/app.css web/app.js web/mock.js web/chart.js web/history.js
 var files embed.FS
 
 // Files devuelve la raíz de los archivos web (index.html, app.css, app.js, mock.js).

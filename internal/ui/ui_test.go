@@ -23,7 +23,7 @@ func read(t *testing.T, name string) string {
 }
 
 func TestEmbedded(t *testing.T) {
-	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js"} {
+	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js", "history.js"} {
 		read(t, n)
 	}
 }
@@ -47,7 +47,7 @@ var unsafeJS = regexp.MustCompile(`innerHTML|insertAdjacentHTML|outerHTML|docume
 func unsafeUse(js string) []string { return unsafeJS.FindAllString(js, -1) }
 
 func TestNoUnsafeDOM(t *testing.T) {
-	for _, n := range []string{"app.js", "mock.js"} {
+	for _, n := range []string{"app.js", "mock.js", "history.js"} {
 		if bad := unsafeUse(read(t, n)); len(bad) > 0 {
 			t.Errorf("%s usa API insegura: %v", n, bad)
 		}
@@ -111,16 +111,16 @@ func TestBindingsExistInApp(t *testing.T) {
 	}
 	typ := reflect.TypeOf(&app.App{})
 	names := regexp.MustCompile(`'(\w+)'`).FindAllStringSubmatch(m[1], -1)
-	if len(names) != 17 {
-		t.Fatalf("se esperaban 17 métodos, hay %d", len(names))
+	if len(names) != 23 {
+		t.Fatalf("se esperaban 23 métodos, hay %d", len(names))
 	}
 	for _, n := range names {
 		goName := strings.ToUpper(n[1][:1]) + n[1][1:]
 		if _, ok := typ.MethodByName(goName); !ok {
 			t.Errorf("app.App no tiene %s (JS %s)", goName, n[1])
 		}
-		if !strings.Contains(js, "nperf."+n[1]+"(") && n[1] != "state" {
-			t.Errorf("app.js no usa nperf.%s", n[1])
+		if !strings.Contains(js+read(t, "history.js"), "nperf."+n[1]+"(") && n[1] != "state" {
+			t.Errorf("la UI no usa nperf.%s", n[1])
 		}
 	}
 }
@@ -145,5 +145,32 @@ func TestNetworkDetectionUI(t *testing.T) {
 		if !strings.Contains(html, id) {
 			t.Errorf("index.html sin %s", id)
 		}
+	}
+}
+
+// history.js: cargado por index.html tras app.js, CSP intacta y cada llamada de nperf.* declarada.
+func TestHistoryUI(t *testing.T) {
+	h, js, mock := read(t, "index.html"), read(t, "history.js"), read(t, "mock.js")
+	if !strings.Contains(h, `<script src="history.js"></script>`) || strings.Index(h, "history.js") < strings.Index(h, "app.js") {
+		t.Error("index.html debe cargar history.js después de app.js")
+	}
+	app := read(t, "app.js")
+	m := regexp.MustCompile(`NPERF_METHODS = \[([^\]]*)\]`).FindStringSubmatch(app)
+	for _, c := range regexp.MustCompile(`nperf\.(\w+)\(`).FindAllStringSubmatch(js, -1) {
+		if !strings.Contains(m[1], "'"+c[1]+"'") {
+			t.Errorf("history.js llama a nperf.%s que no está en NPERF_METHODS", c[1])
+		}
+		if !strings.Contains(mock, c[1]+":") {
+			t.Errorf("mock.js no simula %s", c[1])
+		}
+	}
+	for _, s := range []string{"nperf.exportHistory(", "nperf.deleteAllHistory(", "nperf.deleteHistory(", "nperf.setHistoryEnabled(", "history_warning", "cancelado", "reportView(", "chartBlock("} {
+		if !strings.Contains(js, s) {
+			t.Errorf("history.js no contiene %q", s)
+		}
+	}
+	// El campo de ruta nunca se envía: la elige el diálogo nativo.
+	if regexp.MustCompile(`\bpath\b`).MatchString(js) {
+		t.Error("history.js no debe manejar rutas de entrada")
 	}
 }

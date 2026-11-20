@@ -45,7 +45,7 @@
       { id: 'gateway', alias: 'Puerta de enlace (sin NPerf)', ips: ['192.168.1.1'], status: 'noagent', status_label: 'sin NPerf', queue: 0, link: 'unknown', link_speed: '' },
       { id: 'h1', alias: 'Router del taller', ips: ['192.168.2.1'], status: 'noagent', status_label: 'sin NPerf', queue: 0, link: 'unknown', link_speed: '' }
     ],
-    probe: { running: false, status: 'idle' }, can_probe: false, probe_blocked_reason: '',
+    history_enabled: true, history_warning: '', probe: { running: false, status: 'idle' }, can_probe: false, probe_blocked_reason: '',
     selected_id: '', direction: 'both', directions: [], duration_seconds: 10, total_seconds: 20, total_label: '',
     alias: 'PC-Oficina', extra_subnets: ['192.168.2.0/24'], firewall_hint: '', has_key: false,
     test: { running: false, status: 'idle' }, can_test: false, test_blocked_reason: 'elija un equipo de destino', config_error: ''
@@ -109,6 +109,24 @@
     };
     return { available: true, adapters: [mk('{1}', 'Ethernet', 'eth', 'up', 4e8), mk('{2}', 'Wi-Fi', 'wifi', 'up', 6e7), mk('{3}', 'Ethernet 2', 'eth', 'disconnected', 0)] };
   }
+
+  // ---- historial de ejemplo (forma de internal/history.Record) ----
+  const me = { alias: 'PC-Oficina', ip: '192.168.1.10', link: 'eth', nominal_mbps: 1000 };
+  const mkRec = function (id, iso, kind, status, dest, extra) { return Object.assign({ format_version: 1, id: id, time: iso, kind: kind, status: status, version: '0.6.0', source: me, dest: dest }, extra); };
+  const srv = { alias: 'Servidor', ip: '192.168.1.20', link: 'eth', nominal_mbps: 1000 };
+  const ana = { alias: 'Portátil Ana', ip: '192.168.1.31', link: 'wifi', ssid: 'Oficina-5G', nominal_mbps: 300 };
+  const gw = { alias: 'Puerta de enlace', ip: '192.168.1.1' };
+  const day = function (n, h) { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(h, 12, 30, 0); return d.toISOString(); };
+  let records = [
+    mkRec('20260120-101230-aaaa0001', day(0, 10), 'test', 'done', srv, { params: report.params, result: report, diagnosis: diagnosis, chart: mkChart('Servidor', false), notes: report.notes }),
+    mkRec('20260120-091230-aaaa0002', day(0, 9), 'ping', 'done', gw, { result: probes.ping, diagnosis: combined.ping }),
+    mkRec('20260119-171230-aaaa0003', day(1, 17), 'test', 'cancelled', ana, { chart: Object.assign(mkChart('Portátil Ana', false, 4), { cancelled: true }) }),
+    mkRec('20260119-161230-aaaa0004', day(1, 16), 'trace', 'done', { alias: 'dns.google', ip: '8.8.8.8' }, { result: probes.trace }),
+    mkRec('20260118-101230-aaaa0005', day(2, 10), 'ports', 'done', gw, { result: probes.ports }),
+    mkRec('20260118-091230-aaaa0006', day(2, 9), 'mtu', 'error', { alias: 'dns.google', ip: '8.8.8.8' }, { error: 'no se pudo abrir el socket ICMP' }),
+    mkRec('20260117-101230-aaaa0007', day(3, 10), 'speed', 'done', { alias: 'M-Lab NDT7' }, { result: { format_version: 1, command: 'speed', provider: 'M-Lab', attribution: 'Medición con M-Lab NDT7.', server: { machine: 'mlab1-mad01', city: 'Madrid', country: 'ES' }, download: { mbps: 487.2, bytes: 600000000, duration_s: 10 }, download_status: 'ok', upload: { mbps: 96.4, bytes: 120000000, duration_s: 10 }, upload_status: 'ok' } }),
+    mkRec('20260117-091230-aaaa0008', day(3, 9), 'internet', 'done', { alias: 'Internet' }, { result: { format_version: 1, command: 'internet', verdict: { kind: 'ok', message: 'Internet funciona con normalidad.', notes: [] }, targets: [{ target: '1.1.1.1', status: 'ok' }, { target: '8.8.8.8', status: 'ok' }] } })
+  ];
   let timers = [];
   function sync() {
     const p = st.peers.concat(st.no_agent).filter(function (x) { return x.id === st.selected_id; })[0];
@@ -189,6 +207,31 @@
     },
     openLocationSettings: function () { view.location_denied = false; view.location_notice = ''; return Promise.resolve(); },
     monitor: function (active) { monOn = !!active; return Promise.resolve(active ? monitorView() : { available: true, adapters: [] }); },
+    history: function (f) {
+      const since = f.since ? Date.parse(f.since) : null, until = f.until ? Date.parse(f.until) : null, h = String(f.host || '').toLowerCase();
+      const out = records.filter(function (r) {
+        const t = Date.parse(r.time);
+        if (f.kind && r.kind !== f.kind) return false;
+        if (since !== null && t < since) return false;
+        if (until !== null && t > until) return false;
+        if (h && ![r.source, r.dest].some(function (e) { return e && ((e.alias || '').toLowerCase() === h || e.ip === h); })) return false;
+        return true;
+      });
+      return Promise.resolve(JSON.parse(JSON.stringify({ records: out, skipped: 0 })));
+    },
+    historyRecord: function (id) {
+      const r = records.filter(function (x) { return x.id === id; })[0];
+      return r ? Promise.resolve(JSON.parse(JSON.stringify(r))) : Promise.reject(new Error('registro no encontrado'));
+    },
+    deleteHistory: function (ids) { const n = records.length; records = records.filter(function (r) { return ids.indexOf(r.id) < 0; }); return Promise.resolve(n - records.length); },
+    deleteAllHistory: function () { const n = records.length; records = []; return Promise.resolve(n); },
+    exportHistory: function (ids, format, opts) {
+      if (window.__mockExport === 'cancel') return Promise.resolve('cancelado');
+      if (window.__mockExport === 'error') return Promise.reject(new Error('no se pudo escribir el archivo'));
+      const p = 'C:\\Users\\Ana\\Documents\\nperf-historial.' + (format === 'html' ? 'html' : format === 'json' ? 'json' : 'csv');
+      return Promise.resolve(opts.intervals ? [p, p.replace('.csv', '-intervalos.csv')] : [p]);
+    },
+    setHistoryEnabled: function (on) { st.history_enabled = !!on; return Promise.resolve(); },
     cancelTest: function () { timers.forEach(clearTimeout); timers = []; const ch = st.test.chart; if (ch) ch.cancelled = true; st.test = { running: false, status: 'cancelled', chart: ch }; return Promise.resolve(); }
   };
   window.nperf = api;

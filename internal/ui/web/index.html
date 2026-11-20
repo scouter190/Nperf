@@ -19,12 +19,14 @@
   <span id="total" class="total"></span>
   <span class="spacer"></span>
   <span id="blocked" class="blocked"></span>
+  <button id="history-toggle" type="button" aria-controls="history-panel" aria-expanded="false">Historial</button>
   <button id="test" class="primary" type="button">TEST!</button>
   <button id="cancel" class="danger" type="button" hidden>Cancelar</button>
 </header>
 <div id="banners">
   <div id="config-error" class="banner error" hidden></div>
   <div id="firewall" class="banner warn" hidden></div>
+  <div id="history-warning" class="banner warn" role="status" hidden></div>
   <div id="toast" class="banner error" hidden></div>
 </div>
 <main class="layout">
@@ -81,8 +83,88 @@
     <div id="detail"></div>
     <div id="charts"></div>
   </section>
+  <section id="history-panel" class="panel history-panel" aria-label="Historial" hidden>
+    <div id="hist-list-view">
+      <div class="detail-head">
+        <h2>Historial</h2>
+        <label class="check"><input id="hist-enabled" type="checkbox"> Guardar resultados en el historial</label>
+      </div>
+      <p id="hist-disabled" class="banner warn" role="status" hidden>El historial está desactivado: los nuevos resultados no se guardan. Los ya guardados se pueden consultar, exportar y borrar.</p>
+      <form id="hist-filters" class="hist-filters" autocomplete="off">
+        <label class="stack">Equipo
+          <input id="hist-host" type="text" maxlength="255" placeholder="Alias o IP">
+        </label>
+        <label class="stack">Tipo
+          <select id="hist-kind"></select>
+        </label>
+        <label class="stack">Desde
+          <input id="hist-since" type="date">
+        </label>
+        <label class="stack">Hasta
+          <input id="hist-until" type="date">
+        </label>
+        <span class="row hist-filter-btns"><button id="hist-apply" type="submit">Filtrar</button><button id="hist-reset" type="button">Quitar filtros</button></span>
+      </form>
+      <p id="hist-msg" class="muted" role="status"></p>
+      <div class="hist-actions">
+        <label class="check"><input id="hist-all" type="checkbox"> Seleccionar todo</label>
+        <span id="hist-count" class="muted"></span>
+        <span class="spacer"></span>
+        <button id="hist-del-sel" type="button">Borrar seleccionados</button>
+        <button id="hist-del-all" type="button" class="danger">Borrar todo</button>
+      </div>
+      <div id="hist-confirm" class="banner warn hist-confirm" role="alertdialog" aria-labelledby="hist-confirm-text" hidden>
+        <span id="hist-confirm-text"></span>
+        <button id="hist-confirm-yes" type="button" class="danger">Borrar</button>
+        <button id="hist-confirm-no" type="button">Cancelar</button>
+      </div>
+      <div class="hist-scroll">
+        <table id="hist-table" class="hist-table">
+          <caption class="sr-only">Resultados guardados, los más recientes primero</caption>
+          <thead><tr><th scope="col" class="hist-chk">Sel.</th><th scope="col">Fecha</th><th scope="col">Tipo</th><th scope="col">Destino</th><th scope="col">Resultado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+          <tbody id="hist-rows"></tbody>
+        </table>
+      </div>
+      <p id="hist-empty" class="muted" hidden>No hay registros que mostrar.</p>
+      <details id="hist-export" class="settings">
+        <summary>Exportar seleccionados</summary>
+        <div class="hist-export-form">
+          <label class="stack">Formato
+            <select id="hist-format">
+              <option value="csv">CSV para Excel</option>
+              <option value="csv-std">CSV estándar</option>
+              <option value="json">JSON</option>
+              <option value="html">Informe HTML</option>
+            </select>
+          </label>
+          <label class="stack">Cliente (opcional)
+            <input id="hist-client" type="text" maxlength="200">
+          </label>
+          <label class="stack">Técnico (opcional)
+            <input id="hist-tech" type="text" maxlength="200">
+          </label>
+          <label class="stack">Notas (opcional)
+            <textarea id="hist-notes" maxlength="2000" rows="3"></textarea>
+          </label>
+          <label class="check"><input id="hist-intervals" type="checkbox"> Incluir intervalos (segundo CSV)</label>
+          <span class="row"><button id="hist-export-go" type="button" class="primary">Exportar…</button></span>
+          <p id="hist-export-msg" class="muted" role="status"></p>
+        </div>
+      </details>
+    </div>
+    <div id="hist-record-view" hidden>
+      <div class="detail-head">
+        <button id="hist-back" type="button">Volver a la lista</button>
+        <label class="check"><input id="hist-detailed" type="checkbox"> Modo detallado</label>
+      </div>
+      <p class="banner readonly">Registro guardado: solo lectura.</p>
+      <div id="hist-record"></div>
+      <div id="hist-record-charts"></div>
+    </div>
+  </section>
 </main>
 <script src="chart.js"></script>
 <script src="app.js"></script>
+<script src="history.js"></script>
 </body>
 </html>

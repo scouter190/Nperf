@@ -4,7 +4,7 @@
 // Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
 // El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
-const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe', 'monitor'];
+const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe', 'monitor', 'history', 'historyRecord', 'deleteHistory', 'deleteAllHistory', 'exportHistory', 'setHistoryEnabled'];
 if (!window.nperf) {
   const api = {};
   NPERF_METHODS.forEach(function (m) {
@@ -616,6 +616,7 @@ function refreshMonitor() {
 function render(s) {
   last = s;
   renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s); renderCharts(s);
+  if (typeof renderHistoryState === 'function') renderHistoryState(s);
 }
 
 let polling = false;

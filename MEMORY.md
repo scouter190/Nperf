@@ -6,7 +6,7 @@
 **Fase 8 - Implementando spec 006 (historial, exportar, internet con M-Lab).** Spec 005 completa en código. Specs 001-004 completas en código; validaciones manuales pendientes (iperf3, gui, red, sin-agente). Spec 003: banda/canal WiFi y virtuales validados por el usuario en Windows 11.
 
 ## Spec activa
-`specs/006-historial-exportar-internet/` (aprobada; hechas T1-T24 de T1-T27; decisiones §21; 22 criterios; condiciones M-Lab: consentimiento previo, privacidad propia docs/privacidad.md, 40 pruebas/día, Locate v2). `specs/005-graficas-en-vivo/` (T1-T18 hechas, CI Windows verde (hrtime en sondas y tcpSampler); validación manual pendiente: docs/validacion-graficas.md; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
+`specs/006-historial-exportar-internet/` (aprobada; hechas T1-T25 de T1-T27; decisiones §21; 22 criterios; condiciones M-Lab: consentimiento previo, privacidad propia docs/privacidad.md, 40 pruebas/día, Locate v2). `specs/005-graficas-en-vivo/` (T1-T18 hechas, CI Windows verde (hrtime en sondas y tcpSampler); validación manual pendiente: docs/validacion-graficas.md; decisiones §20; 17 criterios). Spec 004: completa en código (§19). Spec 003: código completo. Spec 002: T16/T17 pendientes de prueba a mano. Spec 001: cerrada.
 
 ## Estado del código (spec 001, CLI)
 - Módulo `nperf` (Go 1.27.3). Repo: https://github.com/scouter190/Nperf (rama `main`). Dependencias: jchv/go-webview2 + go-winloader (pseudo-versión fija), golang.org/x/sys v0.49.0; govulncheck sin hallazgos.
