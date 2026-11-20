@@ -14,6 +14,7 @@ import (
 	"nperf/internal/config"
 	"nperf/internal/server"
 	"nperf/internal/testutil"
+	"nperf/internal/version"
 )
 
 // capture sustituye stdout/stderr y el directorio de configuración durante la prueba.
@@ -172,5 +173,21 @@ func TestModeText(t *testing.T) {
 		if got := modeText(p); got != w {
 			t.Errorf("%s: %q", p, got)
 		}
+	}
+}
+
+func TestVersionCommandAndHelpFirstLine(t *testing.T) {
+	out, _ := capture(t, t.TempDir())
+	if code := run([]string{"version"}); code != 0 || out.String() != "NPerf "+version.Display()+"\n" {
+		t.Errorf("version: código %d, salida %q", code, out)
+	}
+	out, _ = capture(t, t.TempDir())
+	run([]string{"help"})
+	first, _, _ := strings.Cut(out.String(), "\n")
+	if first != "NPerf "+version.Display() {
+		t.Errorf("primera línea de la ayuda: %q", first)
+	}
+	if !strings.Contains(out.String(), "nperf version") {
+		t.Error("la ayuda no lista nperf version")
 	}
 }

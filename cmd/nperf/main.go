@@ -45,7 +45,7 @@ var (
 
 func main() { os.Exit(run(os.Args[1:])) }
 
-const generalHelp = `NPerf: medidor de red en par (RTT, TCP y UDP) entre dos equipos.
+const generalHelpBody = `NPerf: medidor de red en par (RTT, TCP y UDP) entre dos equipos.
 
 Uso:
   nperf server [opciones]          inicia el servidor de medición
@@ -58,6 +58,7 @@ Uso:
   nperf ports <host> [opciones]    puertos TCP abiertos, cerrados o filtrados
   nperf history list|show|export   historial de resultados guardados (ver "nperf history help")
   nperf internet [opciones]        latencia a Internet y, con -speed, velocidad (M-Lab NDT7)
+  nperf version                    muestra la versión
   nperf help                       muestra esta ayuda
 
 Use "nperf server -h", "nperf client -h", "nperf status -h" o "nperf adapters -h", "nperf ping -h", etc. para ver las opciones de cada comando.
@@ -75,14 +76,22 @@ Códigos de salida:
   2  error de uso (argumentos o configuración inválidos)
 `
 
+// generalHelp devuelve la ayuda general; la primera línea incluye la versión.
+func generalHelp() string {
+	return "NPerf " + version.Display() + "\n" + generalHelpBody
+}
+
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(stdout, generalHelp)
+		fmt.Fprint(stdout, generalHelp())
 		return exitUsage
 	}
 	switch args[0] {
 	case "-h", "-help", "--help", "help":
-		fmt.Fprint(stdout, generalHelp)
+		fmt.Fprint(stdout, generalHelp())
+		return exitOK
+	case "version":
+		fmt.Fprintln(stdout, "NPerf "+version.Display())
 		return exitOK
 	case "adapters":
 		return runAdapters(args[1:])
@@ -98,7 +107,7 @@ func run(args []string) int {
 		return runProbe(ctx, args[0], args[1:])
 	case "server", "client", "status":
 	default:
-		fmt.Fprintf(stderr, "comando desconocido: %s\n\n%s", args[0], generalHelp)
+		fmt.Fprintf(stderr, "comando desconocido: %s\n\n%s", args[0], generalHelp())
 		return exitUsage
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)

@@ -51,12 +51,23 @@ func e2eEnv(cfg string) []string {
 
 func buildBinary(t *testing.T) string {
 	t.Helper()
+	return buildBinaryLd(t, "")
+}
+
+// buildBinaryLd compila nperf con -ldflags opcionales.
+func buildBinaryLd(t *testing.T, ldflags string) string {
+	t.Helper()
 	name := "nperf"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
 	bin := filepath.Join(t.TempDir(), name)
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+	args := []string{"build"}
+	if ldflags != "" {
+		args = append(args, "-ldflags", ldflags)
+	}
+	args = append(args, "-o", bin, ".")
+	if out, err := exec.Command("go", args...).CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	return bin
@@ -279,4 +290,23 @@ func TestE2EClaveIncorrecta(t *testing.T) {
 		}
 		mustContain(t, r.stderr+r.stdout, "clave incorrecta")
 	})
+}
+
+func TestE2EVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("e2e")
+	}
+	cfg := t.TempDir()
+	for _, c := range []struct{ ld, want string }{
+		{"", "NPerf dev\n"},
+		{"-X nperf/internal/version.Build=1.2.3", "NPerf 1.2.3\n"},
+	} {
+		bin := buildBinaryLd(t, c.ld)
+		cmd := exec.Command(bin, "version")
+		cmd.Env = e2eEnv(cfg)
+		out, err := cmd.Output()
+		if err != nil || string(out) != c.want {
+			t.Errorf("ldflags %q: salida %q, error %v; esperado %q", c.ld, out, err, c.want)
+		}
+	}
 }
