@@ -4,7 +4,7 @@ Olas: las tareas de una misma ola pueden ir en paralelo (archivos disjuntos). **
 
 ## Ola 1 (Go y base, en paralelo)
 - [x] T1 G2: `saveRecord` → `(id, error)`; `HistoryID` en `TestState` y `ProbeState` (`history_id,omitempty`), asignado antes del estado final en test/probe/internet/speed; `DeleteHistory`/`DeleteAllHistory` lo vacían si borran ese registro (internal/app/{app.go,history.go,test.go,probe.go,internet.go} + tests) — tests: id = archivo guardado en TEST!, diagnóstico e internet; vacío con historial desactivado o con fallo al guardar; vacío tras borrar; `-race` (criterio 8).
-- [ ] T2 Tokens y contraste: variables del documento en `app.css` (claro y `prefers-color-scheme: dark`), fuentes del sistema, ajuste solo de los tokens que no llegan a AA; test de contraste en `ui_test.go` (internal/ui/web/app.css, internal/ui/ui_test.go) — `go test ./internal/ui` con el test nuevo; la UI actual se sigue viendo bien con el mock (criterio 5).
+- [x] T2 Tokens y contraste: variables del documento en `app.css` (claro y `prefers-color-scheme: dark`), fuentes del sistema, ajuste solo de los tokens que no llegan a AA; test de contraste en `ui_test.go` (internal/ui/web/app.css, internal/ui/ui_test.go) — `go test ./internal/ui` con el test nuevo; la UI actual se sigue viendo bien con el mock (criterio 5).
 - [ ] T3 `tools/uipreview`: servidor de desarrollo en 127.0.0.1 (puerto aleatorio, misma CSP), `/maqueta` y `/app` (index.html + mock.js inyectado) leyendo del disco (tools/uipreview/main.go + test) — test con httptest: CSP presente, mock inyectado solo en `/app`, 404 fuera de la lista; `internal/gui/static.go` sin cambios.
 
 ## Ola 2 (maqueta, puerta visual)
