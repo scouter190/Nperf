@@ -7,8 +7,16 @@ import (
 	"strings"
 )
 
-// Current es la versión semver de NPerf; única fuente de verdad.
-const Current = "0.1.0"
+// Current es la versión de protocolo (handshake, User-Agent, historial) y
+// fuente de la regla de compatibilidad.
+var Current = "1.0.0"
+
+// Build es la versión de compilación, solo para mostrar ("dev" o X.Y.Z).
+// Se inyecta con -ldflags "-X nperf/internal/version.Build=X.Y.Z".
+var Build = "dev"
+
+// Display devuelve la versión de compilación para mostrar al usuario.
+func Display() string { return Build }
 
 // Major devuelve la versión mayor de una cadena semver "X.Y.Z".
 func Major(v string) (int, error) {
