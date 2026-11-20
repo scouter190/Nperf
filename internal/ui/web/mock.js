@@ -153,10 +153,31 @@
     else if (!st.selected_id) st.can_test = false, st.test_blocked_reason = 'elija un equipo de destino';
     else if (st.no_agent.some(function (x) { return x.id === st.selected_id; })) st.can_test = false, st.test_blocked_reason = 'los equipos sin NPerf no admiten TEST!; use Ping, Traceroute, MTU o Puertos';
     else st.can_test = true, st.test_blocked_reason = '';
-    st.can_probe = !st.test.running && !st.probe.running;
+    if (st.config_error) st.can_test = false;
+    st.can_probe = !st.test.running && !st.probe.running && !st.config_error;
     st.probe_blocked_reason = st.test.running ? 'hay un TEST! en curso: espere a que termine para lanzar un diagnóstico' : (st.probe.running ? 'ya hay un diagnóstico en curso' : '');
   }
+  // history_id: id del registro guardado (vacío con el historial desactivado).
+  function hid(kind) { if (!st.history_enabled) return undefined; const r = records.filter(function (x) { return x.kind === kind; })[0]; return r ? r.id : undefined; }
+  function withId(o, kind) { const id = hid(kind); if (id) o.history_id = id; return o; }
   function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  // ---- escenarios: ?escenario=<nombre> fija el estado inicial (sin temporizadores) ----
+  const scenarios = {
+    vacio: function () { st.peers = []; st.no_agent = []; records = []; st.selected_id = ''; },
+    cola: function () { st.selected_id = 'p1'; st.test = { running: true, status: 'queued', queue_position: 3 }; },
+    midiendo: function () { st.selected_id = 'p1'; st.test = { running: true, status: 'running', phase: 'tcp_fwd', chart: mkChart('Servidor', false, 5) }; },
+    terminado: function () { st.selected_id = 'p1'; st.test = withId({ running: false, status: 'done', report: report, diagnosis: diagnosis, chart: mkChart('Servidor', false) }, 'test'); },
+    cancelado: function () { const ch = mkChart('Servidor', false, 4); ch.cancelled = true; st.selected_id = 'p1'; st.test = { running: false, status: 'cancelled', chart: ch }; },
+    error: function () { st.selected_id = 'p1'; st.test = { running: false, status: 'error', error: 'no se pudo conectar con Servidor: tiempo de espera agotado' }; },
+    diagnostico: function () { st.selected_id = 'gateway'; st.probe = withId({ running: false, status: 'done', kind: 'ping', target_id: 'gateway', result: probes.ping, combined: combined.ping }, 'ping'); },
+    internet: function () { st.probe = withId({ running: false, status: 'done', kind: 'internet', result: inetResult, combined: internetCombined }, 'internet'); },
+    velocidad: function () { st.probe = withId({ running: false, status: 'done', kind: 'speed', result: speedResult }, 'speed'); },
+    historial_desactivado: function () { st.history_enabled = false; st.history_warning = ''; records = []; },
+    config_error: function () { st.config_error = 'no se pudo leer config.json: formato no válido'; }
+  };
+  const esc = new URLSearchParams(window.location.search).get('escenario');
+  if (esc && scenarios[esc]) scenarios[esc]();
+
   const api = {
     state: function () { sync(); return Promise.resolve(JSON.parse(JSON.stringify(st))); },
     selectPeer: function (id) {
@@ -182,7 +203,7 @@
       later(3000, function () { st.test = { running: true, status: 'running', phase: 'rtt' }; });
       later(4000, function () { st.test = { running: true, status: 'running', phase: 'tcp_fwd', chart: mkChart(peer, old, 0) }; });
       for (let i = 1; i <= 10; i++) later(4000 + i * 400, function () { st.test = { running: true, status: 'running', phase: 'tcp_fwd', chart: mkChart(peer, old, i) }; });
-      later(8600, function () { st.test = { status: 'done', running: false, report: report, diagnosis: diagnosis, chart: mkChart(peer, old) }; });
+      later(8600, function () { st.test = withId({ status: 'done', running: false, report: report, diagnosis: diagnosis, chart: mkChart(peer, old) }, 'test'); });
       return Promise.resolve();
     },
     addHost: function (target, alias) {
@@ -204,7 +225,7 @@
       if (st.probe.running) return Promise.reject(new Error('ya hay un diagnóstico en curso'));
       if (!id) return Promise.reject(new Error('elija un equipo para el diagnóstico'));
       st.probe = { running: true, status: 'running', kind: kind, target_id: id };
-      later(kind === 'ping' ? 1200 : 2500, function () { st.probe = { running: false, status: 'done', kind: kind, target_id: id, result: probes[kind], combined: combined[kind] }; });
+      later(kind === 'ping' ? 1200 : 2500, function () { st.probe = withId({ running: false, status: 'done', kind: kind, target_id: id, result: probes[kind], combined: combined[kind] }, kind); });
       return Promise.resolve();
     },
     cancelProbe: function () {
@@ -248,7 +269,7 @@
     startInternet: function () {
       if (st.test.running || st.probe.running) return Promise.reject(new Error('hay otra prueba en curso'));
       st.probe = { running: true, status: 'running', kind: 'internet' };
-      later(1500, function () { st.probe = { running: false, status: 'done', kind: 'internet', result: inetResult, combined: internetCombined }; });
+      later(1500, function () { st.probe = withId({ running: false, status: 'done', kind: 'internet', result: inetResult, combined: internetCombined }, 'internet'); });
       return Promise.resolve();
     },
     startSpeed: function (consent) {
@@ -256,7 +277,7 @@
       if (st.test.running || st.probe.running) return Promise.reject(new Error('hay otra prueba en curso'));
       window.__speedCalls = (window.__speedCalls || 0) + 1;
       st.probe = { running: true, status: 'running', kind: 'speed' };
-      later(2000, function () { st.probe = { running: false, status: 'done', kind: 'speed', result: speedResult }; });
+      later(2000, function () { st.probe = withId({ running: false, status: 'done', kind: 'speed', result: speedResult }, 'speed'); });
       return Promise.resolve();
     },
     openPrivacy: function (which) { if (which !== 'mlab' && which !== 'nperf') return Promise.reject(new Error('política no permitida')); window.__privacy = which; return Promise.resolve(); },
@@ -275,5 +296,5 @@
   };
   window.nperf = api;
   // Control para pruebas: __mock.state es el estado mutable.
-  window.__mock = { monitorOn: function () { return monOn; }, mkChart: mkChart, probes: probes, state: st, view: view, report: report, sync: sync };
+  window.__mock = { scenarios: Object.keys(scenarios), monitorOn: function () { return monOn; }, mkChart: mkChart, probes: probes, state: st, view: view, report: report, sync: sync };
 })();
