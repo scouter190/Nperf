@@ -205,3 +205,14 @@ func TestInternetSaveHistoryDisabled(t *testing.T) {
 }
 
 var _ = io.Discard
+
+func TestInternetSaveFailureKeepsExitCode(t *testing.T) {
+	f := useInternet(t, "", false)
+	os.WriteFile(filepath.Join(f.cache, "NPerf"), []byte("x"), 0o600) // impide crear el directorio
+	if c := runInternet(context.Background(), []string{"-save"}); c != 0 {
+		t.Fatalf("código %d: %s", c, f.err)
+	}
+	if !strings.Contains(f.err.String(), "no se pudo guardar") {
+		t.Fatalf("err=%q", f.err)
+	}
+}

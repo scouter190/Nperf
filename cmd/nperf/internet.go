@@ -178,8 +178,8 @@ func saveInternet(cfg config.Config, targets []netip.Addr, latJSON string, spJSO
 	base := cacheBase()
 	st, err := history.Open(history.DefaultDir(base), nil, cfg.HistoryOn())
 	if err != nil {
-		fmt.Fprintln(stderr, "error: no se pudo guardar en el historial:", err)
-		return exitError
+		fmt.Fprintln(stderr, "aviso: no se pudo guardar en el historial:", err)
+		return exitOK
 	}
 	if !st.Enabled {
 		fmt.Fprintln(stderr, "aviso: el historial está desactivado; no se guardó el resultado")
@@ -208,8 +208,8 @@ func saveInternet(cfg config.Config, targets []netip.Addr, latJSON string, spJSO
 	for _, r := range recs {
 		id, err := st.Save(r)
 		if err != nil {
-			fmt.Fprintln(stderr, "error: no se pudo guardar en el historial:", err)
-			return exitError
+			fmt.Fprintln(stderr, "aviso: no se pudo guardar en el historial:", err)
+			return exitOK
 		}
 		fmt.Fprintf(stderr, "guardado en el historial: %s\n", id)
 	}

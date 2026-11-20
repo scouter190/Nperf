@@ -5,9 +5,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/netip"
 	"time"
 
+	"nperf/internal/history"
 	"nperf/internal/probe"
 )
 
@@ -113,6 +115,7 @@ func runPing(ctx context.Context, args []string) int {
 	interval := fs.Duration("interval", probe.DefaultInterval, "tiempo entre ecos, mínimo 200ms (por defecto: 500ms)")
 	timeout := fs.Duration("timeout", probe.DefaultTimeout, "espera por eco, 200ms-5s (por defecto: 1s)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1); los errores salen como {\"error\": \"...\"}")
+	save := fs.Bool("save", false, saveHelp)
 	c := probeCmd{"ping", "nperf ping <host> [opciones]", jsonOut}
 	opts := probe.PingOptions{}
 	host, code, ok := c.begin(args, flagSet{fs}, func() error {
@@ -132,11 +135,16 @@ func runPing(ctx context.Context, args []string) int {
 	if err != nil {
 		return c.runErr(ctx, err)
 	}
-	if *jsonOut {
-		if err := probe.PingJSON(stdout, dest, st, replies); err != nil {
+	if *jsonOut || *save {
+		b, err := emitJSON(stdout, *jsonOut, func(w io.Writer) error { return probe.PingJSON(w, dest, st, replies) })
+		if err != nil && *jsonOut {
 			return exitError
 		}
-	} else {
+		if err == nil && *save {
+			saveHistory(history.KindPing, host, opts, b)
+		}
+	}
+	if !*jsonOut {
 		probe.PingText(stdout, dest, st, replies)
 	}
 	if st.Received == 0 {
@@ -150,6 +158,7 @@ func runTrace(ctx context.Context, args []string) int {
 	hops := fs.Int("max-hops", probe.DefaultMaxHops, fmt.Sprintf("máximo de saltos, 1-%d (por defecto: %d)", probe.MaxHopsLimit, probe.DefaultMaxHops))
 	timeout := fs.Duration("timeout", probe.DefaultTimeout, "espera por sonda, 200ms-5s (por defecto: 1s)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1); los errores salen como {\"error\": \"...\"}")
+	save := fs.Bool("save", false, saveHelp)
 	c := probeCmd{"trace", "nperf trace <host> [opciones]", jsonOut}
 	opts := probe.TraceOptions{}
 	host, code, ok := c.begin(args, flagSet{fs}, func() error {
@@ -169,11 +178,16 @@ func runTrace(ctx context.Context, args []string) int {
 	if err != nil {
 		return c.runErr(ctx, err)
 	}
-	if *jsonOut {
-		if err := probe.TraceJSON(stdout, dest, res); err != nil {
+	if *jsonOut || *save {
+		b, err := emitJSON(stdout, *jsonOut, func(w io.Writer) error { return probe.TraceJSON(w, dest, res) })
+		if err != nil && *jsonOut {
 			return exitError
 		}
-	} else {
+		if err == nil && *save {
+			saveHistory(history.KindTrace, host, opts, b)
+		}
+	}
+	if !*jsonOut {
 		probe.TraceText(stdout, dest, res)
 	}
 	return exitOK
@@ -183,6 +197,7 @@ func runMTU(ctx context.Context, args []string) int {
 	fs := newFlagSet("mtu", "nperf mtu <host> [opciones]")
 	timeout := fs.Duration("timeout", probe.DefaultTimeout, "espera por sonda, 200ms-5s (por defecto: 1s)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1); los errores salen como {\"error\": \"...\"}")
+	save := fs.Bool("save", false, saveHelp)
 	c := probeCmd{"mtu", "nperf mtu <host> [opciones]", jsonOut}
 	host, code, ok := c.begin(args, flagSet{fs}, func() error {
 		return probe.TraceOptions{MaxHops: probe.MinHops, Timeout: *timeout}.Validate()
@@ -206,11 +221,16 @@ func runMTU(ctx context.Context, args []string) int {
 	if err != nil {
 		return c.runErr(ctx, err)
 	}
-	if *jsonOut {
-		if err := probe.MTUJSON(stdout, dest, res); err != nil {
+	if *jsonOut || *save {
+		b, err := emitJSON(stdout, *jsonOut, func(w io.Writer) error { return probe.MTUJSON(w, dest, res) })
+		if err != nil && *jsonOut {
 			return exitError
 		}
-	} else {
+		if err == nil && *save {
+			saveHistory(history.KindMTU, host, map[string]any{"timeout_ms": timeout.Milliseconds()}, b)
+		}
+	}
+	if !*jsonOut {
 		probe.MTUText(stdout, dest, res)
 	}
 	return exitOK
@@ -221,6 +241,7 @@ func runPorts(ctx context.Context, args []string) int {
 	list := fs.String("p", "", "puertos TCP: lista y rangos, p. ej. 22,80,8000-8010 (máx. 32; por defecto: 21,22,23,53,80,443,445,3389,8080,8291)")
 	timeout := fs.Duration("timeout", probe.DefaultPortsTimeout, "espera por puerto, 200ms-5s (por defecto: 1.5s)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1); los errores salen como {\"error\": \"...\"}")
+	save := fs.Bool("save", false, saveHelp)
 	c := probeCmd{"ports", "nperf ports <host> [opciones]", jsonOut}
 	opts := probe.DefaultPortsOptions()
 	host, code, ok := c.begin(args, flagSet{fs}, func() error {
@@ -247,11 +268,16 @@ func runPorts(ctx context.Context, args []string) int {
 	if err != nil {
 		return c.runErr(ctx, err)
 	}
-	if *jsonOut {
-		if err := probe.PortsJSON(stdout, dest, res); err != nil {
+	if *jsonOut || *save {
+		b, err := emitJSON(stdout, *jsonOut, func(w io.Writer) error { return probe.PortsJSON(w, dest, res) })
+		if err != nil && *jsonOut {
 			return exitError
 		}
-	} else {
+		if err == nil && *save {
+			saveHistory(history.KindPorts, host, map[string]any{"ports": opts.Ports, "timeout_ms": opts.Timeout.Milliseconds()}, b)
+		}
+	}
+	if !*jsonOut {
 		probe.PortsText(stdout, dest, res)
 	}
 	return exitOK

@@ -15,6 +15,7 @@ import (
 
 	"nperf/internal/client"
 	"nperf/internal/config"
+	"nperf/internal/history"
 	"nperf/internal/netutil"
 	"nperf/internal/proto"
 	"nperf/internal/report"
@@ -55,6 +56,8 @@ Uso:
   nperf trace <host> [opciones]    ruta salto a salto
   nperf mtu <host> [opciones]      MTU de la ruta (paquete máximo sin fragmentar)
   nperf ports <host> [opciones]    puertos TCP abiertos, cerrados o filtrados
+  nperf history list|show|export   historial de resultados guardados (ver "nperf history help")
+  nperf internet [opciones]        latencia a Internet y, con -speed, velocidad (M-Lab NDT7)
   nperf help                       muestra esta ayuda
 
 Use "nperf server -h", "nperf client -h", "nperf status -h" o "nperf adapters -h", "nperf ping -h", etc. para ver las opciones de cada comando.
@@ -83,6 +86,12 @@ func run(args []string) int {
 		return exitOK
 	case "adapters":
 		return runAdapters(args[1:])
+	case "history":
+		return runHistory(args[1:])
+	case "internet":
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel()
+		return runInternet(ctx, args[1:])
 	case "ping", "trace", "mtu", "ports":
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer cancel()
@@ -285,6 +294,7 @@ func runClient(ctx context.Context, args []string) int {
 	streams := fs.Int("streams", proto.DefaultStreams, fmt.Sprintf("flujos TCP paralelos, de 1 a 64 (por defecto: %d)", proto.DefaultStreams))
 	direction := fs.String("direction", "both", "sentido: fwd (cliente a servidor), rev (servidor a cliente) o both (por defecto: both)")
 	jsonOut := fs.Bool("json", false, "imprime solo un objeto JSON (formato v1) por la salida estándar; los errores salen como {\"error\": \"...\"}")
+	save := fs.Bool("save", false, saveHelp)
 	noLoadRTT := fs.Bool("no-load-rtt", false, "desactiva las sondas de RTT bajo carga")
 	// Permite `client <host> -flags` además de `client -flags <host>`.
 	var host string
@@ -353,13 +363,19 @@ func runClient(ctx context.Context, args []string) int {
 	}
 	p := report.Params{Host: host, Port: *port, Proto: *protoName, Direction: *direction, Duration: dur,
 		Streams: *streams, UDPRate: rate, Version: version.Current}
-	if *jsonOut {
-		if err := report.JSON(stdout, p, res); err != nil {
+	if *jsonOut || *save {
+		b, err := emitJSON(stdout, *jsonOut, func(w io.Writer) error { return report.JSON(w, p, res) })
+		if err != nil && *jsonOut {
 			fmt.Fprintln(stderr, "error:", err)
 			return exitError
 		}
-		return exitOK
+		if err == nil && *save {
+			saveHistory(history.KindTest, host, map[string]any{"port": *port, "proto": *protoName, "direction": *direction,
+				"duration_s": *secs, "streams": *streams}, b)
+		}
 	}
-	report.Text(stdout, p, res)
+	if !*jsonOut {
+		report.Text(stdout, p, res)
+	}
 	return exitOK
 }
