@@ -57,6 +57,7 @@ type Deps struct {
 	Counters  netinfo.CounterSource  // contadores por tarjeta (monitor); nil = monitor no disponible
 	Probe     probe.Env              // entorno de los diagnósticos (T15 lo cablea); vacío = no disponibles
 	History   *history.Store         // almacén del historial; nil = sin historial
+	Ping      probe.PingOptions      // opciones de ping de la prueba de internet; vacío = DefaultPing
 	Speed     *ndt7.RunOptions       // plantilla de la prueba M-Lab (Consent se ignora); nil = no disponible
 }
 

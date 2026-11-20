@@ -24,6 +24,7 @@ import (
 // internetEnv agrupa las dependencias de `nperf internet`; las pruebas la sustituyen.
 type internetEnv struct {
 	Probe    func() (probe.Env, func())
+	Ping     probe.PingOptions                     // opciones de ping de la latencia
 	Speed    func(quotaDir string) ndt7.RunOptions // opciones base de ndt7.Run (sin Consent ni Quota)
 	Stdin    io.Reader
 	Terminal func() bool // true si la entrada estándar es una terminal
@@ -32,6 +33,7 @@ type internetEnv struct {
 var internetSystem = func() internetEnv {
 	return internetEnv{
 		Probe: probeSystem,
+		Ping:  probe.DefaultPing(),
 		Speed: func(string) ndt7.RunOptions { return ndt7.RunOptions{} },
 		Stdin: os.Stdin,
 		Terminal: func() bool {
@@ -104,7 +106,7 @@ func runInternet(ctx context.Context, args []string) int {
 	if pe.Router != nil {
 		gw, _ = pe.Router.Gateway()
 	}
-	out, err := inet.Run(ctx, pe, gw, targets)
+	out, err := inet.RunWith(ctx, pe, gw, targets, env.Ping)
 	if err != nil {
 		if interrupted(ctx, err) {
 			return fail(exitError, errors.New("cancelado por el usuario"))
@@ -121,6 +123,9 @@ func runInternet(ctx context.Context, args []string) int {
 		o.Consent = true
 		o.Quota = &ndt7.Quota{Dir: qdir}
 		sres, _ = ndt7.Run(ctx, o) // el fallo queda en el Result como "no disponible" con motivo
+		if ctx.Err() != nil {
+			return fail(exitError, errors.New("cancelado por el usuario"))
+		}
 	}
 
 	var latJSON jsonBuf

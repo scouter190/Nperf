@@ -172,6 +172,9 @@ func Download(ctx context.Context, o MeasureOptions) (Direction, error) {
 				// El servidor no cerró: se mide hasta el último dato.
 				end = lastData
 				d.Notes = append(d.Notes, fmt.Sprintf("el servidor no cerró; cortada a los %d s", int(o.total().Seconds())))
+				if time.Duration(end-start) < o.minNormal() {
+					d.Incomplete, d.Reason = true, "tiempo medido insuficiente"
+				}
 			case ctx.Err() != nil:
 				d.Incomplete, d.Reason = true, "cancelada"
 			default:
@@ -271,7 +274,8 @@ func Upload(ctx context.Context, o MeasureOptions) (Direction, error) {
 		size := minChunk
 		for wctx.Err() == nil {
 			if err := c.WriteMessage(wctx, ws.Binary, buf[:size]); err != nil {
-				if wctx.Err() == nil {
+				// Un plazo/cancelación propio no es un fallo de escritura.
+				if wctx.Err() == nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 					mu.Lock()
 					writeErr = err
 					mu.Unlock()
@@ -304,7 +308,7 @@ func Upload(ctx context.Context, o MeasureOptions) (Direction, error) {
 		d.Incomplete, d.Reason = true, reason
 		var ce *ws.CloseError
 		if !errors.As(err, &ce) && !errors.Is(err, ws.ErrTooBig) && lastM != nil &&
-			serverElapsed(*lastM) >= o.upTime()*9/10 {
+			serverElapsed(*lastM) >= max(o.upTime()*9/10, o.minNormal()) {
 			d.Incomplete, d.Reason = false, ""
 			d.Notes = append(d.Notes, "el servidor cortó la conexión al final")
 		}
@@ -316,6 +320,9 @@ func Upload(ctx context.Context, o MeasureOptions) (Direction, error) {
 		abrupt(writeErr)
 	case capped.Load():
 		d.Notes = append(d.Notes, fmt.Sprintf("el servidor no cerró; cortada a los %d s", int(o.total().Seconds())))
+		if lastM == nil || serverElapsed(*lastM) < o.minNormal() {
+			d.Incomplete, d.Reason = true, "tiempo medido insuficiente"
+		}
 	case readErr != nil:
 		if ok, _ := endReason(readErr); !ok {
 			abrupt(readErr)

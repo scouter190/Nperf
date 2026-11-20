@@ -160,6 +160,7 @@ func TestSpeedExcludedWithTestAndProbes(t *testing.T) {
 func TestInternetFinishesAndSaves(t *testing.T) {
 	a, _ := newProbeApp(t, probe.Env{Echoer: okEcho(false)}, direct(), nil)
 	a.d.History = &history.Store{Dir: filepath.Join(t.TempDir(), "historial"), Enabled: true}
+	a.d.Ping = probe.PingOptions{Count: 1, Interval: probe.MinInterval, Timeout: probe.MinTimeout}
 	if err := a.SetInternetTargets([]string{"9.9.9.9"}); err != nil {
 		t.Fatal(err)
 	}

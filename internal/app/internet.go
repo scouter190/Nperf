@@ -11,6 +11,7 @@ import (
 	"nperf/internal/history"
 	"nperf/internal/inet"
 	"nperf/internal/ndt7"
+	"nperf/internal/probe"
 )
 
 // Tipos de prueba hacia internet (mismo hueco de estado que los diagnósticos).
@@ -125,7 +126,11 @@ func (a *App) StartInternet() error {
 	}
 	return a.launchProbe(ProbeInternet, func(ctx context.Context) (json.RawMessage, *CombinedState, error) {
 		env := a.d.Probe
-		out, err := inet.Run(ctx, env, a.gateway(), targets)
+		po := a.d.Ping
+		if po.Count == 0 {
+			po = probe.DefaultPing()
+		}
+		out, err := inet.RunWith(ctx, env, a.gateway(), targets, po)
 		if err != nil {
 			return nil, nil, err
 		}

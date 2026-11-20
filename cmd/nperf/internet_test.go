@@ -48,6 +48,7 @@ func useInternet(t *testing.T, stdin string, terminal bool) *inetFix {
 	configDir = func() (string, error) { return cfgd, nil }
 	internetSystem = func() internetEnv {
 		return internetEnv{
+			Ping: probe.PingOptions{Count: 2, Interval: 200 * time.Millisecond, Timeout: 200 * time.Millisecond},
 			Probe: func() (probe.Env, func()) {
 				return probe.Env{Echoer: f.echo, Clock: probe.RealClock{}, Dialer: refuseDialer{}}, func() {}
 			},

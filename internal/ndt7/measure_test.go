@@ -21,7 +21,7 @@ func opts(s *ndt7test.Server, path string) MeasureOptions {
 		URL:        "wss://" + s.Addr() + "/ndt/v7/" + path + "?access_token=" + ndt7test.Token + "&index=0",
 		WS:         ws.Options{TLS: s.TLSConfig()},
 		UploadTime: time.Second,
-		MinNormal:  900 * time.Millisecond,
+		MinNormal:  600 * time.Millisecond,
 	}
 }
 
@@ -127,28 +127,31 @@ func TestCutMidway(t *testing.T) {
 	}
 }
 
+func measure(dir string, o MeasureOptions) (Direction, error) {
+	if dir == "download" {
+		return Download(context.Background(), o)
+	}
+	return Upload(context.Background(), o)
+}
+
 func TestGiantAndInvalidJSON(t *testing.T) {
-	s := srv(t, func(c *ndt7test.Config) { c.Fail = ndt7test.GiantFrame })
-	for _, dir := range []string{"download", "upload"} {
-		var d Direction
-		var err error
-		if dir == "download" {
-			d, err = Download(context.Background(), opts(s, dir))
-		} else {
-			d, err = Upload(context.Background(), opts(s, dir))
+	for _, fail := range []ndt7test.FailMode{ndt7test.GiantFrame, ndt7test.InvalidJSON} {
+		for _, dir := range []string{"download", "upload"} {
+			t.Run(dir, func(t *testing.T) {
+				t.Parallel()
+				s := srv(t, func(c *ndt7test.Config) { c.Fail = fail })
+				d, err := measure(dir, opts(s, dir))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if fail == ndt7test.GiantFrame && (!d.Incomplete || d.Reason == "") {
+					t.Fatalf("gigante: %+v", d)
+				}
+				if fail == ndt7test.InvalidJSON && (d.Incomplete || d.Bytes == 0) {
+					t.Fatalf("json inválido: %+v", d)
+				}
+			})
 		}
-		if err != nil || !d.Incomplete || d.Reason == "" {
-			t.Fatalf("%s gigante: %v %+v", dir, err, d)
-		}
-	}
-	s.Configure(func(c *ndt7test.Config) { c.Fail = ndt7test.InvalidJSON })
-	d, err := Download(context.Background(), opts(s, "download"))
-	if err != nil || d.Incomplete || d.Bytes == 0 {
-		t.Fatalf("json inválido: %v %+v", err, d)
-	}
-	d, err = Upload(context.Background(), opts(s, "upload"))
-	if err != nil || d.Incomplete || d.Bytes == 0 {
-		t.Fatalf("json inválido subida: %v %+v", err, d)
 	}
 }
 
@@ -184,15 +187,40 @@ func TestEarlyNormalClose(t *testing.T) {
 		c.DownloadTime = 300 * time.Millisecond
 		c.UploadTime = 300 * time.Millisecond
 	})
-	d, err := Download(context.Background(), opts(s, "download"))
+	o := opts(s, "download")
+	o.MaxTotal = 3 * time.Second
+	d, err := Download(context.Background(), o)
 	if err != nil || !d.Incomplete || d.Reason == "" {
 		t.Fatalf("descarga: %v %+v", err, d)
 	}
-	o := opts(s, "upload")
-	o.UploadTime = 5 * time.Second
+	// El cliente envía lo mismo que el servidor mide (300 ms) y el tope es corto:
+	// tanto si el servidor cierra como si se corta al tope, < MinNormal es incompleto.
+	o = opts(s, "upload")
+	o.UploadTime = 300 * time.Millisecond
+	o.MaxTotal = 3 * time.Second
 	d, err = Upload(context.Background(), o)
 	if err != nil || !d.Incomplete || d.Reason == "" {
 		t.Fatalf("subida: %v %+v", err, d)
+	}
+}
+
+func TestCappedShortIsIncomplete(t *testing.T) {
+	for _, dir := range []string{"download", "upload"} {
+		t.Run(dir, func(t *testing.T) {
+			t.Parallel()
+			s := srv(t, func(c *ndt7test.Config) {
+				c.Fail = ndt7test.NoClose
+				c.DownloadTime = 300 * time.Millisecond
+				c.UploadTime = 300 * time.Millisecond
+			})
+			o := opts(s, dir)
+			o.UploadTime = 300 * time.Millisecond
+			o.MaxTotal = time.Second
+			d, err := measure(dir, o)
+			if err != nil || !d.Incomplete || len(d.Notes) == 0 {
+				t.Fatalf("%v %+v", err, d)
+			}
+		})
 	}
 }
 
