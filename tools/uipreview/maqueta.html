@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NPerf - maqueta</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="shell">
+<!-- Maqueta estática (spec 008 T5): datos de ejemplo, sin puente. Escenarios: #nombre o selector inferior. -->
+<header id="app-header" class="app-header">
+  <span class="logo">NPerf</span>
+  <nav aria-label="Vistas">
+    <button id="nav-panel" class="nav-tab" type="button">Panel</button>
+    <button id="nav-history" class="nav-tab" type="button">Historial <span class="count">(8)</span></button>
+  </nav>
+  <div class="hdr-right">
+    <span id="server-pill" class="server-pill ok" role="status"><span id="server-text">Servidor :5300 · Activo</span></span>
+    <span class="hdr-sep"></span>
+    <button id="hdr-adapters" class="hdr-btn" type="button" title="Tarjetas de red" aria-expanded="false"><span class="gl" aria-hidden="true">&#9783;</span><span class="lbl">Red · Wi-Fi 6</span></button>
+    <button id="hdr-settings" class="hdr-btn" type="button" title="Ajustes" aria-expanded="false"><span class="gear" aria-hidden="true">&#9881;</span><span class="lbl">Ajustes</span></button>
+  </div>
+</header>
+<div id="m-banners">
+  <div class="alert err" role="alert" data-esc="error"><span class="grow"><strong>Error de configuración.</strong> <span class="mono">config.json</span>: la clave «subnets» no es válida (línea 7). El servidor sigue con la configuración anterior.</span><button class="btn sm" type="button" data-go="ajustes">Abrir Ajustes</button></div>
+  <div class="alert warn" data-esc="vacio"><span class="grow">Si otros equipos no aparecen, permite en el cortafuegos de Windows los puertos <span class="mono">TCP/UDP 5300</span> y <span class="mono">UDP 5301</span> para NPerf.</span></div>
+</div>
+<div class="shell-main">
+  <aside class="shell-sidebar" aria-label="Equipos">
+    <div class="sb">
+      <div class="sb-scroll">
+        <h2 class="hl">Este equipo</h2>
+        <div class="peer self" id="p-self">
+          <div class="peer-r1"><span class="ico wifi" aria-hidden="true"></span><span class="peer-name" title="PC-Taller">PC-Taller</span><span class="tag ok">disponible</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.20</span><span class="peer-link mono">Wi-Fi 6 · ↑721 / ↓961 Mbps</span></div>
+        </div>
+        <h2 class="hl">En la red</h2>
+        <div class="peer-empty" data-esc="vacio"><span>No se detectan equipos con NPerf en esta red.</span><span class="muted2">Comprueba que NPerf esté en marcha en el otro equipo y que el cortafuegos permita los puertos 5300 y 5301.</span></div>
+        <div class="peer sel" data-esc="!vacio">
+          <div class="peer-r1"><span class="ico eth" aria-hidden="true"></span><span class="peer-name" title="Oficina-PC">Oficina-PC</span><span class="tag ok">disponible</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.10</span><span class="peer-link mono">1 Gbps</span></div>
+        </div>
+        <div class="peer" data-esc="!vacio">
+          <div class="peer-r1"><span class="ico eth" aria-hidden="true"></span><span class="peer-name" title="Servidor-de-archivos-planta-baja-sala-técnica-2">Servidor-de-archivos-planta-baja-sala-técnica-2</span><span class="tag warn">ocupado</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.31</span><span class="peer-link mono">2,5 Gbps</span></div>
+        </div>
+        <div class="peer" data-esc="!vacio">
+          <div class="peer-r1"><span class="ico wifi" aria-hidden="true"></span><span class="peer-name" title="Portátil-Ana">Portátil-Ana</span><span class="tag warn">en cola 2</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.44</span><span class="peer-link mono">Wi-Fi 5 · 433 Mbps</span></div>
+        </div>
+        <div class="peer off" data-esc="!vacio">
+          <div class="peer-r1"><span class="ico unknown" aria-hidden="true"></span><span class="peer-name" title="Impresora-HQ">Impresora-HQ</span><span class="tag">inalcanzable</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.60</span><span class="peer-link mono">—</span></div>
+        </div>
+        <h2 class="hl">Sin NPerf</h2>
+        <div class="peer gw">
+          <div class="peer-r1"><span class="ico noagent" aria-hidden="true"></span><span class="peer-name" title="Puerta de enlace">Puerta de enlace</span><span class="tag">sin NPerf</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.1</span></div>
+        </div>
+        <div class="peer manual">
+          <div class="peer-r1"><span class="ico noagent" aria-hidden="true"></span><span class="peer-name" title="Cámara patio">Cámara patio</span><span class="tag">sin NPerf</span></div>
+          <div class="peer-r2"><span class="mono">192.168.1.50</span></div>
+          <button class="btn sm rm" type="button">Quitar</button>
+        </div>
+      </div>
+      <div class="sb-foot">
+        <form class="addform" id="addform" autocomplete="off" data-esc="anadir">
+          <label class="fld">IP o nombre<input class="inp" type="text" value="nas.local" aria-label="IP o nombre del equipo"></label>
+          <label class="fld">Alias (opcional)<input class="inp" type="text" placeholder="Alias (opcional)" aria-label="Alias"></label>
+          <div class="acts"><button class="btn sm" type="button" data-go="resultado">Cancelar</button><button class="btn sm primary" type="button">Añadir</button></div>
+        </form>
+        <button class="btn dashed" type="button" data-go="anadir" data-esc="!anadir">+ Añadir equipo</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="shell-content">
+    <section id="view-panel" class="view pw">
+      <div class="surf opbar" id="opbar">
+        <div class="oprow">
+          <label class="fld inline">Sentido
+            <select class="inp" aria-label="Sentido"><option>Ida y vuelta</option><option>Solo ida (cliente → servidor)</option><option>Solo vuelta</option></select>
+          </label>
+          <label class="fld inline">Duración (s)
+            <input class="inp num" type="number" min="3" max="300" value="10" aria-label="Duración en segundos">
+          </label>
+          <span class="muted2 mono">· 40 s total</span>
+          <span class="grow"></span>
+          <span class="blk" data-esc="vacio">Selecciona un equipo disponible para medir.</span>
+          <span class="blk" data-esc="diagnostico">Hay un diagnóstico en curso.</span>
+          <button class="btn primary" type="button" data-esc="!curso !cola" data-dis="vacio diagnostico">TEST!</button>
+          <button class="btn danger" type="button" data-esc="curso cola">Cancelar</button>
+        </div>
+        <div class="oprow">
+          <button class="btn sm" type="button" data-dis="vacio curso cola diagnostico">Ping</button>
+          <button class="btn sm" type="button" data-dis="vacio curso cola diagnostico">Traceroute</button>
+          <button class="btn sm" type="button" data-dis="vacio curso cola diagnostico">MTU</button>
+          <button class="btn sm" type="button" data-dis="vacio curso cola diagnostico">Puertos</button>
+          <span class="vsep"></span>
+          <button class="btn sm" type="button" data-dis="curso cola diagnostico">Internet</button>
+          <button class="btn sm" type="button" id="btn-speed" data-dis="curso cola diagnostico">Velocidad a internet</button>
+          <button class="btn sm icon" type="button" id="btn-info" aria-label="Información sobre la velocidad a internet" aria-expanded="false" aria-controls="pop-info">&#9432;</button>
+        </div>
+        <div id="pop-info" class="popover pop-info" role="dialog" aria-label="Velocidad a internet" hidden>
+          <p>La prueba usa NDT7 de M-Lab. M-Lab publica como datos abiertos (CC0) la IP pública desde la que mides.</p>
+          <p>Se pide confirmación en cada prueba.</p>
+        </div>
+      </div>
+
+      <div class="surf prog q" data-esc="cola" role="status">
+        <span class="ind q"></span>
+        <span class="grow"><strong>En cola en Oficina-PC</strong> — Posición <span class="mono">#2</span></span>
+        <button class="btn sm" type="button">Cancelar espera</button>
+      </div>
+      <div class="surf prog" data-esc="curso" role="status">
+        <span class="ind"></span>
+        <div class="chips" aria-label="Fases">
+          <span class="chip done">RTT</span><span class="chip done">TCP Ida</span><span class="chip cur">TCP Vuelta</span><span class="chip">UDP Ida</span><span class="chip">UDP Vuelta</span>
+        </div>
+        <span class="grow muted2">Midiendo TCP vuelta (4 flujos)</span>
+        <span class="mono">00:23</span>
+      </div>
+      <div class="surf prog" data-esc="diagnostico" role="status">
+        <span class="ind"></span>
+        <span class="grow"><strong>Traceroute</strong> a <span class="mono">192.168.1.1</span> · salto <span class="mono">4</span> de <span class="mono">30</span></span>
+        <button class="btn sm" type="button">Cancelar</button>
+      </div>
+
+      <div id="slot-panel" class="pw0">
+        <div id="res-test" class="pw0" data-esc="!ping !internet !velocidad !vacio !cola !diagnostico !historial !historial-desactivado !exportar !borrar !borrar-todo">
+          <div class="surf rhead" id="res-head">
+            <div class="info">
+              <div class="t"><span>Destino: Oficina-PC <span class="mono muted2">(192.168.1.10)</span></span>
+                <span class="tag ok" data-esc="!parcial !curso">terminado</span><span class="tag warn" data-esc="parcial">cancelado</span><span class="tag accent" data-esc="curso">en curso</span></div>
+              <div class="phy">PC-Taller: Wi-Fi 6 · 5 GHz canal 36 · ↑721 / ↓961 Mbps &nbsp;→&nbsp; Oficina-PC: Ethernet · 1 Gbps</div>
+            </div>
+            <div class="acts" data-esc="!historial-registro">
+              <span class="blk" data-esc="sinhist">Historial desactivado: actívalo en Ajustes para exportar.</span>
+              <button class="btn sm" type="button" data-dis="curso">↻ Repetir</button>
+              <button class="btn sm" type="button" id="btn-export" data-dis="curso sinhist" title="">⤓ Exportar</button>
+              <button class="btn sm" type="button" data-dis="curso">⧉ Copiar resumen</button>
+            </div>
+          </div>
+          <div class="sem" data-esc="!curso !parcial !historial-registro">
+            <span class="sem-ico" aria-hidden="true">!</span>
+            <div class="sem-b">
+              <div class="sem-t">Limitado por enlace Wi-Fi <span class="tag warn">Bufferbloat +104 ms</span><span class="tag warn">Ida al 44 % del PHY</span></div>
+              <p class="sem-x">Tu equipo llega a 318 Mbps de 721 Mbps nominales y la latencia sube de 4 a 108 ms con carga. Acércate al punto de acceso o usa cable.</p>
+            </div>
+          </div>
+          <div class="sem" data-esc="historial-registro">
+            <span class="sem-ico" aria-hidden="true">!</span>
+            <div class="sem-b"><div class="sem-t">Limitado por enlace Wi-Fi <span class="tag warn">Bufferbloat +104 ms</span></div><p class="sem-x">Registro guardado el 18/11/2026 10:42. Solo lectura.</p></div>
+          </div>
+          <div class="kpis">
+            <div class="surf kpi">
+              <div class="kpi-h"><span>TCP Ida ↑</span><span class="tag accent" data-esc="!curso">44 % PHY</span></div>
+              <div class="kpi-v">318 <small>Mbps</small></div>
+              <progress class="pb" max="100" value="45" aria-label="Ida respecto al máximo"></progress>
+              <div class="kpi-f">397 MB · 12 retrans.</div>
+            </div>
+            <div class="surf kpi" data-esc="!parcial !curso">
+              <div class="kpi-h"><span>TCP Vuelta ↓</span><span class="tag accent">73 % PHY</span></div>
+              <div class="kpi-v">702 <small>Mbps</small></div>
+              <progress class="pb rev" max="100" value="100" aria-label="Vuelta respecto al máximo"></progress>
+              <div class="kpi-f">878 MB · 0 retrans.</div>
+            </div>
+            <div class="surf kpi" data-esc="parcial curso">
+              <div class="kpi-h"><span>TCP Vuelta ↓</span></div>
+              <div class="kpi-v na" data-esc="parcial">—</div><div class="kpi-v" data-esc="curso">692 <small>Mbps</small></div>
+              <progress class="pb rev" max="100" value="0" aria-label="Vuelta" data-esc="parcial"></progress><progress class="pb rev" max="100" value="98" aria-label="Vuelta" data-esc="curso"></progress>
+              <div class="kpi-f" data-esc="parcial">No medido</div><div class="kpi-f" data-esc="curso">en curso…</div>
+            </div>
+            <div class="surf kpi">
+              <div class="kpi-h"><span>RTT</span></div>
+              <div class="kpi-v">4,2 <small>ms</small></div>
+              <div class="kpi-s">mín 2,1 / máx 18,3</div>
+              <div class="kpi-s warn" data-esc="!parcial !curso">Sube +104 ms bajo carga</div>
+            </div>
+            <div class="surf kpi" data-esc="!parcial !curso">
+              <div class="kpi-h"><span>UDP pérdida / jitter</span></div>
+              <div class="kpi-v">0,02 <small>% · 0,8 ms</small></div>
+              <div class="kpi-s">Ida 0,03 % · Vuelta 0,01 %</div>
+            </div>
+            <div class="surf kpi" data-esc="parcial curso">
+              <div class="kpi-h"><span>UDP pérdida / jitter</span></div>
+              <div class="kpi-v na">—</div>
+              <div class="kpi-s" data-esc="parcial">No medido</div><div class="kpi-s" data-esc="curso">Pendiente</div>
+            </div>
+          </div>
+          <div class="surf gcard">
+            <div class="gh"><span class="t">Rendimiento TCP (10 s por sentido)</span>
+              <span class="legend"><span><i class="f"></i>TCP Ida</span><span data-esc="!parcial"><i class="r"></i>TCP Vuelta</span></span></div>
+            <div class="plot" role="img" aria-label="Gráfica de rendimiento TCP: ida alrededor de 320 Mbps y vuelta alrededor de 690 Mbps">
+              <div class="yl"><span>800</span><span>400</span><span>0</span></div>
+              <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
+                <line class="g-grid" x1="0" y1="25" x2="300" y2="25"/><line class="g-grid" x1="0" y1="50" x2="300" y2="50"/><line class="g-grid" x1="0" y1="75" x2="300" y2="75"/>
+                <polyline class="g-fwd" points="0.0,81.7 10.0,73.9 20.0,70.6 30.0,62.2 40.0,60.5 50.0,59.9 60.0,63.7 70.0,56.7 80.0,59.2 90.0,60.8 100.0,61.9 110.0,57.5 120.0,58.6 130.0,63.7 140.0,60.0 150.0,62.3 160.0,58.5 170.0,63.0 180.0,59.5 190.0,60.1 200.0,62.8 210.0,63.9 220.0,56.2 230.0,55.9 240.0,63.3 250.0,60.5 260.0,56.0 270.0,62.7 280.0,60.7 290.0,59.6 300.0,58.5"/>
+                <polyline class="g-rev" data-esc="!curso !parcial" points="0.0,61.6 10.0,46.9 20.0,26.0 30.0,14.6 40.0,12.6 50.0,15.6 60.0,10.3 70.0,14.3 80.0,14.7 90.0,13.9 100.0,10.4 110.0,12.1 120.0,14.8 130.0,12.7 140.0,12.3 150.0,17.4 160.0,10.8 170.0,12.0 180.0,11.0 190.0,16.3 200.0,15.7 210.0,15.1 220.0,11.2 230.0,12.8 240.0,11.5 250.0,14.9 260.0,15.1 270.0,12.1 280.0,16.7 290.0,12.0 300.0,13.7"/>
+                <polyline class="g-rev" data-esc="curso" points="0.0,61.6 10.0,46.9 20.0,26.0 30.0,14.6 40.0,12.6 50.0,15.6 60.0,10.3 70.0,14.3 80.0,14.7 90.0,13.9 100.0,10.4 110.0,12.1 120.0,14.8 130.0,12.7 140.0,12.3 150.0,17.4 160.0,10.8"/>
+              </svg>
+              <div class="xl"><span>0 s</span><span>5 s</span><span>10 s</span></div>
+            </div>
+          </div>
+          <div class="dtoggle"><span class="hl">Detalle técnico</span>
+            <label class="chk">Modo detallado <button class="sw" id="sw-detail" type="button" role="switch" aria-checked="false"></button></label></div>
+          <div id="detail" class="pw0" hidden>
+            <div class="surf"><div class="sech">TCP</div><div class="tw"><table class="tbl">
+              <thead><tr><th>Sentido</th><th class="r">Mbps</th><th class="r">MB</th><th class="r">Retrans.</th><th class="r">% PHY</th></tr></thead>
+              <tbody><tr><td>Ida (cliente → servidor)</td><td class="r">318</td><td class="r">397</td><td class="r">~12</td><td class="r">44 %</td></tr>
+              <tr><td>Vuelta (servidor → cliente)</td><td class="r">702</td><td class="r">878</td><td class="r">0</td><td class="r">73 %</td></tr></tbody></table></div></div>
+            <div class="surf"><div class="sech">UDP</div><div class="tw"><table class="tbl">
+              <thead><tr><th>Sentido</th><th class="r">Tasa (Mbps)</th><th class="r">Pérdida</th><th class="r">Jitter (ms)</th></tr></thead>
+              <tbody><tr><td>Ida</td><td class="r">286</td><td class="r">0,03 %</td><td class="r">0,9</td></tr>
+              <tr><td>Vuelta</td><td class="r">632</td><td class="r">0,01 %</td><td class="r">0,7</td></tr></tbody></table></div></div>
+            <div class="surf"><div class="sech">RTT bajo carga</div><div class="tw"><table class="tbl">
+              <thead><tr><th>Momento</th><th class="r">Mediana (ms)</th><th class="r">Máx. (ms)</th></tr></thead>
+              <tbody><tr><td>Sin carga</td><td class="r">4,2</td><td class="r">18,3</td></tr>
+              <tr><td>Con carga (ida)</td><td class="r">108</td><td class="r">212</td></tr></tbody></table></div>
+              </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ping -->
+      <div id="res-ping" class="pw0" data-esc="ping">
+        <div class="surf rhead">
+          <div class="info"><div class="t"><span>Ping · Puerta de enlace <span class="mono muted2">(192.168.1.1)</span></span><span class="tag ok">terminado</span></div></div>
+          <div class="acts"><button class="btn sm" type="button">↻ Repetir</button><button class="btn sm" type="button">⤓ Exportar</button><button class="btn sm" type="button">⧉ Copiar resumen</button></div>
+        </div>
+        <div class="sem ok"><span class="sem-ico" aria-hidden="true">✓</span><div class="sem-b"><div class="sem-t">Conexión sana</div><p class="sem-x">Sin pérdida y latencia de 3,1 ms (límite de 20 ms).</p></div></div>
+        <div class="surf"><div class="tw"><table class="tbl"><thead><tr><th class="r">Enviados</th><th class="r">Recibidos</th><th class="r">Pérdida</th><th class="r">Mín (ms)</th><th class="r">Media (ms)</th><th class="r">Máx (ms)</th><th class="r">Jitter (ms)</th></tr></thead>
+          <tbody><tr><td class="r">10</td><td class="r">10</td><td class="r">0 %</td><td class="r">2,4</td><td class="r">3,1</td><td class="r">5,6</td><td class="r">0,9</td></tr></tbody></table></div></div>
+      </div>
+
+      <!-- Internet -->
+      <div id="res-inet" class="pw0" data-esc="internet">
+        <div class="surf rhead">
+          <div class="info"><div class="t"><span>Internet</span><span class="tag warn">terminado</span></div><div class="phy">4 destinos públicos · ruta por la puerta de enlace 192.168.1.1</div></div>
+          <div class="acts"><button class="btn sm" type="button">↻ Repetir</button><button class="btn sm" type="button">⤓ Exportar</button><button class="btn sm" type="button">⧉ Copiar resumen</button></div>
+        </div>
+        <div class="surf cmb warn"><h3>Diagnóstico combinado: la salida a internet es lenta</h3><p>La red local está sana (3,1 ms a la puerta de enlace) pero los destinos públicos tardan 96 ms de media y se pierde el 4 % de los paquetes: el problema está fuera de tu red, en el proveedor.</p></div>
+        <div class="surf"><div class="tw"><table class="tbl"><thead><tr><th>Destino</th><th class="r">Pérdida</th><th class="r">Media (ms)</th><th class="r">Jitter (ms)</th></tr></thead>
+          <tbody><tr><td class="mono">1.1.1.1</td><td class="r">4 %</td><td class="r">92</td><td class="r">11</td></tr>
+          <tr><td class="mono">8.8.8.8</td><td class="r">0 %</td><td class="r">96</td><td class="r">9</td></tr>
+          <tr><td class="mono">9.9.9.9</td><td class="r">8 %</td><td class="r">101</td><td class="r">14</td></tr>
+          <tr><td class="mono">208.67.222.222</td><td class="r">0 %</td><td class="r">95</td><td class="r">10</td></tr></tbody></table></div></div>
+      </div>
+
+      <!-- Velocidad -->
+      <div id="res-speed" class="pw0" data-esc="velocidad">
+        <div class="surf rhead">
+          <div class="info"><div class="t"><span>Velocidad a internet</span><span class="tag ok">terminado</span></div><div class="phy">Servidor M-Lab: Madrid (mad03)</div></div>
+          <div class="acts"><button class="btn sm" type="button">↻ Repetir</button><button class="btn sm" type="button">⤓ Exportar</button><button class="btn sm" type="button">⧉ Copiar resumen</button></div>
+        </div>
+        <div class="bigs">
+          <div class="surf kpi"><div class="kpi-h"><span>Descarga ↓</span></div><div class="kpi-v">287 <small>Mbps</small></div><progress class="pb rev" max="100" value="100" aria-label="Descarga"></progress></div>
+          <div class="surf kpi"><div class="kpi-h"><span>Subida ↑</span></div><div class="kpi-v">41 <small>Mbps</small></div><progress class="pb" max="100" value="14" aria-label="Subida"></progress></div>
+          <div class="surf kpi"><div class="kpi-h"><span>Latencia</span></div><div class="kpi-v">17 <small>ms</small></div><div class="kpi-s">mín 14 / máx 29</div></div>
+        </div>
+        <p class="attr">Medido con NDT7 · M-Lab (datos abiertos CC0). Límite de 40 pruebas al día.</p>
+      </div>
+
+      <div id="res-empty-a" class="surf hempty" data-esc="cola diagnostico">El resultado aparecerá aquí cuando termine la operación en curso.</div>
+      <div id="res-empty-b" class="surf hempty" data-esc="vacio">Selecciona un equipo de la lista para empezar. Puedes lanzar Internet sin elegir destino.</div>
+    </section>
+
+    <section id="view-history" class="view hw" hidden>
+      <div class="alert info" data-esc="historial-desactivado"><span class="grow">El historial está desactivado: no se guardan resultados nuevos.</span><button class="link" type="button" data-go="ajustes">Activar en Ajustes</button></div>
+      <div id="hist-list" class="hw0" data-esc="!historial-registro">
+        <div class="surf hfilters">
+          <label class="fld">Equipo<select class="inp"><option>Todos</option><option>Oficina-PC</option><option>Puerta de enlace</option></select></label>
+          <label class="fld">Tipo<select class="inp"><option>Todos</option><option>TEST!</option><option>Ping</option><option>Traceroute</option><option>MTU</option><option>Puertos</option><option>Internet</option><option>Velocidad</option></select></label>
+          <label class="fld">Desde<input class="inp mono" type="date" value="2026-11-01"></label>
+          <label class="fld">Hasta<input class="inp mono" type="date" value="2026-11-20"></label>
+          <div class="acts"><button class="btn primary" type="button">Filtrar</button><button class="btn" type="button">Limpiar</button></div>
+        </div>
+        <div class="hbatch">
+          <div class="l"><label class="chk"><input type="checkbox"> Seleccionar todo</label><span class="muted2 mono">8 registros · 2 seleccionados</span></div>
+          <div class="r"><button class="btn primary" type="button" data-modal="exportar">Exportar seleccionados (2)</button><button class="btn" type="button" data-modal="borrar">Borrar seleccionados</button><button class="btn danger outline" type="button" data-modal="borrar-todo">Borrar todo</button></div>
+        </div>
+        <div class="surf hempty" data-esc="historial-desactivado">Sin registros. Los resultados nuevos no se guardan mientras el historial esté desactivado.</div>
+        <div class="surf" data-esc="!historial-desactivado"><div class="tw"><table class="tbl">
+          <thead><tr><th></th><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Resultado</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox" checked aria-label="Seleccionar"></td><td class="dt mono">20/11 09:14</td><td>Oficina-PC</td><td><span class="tcell">TEST! <span class="tag ok">terminado</span></span></td><td class="mono">↑318 / ↓702 Mbps</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" checked aria-label="Seleccionar"></td><td class="dt mono">20/11 09:02</td><td>Puerta de enlace</td><td><span class="tcell">Ping <span class="tag ok">terminado</span></span></td><td class="mono">0 % · 3,1 ms</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr class="rowerr"><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">19/11 17:40</td><td>Impresora-HQ</td><td><span class="tcell">Puertos <span class="tag err">error</span></span></td><td class="st">No se pudo resolver el destino</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">19/11 12:21</td><td>Oficina-PC</td><td><span class="tcell">TEST! <span class="tag warn">cancelado</span></span></td><td class="mono">↑305 Mbps</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">18/11 10:42</td><td>Internet</td><td><span class="tcell">Velocidad <span class="tag ok">terminado</span></span></td><td class="mono">↓287 / ↑41 Mbps</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">18/11 10:30</td><td>Internet</td><td><span class="tcell">Internet <span class="tag warn">terminado</span></span></td><td class="mono">4 % · 96 ms</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">17/11 16:05</td><td>Puerta de enlace</td><td><span class="tcell">MTU <span class="tag ok">terminado</span></span></td><td class="mono">1500 B</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+            <tr><td><input type="checkbox" aria-label="Seleccionar"></td><td class="dt mono">17/11 15:58</td><td>Puerta de enlace</td><td><span class="tcell">Traceroute <span class="tag ok">terminado</span></span></td><td class="mono">6 saltos</td><td><button class="btn sm" type="button" data-go="historial-registro">Abrir</button></td></tr>
+          </tbody></table></div></div>
+      </div>
+      <div class="hw0" data-esc="historial-registro">
+        <div class="hbatch"><button class="btn" type="button" data-go="historial">← Volver al historial</button><button class="btn primary" type="button" data-modal="exportar">Exportar este registro</button></div>
+        <div id="slot-hist" class="hw0"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="backdrop" class="backdrop"></div>
+<aside id="drawer" class="drawer" aria-label="Panel lateral">
+  <div class="drawer-head"><span id="drawer-title" class="drawer-title">Tarjetas de red</span><button id="drawer-close" class="btn sm icon" type="button" aria-label="Cerrar">✕</button></div>
+  <div id="drawer-adapters" class="drawer-pane" hidden>
+    <div class="surf nic act">
+      <div class="nic-h"><span class="ico wifi" aria-hidden="true"></span><span class="n">Wi-Fi · CasaWiFi</span><span class="tag ok">Activa</span></div>
+      <dl class="kvg">
+        <div><dt>SSID</dt><dd>CasaWiFi</dd></div><div><dt>Banda / canal</dt><dd>5 GHz · 36</dd></div>
+        <div><dt>Señal</dt><dd>78 % · −55 dBm</dd></div><div><dt>Estándar</dt><dd>Wi-Fi 6</dd></div>
+        <div><dt>Tasa ↑ / ↓ (en vivo)</dt><dd>1,2 / 38,4 Mbps</dd></div><div><dt>Enlace ↑ / ↓</dt><dd>721 / 961 Mbps</dd></div>
+        <div><dt>IPv4</dt><dd>192.168.1.20</dd></div><div><dt>Adaptador</dt><dd>Intel Wi-Fi 6 AX201</dd></div>
+        <div><dt>BSSID</dt><dd>a4:2b:b0:11:5c:9e</dd></div><div><dt>MAC</dt><dd>3c:58:c2:0d:77:41</dd></div>
+      </dl>
+    </div>
+    <details class="acc" id="acc-inactive">
+      <summary>Ver 5 interfaces inactivas o virtuales (Ethernet, Bluetooth, Tailscale…)</summary>
+      <div class="surf nic dim"><div class="nic-h"><span class="ico eth" aria-hidden="true"></span><span class="n">Ethernet</span><span class="tag">desconectada</span></div><span class="muted2 mono">1 Gbps nominal</span></div>
+      <div class="surf nic dim"><div class="nic-h"><span class="ico other" aria-hidden="true"></span><span class="n">Conexión de red Bluetooth</span><span class="tag">desconectada</span></div></div>
+      <div class="surf nic dim"><div class="nic-h"><span class="ico other" aria-hidden="true"></span><span class="n">Tailscale</span><span class="tag accent">virtual</span></div><span class="muted2 mono">100.101.4.7</span></div>
+      <div class="surf nic dim"><div class="nic-h"><span class="ico other" aria-hidden="true"></span><span class="n">vEthernet (WSL)</span><span class="tag accent">virtual</span></div><span class="muted2 mono">172.24.80.1</span></div>
+      <div class="surf nic dim"><div class="nic-h"><span class="ico other" aria-hidden="true"></span><span class="n">Wi-Fi Direct Virtual Adapter</span><span class="tag accent">virtual</span></div></div>
+    </details>
+    <h2 class="hl">Tráfico en vivo (últimos 5 min)</h2>
+    <div class="surf gcard">
+      <div class="gh"><span class="t">Wi-Fi</span><span class="legend"><span><i class="r"></i>↓ recibido</span><span><i class="f"></i>↑ enviado</span></span></div>
+      <div class="plot sm" role="img" aria-label="Tráfico del adaptador Wi-Fi en los últimos 5 minutos">
+        <div class="yl"><span>80</span><span>0</span></div>
+        <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true"><line class="g-grid" x1="0" y1="50" x2="300" y2="50"/>
+          <polyline class="g-rev" points="0.0,94.1 10.0,86.0 20.0,87.4 30.0,71.5 40.0,64.4 50.0,56.4 60.0,50.4 70.0,48.9 80.0,39.6 90.0,45.6 100.0,49.3 110.0,52.2 120.0,54.9 130.0,61.0 140.0,69.5 150.0,63.6 160.0,51.8 170.0,45.6 180.0,40.2 190.0,53.0 200.0,59.6 210.0,65.3 220.0,70.4 230.0,76.3 240.0,80.0 250.0,87.6 260.0,91.2 270.0,89.7 280.0,90.3 290.0,88.6 300.0,89.6"/>
+          <polyline class="g-fwd" points="0,97 20,95.5 40,96.5 60,96.2 80,95.8 100,94.2 120,96 140,95.5 160,94.1 180,95.5 200,94.6 220,93.9 240,93.6 260,94.9 280,95.6 300,95.1"/></svg>
+        <div class="xl"><span>−5 min</span><span>−2,5 min</span><span>ahora</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="drawer-settings" class="drawer-pane" hidden>
+    <div class="alert ok" role="status" data-esc="ajustes"><span class="grow">Guardado · Servidor reiniciado</span></div>
+    <div class="alert err" role="alert" data-esc="ajustes-error"><span class="grow">No se pudo guardar: el alias no puede estar vacío.</span></div>
+    <div class="surf set"><h3>Alias</h3><div class="hrow"><input class="inp" type="text" value="PC-Taller" maxlength="64" aria-label="Alias"><button class="btn" type="button" disabled>Guardar</button></div></div>
+    <div class="surf set"><h3>Clave compartida <span class="tag ok">Configurada</span></h3><p>Solo escritura; nunca se muestra.</p>
+      <div class="hrow"><input class="inp" type="password" placeholder="Nueva clave" aria-label="Nueva clave"><button class="btn" type="button">Guardar</button></div></div>
+    <div class="surf set"><h3>Historial local</h3>
+      <div class="dtoggle"><span>Guardar resultados en el historial</span><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Guardar resultados en el historial"></button></div>
+      <p>Se conservan 90 días o 50 MB.</p></div>
+    <div class="surf set"><h3>Destinos de latencia a internet <span class="muted2">(máx. 4)</span></h3>
+      <ul class="li"><li>1.1.1.1<button class="btn sm" type="button">Quitar</button></li><li>8.8.8.8<button class="btn sm" type="button">Quitar</button></li><li>9.9.9.9<button class="btn sm" type="button">Quitar</button></li><li>208.67.222.222<button class="btn sm" type="button">Quitar</button></li></ul>
+      <div class="hrow"><input class="inp mono" type="text" placeholder="IPv4 pública" aria-label="IPv4 pública" disabled><button class="btn" type="button" disabled>Añadir</button></div>
+      <p class="fnote">Has llegado al máximo de 4 destinos.</p>
+      <button class="btn sm" type="button">Restaurar valores por defecto</button></div>
+    <div class="surf set"><h3>Subredes extra</h3>
+      <ul class="li"><li>10.20.0.0/24<button class="btn sm" type="button">Quitar</button></li></ul>
+      <div class="hrow"><input class="inp mono" type="text" placeholder="192.168.x.0/24" aria-label="Subred"><button class="btn" type="button">Añadir</button></div></div>
+  </div>
+</aside>
+
+<div id="mdl-back" class="mdl-back" hidden>
+  <div id="mdl-mlab" class="mdl" role="dialog" aria-modal="true" aria-labelledby="mlab-t" hidden>
+    <h2 id="mlab-t">Velocidad a internet con M-Lab</h2>
+    <p>La prueba mide contra un servidor público de M-Lab (NDT7). M-Lab publica como datos abiertos (CC0) la IP pública desde la que mides junto con el resultado.</p>
+    <p>Consume datos durante unos 20 s en descarga y subida. Hay un límite de 40 pruebas al día.</p>
+    <div class="foot"><span class="links"><button class="link" type="button">Política de M-Lab</button><button class="link" type="button">Política de NPerf</button></span>
+      <span class="acts"><button id="mlab-cancel" class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" data-close>Aceptar y medir</button></span></div>
+  </div>
+  <div id="mdl-exportar" class="mdl" role="dialog" aria-modal="true" aria-labelledby="exp-t" hidden>
+    <h2 id="exp-t">Exportar 2 registros</h2>
+    <label class="fld">Formato<select class="inp"><option>CSV para Excel (ES)</option><option>CSV estándar</option><option>JSON</option><option>HTML autocontenido</option></select></label>
+    <label class="fld">Cliente (opcional)<input class="inp" type="text"></label>
+    <label class="fld">Técnico (opcional)<input class="inp" type="text"></label>
+    <label class="fld">Notas (opcional)<textarea rows="2"></textarea></label>
+    <label class="chk"><input type="checkbox"> Incluir intervalos (segundo CSV)</label>
+    <div class="foot"><span></span><span class="acts"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button">Exportar…</button></span></div>
+  </div>
+  <div id="mdl-borrar" class="mdl" role="alertdialog" aria-modal="true" aria-labelledby="bor-t" hidden>
+    <h2 id="bor-t">Borrar registros</h2>
+    <p>¿Borrar los 2 registros seleccionados? Esta acción no se puede deshacer.</p>
+    <div class="foot"><span></span><span class="acts"><button class="btn" type="button" data-close>Cancelar</button><button class="btn danger" type="button">Borrar</button></span></div>
+  </div>
+  <div id="mdl-borrar-todo" class="mdl" role="alertdialog" aria-modal="true" aria-labelledby="bot-t" hidden>
+    <h2 id="bot-t">Borrar todo el historial</h2>
+    <p>¿Borrar todo el historial (8 registros)? Esta acción no se puede deshacer.</p>
+    <div class="foot"><span></span><span class="acts"><button class="btn" type="button" data-close>Cancelar</button><button class="btn danger" type="button">Borrar todo</button></span></div>
+  </div>
+</div>
+
+<select id="m-esc" class="inp m-tool" aria-label="Escenario de la maqueta"></select>
+<script src="shell.js"></script>
+<script src="maqueta.js"></script>
+</body>
+</html>

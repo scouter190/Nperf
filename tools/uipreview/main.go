@@ -22,8 +22,8 @@ import (
 // csp es la misma política que internal/gui (StaticHandler).
 const csp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
-// extras se sirven siempre (la maqueta carga shell.js; mock.js solo se inyecta en /app).
-var extras = []string{"shell.js", "mock.js"}
+// extras se sirven siempre (la maqueta carga shell.js y maqueta.js; mock.js solo se inyecta en /app).
+var extras = []string{"shell.js", "mock.js", "maqueta.js"}
 
 var refRe = regexp.MustCompile(`(?:src|href)="([A-Za-z0-9_.-]+\.(?:js|css))"`)
 
@@ -96,7 +96,11 @@ func Handler(webDir, maqueta, host string) http.Handler {
 				http.NotFound(w, r)
 				return
 			}
-			b, err := os.ReadFile(filepath.Join(webDir, name))
+			dir := webDir
+			if name == "maqueta.js" { // script propio de la maqueta, junto a maqueta.html
+				dir = filepath.Dir(maqueta)
+			}
+			b, err := os.ReadFile(filepath.Join(dir, name))
 			if err != nil {
 				http.NotFound(w, r)
 				return

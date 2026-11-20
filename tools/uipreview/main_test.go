@@ -25,6 +25,7 @@ func setup(t *testing.T) http.Handler {
 	w("secreto.txt", "x")
 	w("otro.js", "//x")
 	w("shell.js", "//shell")
+	w("maqueta.js", "//maqueta")
 	return Handler(d, filepath.Join(d, "maqueta.html"), "example.com")
 }
 
@@ -38,7 +39,7 @@ func get(h http.Handler, path string) *httptest.ResponseRecorder {
 
 func TestCSPYMock(t *testing.T) {
 	h := setup(t)
-	for _, p := range []string{"/app", "/maqueta", "/app.css", "/shell.js"} {
+	for _, p := range []string{"/app", "/maqueta", "/app.css", "/shell.js", "/maqueta.js"} {
 		w := get(h, p)
 		if w.Code != 200 || w.Header().Get("Content-Security-Policy") != csp {
 			t.Fatalf("%s: código %d, CSP %q", p, w.Code, w.Header().Get("Content-Security-Policy"))
@@ -93,12 +94,12 @@ func TestCSPIgualQueGUI(t *testing.T) {
 
 func TestListaDeIndex(t *testing.T) {
 	m := permitidos([]byte(`<link rel="stylesheet" href="app.css"><script src="sidebar.js"></script><script src="https://x/y.js"></script>`))
-	for _, n := range []string{"app.css", "sidebar.js", "mock.js", "shell.js"} {
+	for _, n := range []string{"app.css", "sidebar.js", "mock.js", "shell.js", "maqueta.js"} {
 		if m[n] == "" {
 			t.Errorf("falta %s", n)
 		}
 	}
-	if len(m) != 4 {
+	if len(m) != 5 {
 		t.Fatalf("lista inesperada: %v", m)
 	}
 }
