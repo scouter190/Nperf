@@ -725,3 +725,50 @@ P.copyText('x').then(()=>{assert(copied);console.log('ok');});`
 		t.Fatalf("resumen y exportar del Panel: %v\n%s", err, out)
 	}
 }
+
+// Spec 008 T17: sin ids huérfanos. Todo id que el JS busca existe en index.html (o lo crea el propio JS)
+// y todo id de index.html se referencia desde JS, CSS o atributos del HTML.
+func TestIDsReferenced(t *testing.T) {
+	h := read(t, "index.html")
+	css := read(t, "app.css")
+	var js strings.Builder
+	files, _ := fs.Glob(Files(), "*.js")
+	for _, f := range files {
+		if f == "mock.js" {
+			continue
+		}
+		js.WriteString(read(t, f))
+		js.WriteString("\n")
+	}
+	allJS := js.String()
+	htmlIDs := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\bid="([^"]+)"`).FindAllStringSubmatch(h, -1) {
+		htmlIDs[m[1]] = true
+	}
+	created := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\.id = '([^']+)'|\bid: '([^']+)'`).FindAllStringSubmatch(allJS, -1) {
+		created[m[1]+m[2]] = true
+	}
+	refRe := regexp.MustCompile(`(?:\$|byId|getElementById)\('([a-zA-Z0-9_-]+)'\)`)
+	refs := map[string]bool{}
+	for _, m := range refRe.FindAllStringSubmatch(allJS, -1) {
+		refs[m[1]] = true
+		if !htmlIDs[m[1]] && !created[m[1]] {
+			t.Errorf("el JS busca el id %q que no existe en index.html", m[1])
+		}
+	}
+	// Prefijos que shell.js compone ('view-' + nombre, 'drawer-', 'nav-', 'hdr-').
+	dyn := regexp.MustCompile(`^(view|drawer|nav|hdr)-`)
+	for id := range htmlIDs {
+		if refs[id] || dyn.MatchString(id) {
+			continue
+		}
+		q := regexp.QuoteMeta(id)
+		if regexp.MustCompile(`#`+q+`\b`).MatchString(css) ||
+			regexp.MustCompile(`(?:for|list|aria-[a-z]+|href)="#?`+q+`"`).MatchString(h) ||
+			strings.Contains(allJS, "'"+id+"'") || strings.Contains(allJS, "'#"+id+"'") {
+			continue
+		}
+		t.Errorf("el id %q de index.html no lo usa nadie", id)
+	}
+}

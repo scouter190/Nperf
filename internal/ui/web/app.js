@@ -54,7 +54,6 @@ function selectedDevice(s) {
   const all = (s.peers || []).concat(s.no_agent || []);
   return all.filter(function (p) { return p.id === s.selected_id; })[0];
 }
-function isNoAgent(s, id) { return (s.no_agent || []).some(function (p) { return p.id === id; }); }
 
 function renderBanners(s) {
   $('config-error').hidden = !s.config_error;

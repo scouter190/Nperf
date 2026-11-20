@@ -559,7 +559,6 @@
     sw.ariaChecked = core.ui.isDetailedMode ? 'true' : 'false';
     sw.addEventListener('click', function () {
       core.ui.isDetailedMode = !core.ui.isDetailedMode;
-      const cb = $('detailed'); if (cb) cb.checked = core.ui.isDetailedMode; // history.js lo lee hasta T16
       delete sig.detail; if (last) renderResult(last);
     });
     lab.appendChild(sw); row.appendChild(lab);

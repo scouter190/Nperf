@@ -239,7 +239,7 @@ function histOpenRecord(id) {
   Promise.resolve().then(function () { return nperf.historyRecord(id); })
     .then(function (r) {
       histOpen = r;
-      $('hist-detailed').checked = $('detailed').checked;
+      $('hist-detailed').checked = window.NPerfCore.ui.isDetailedMode;
       $('hist-list-view').hidden = true;
       $('hist-record-view').hidden = false;
       histRenderRecord();

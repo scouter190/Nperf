@@ -29,5 +29,5 @@ Olas: las tareas de una misma ola pueden ir en paralelo (archivos disjuntos). **
 - [x] T16 `history.js`: filtros con wrap, lote (seleccionar todo, contador, exportar/borrar seleccionados, borrar todo con modal), badge separado del tipo, registro en solo lectura con Volver y Exportar, aviso "Activar en Ajustes" y refresco del contador de la cabecera (history.js, app.css, ui_test.go) — TestHistoryUI reescrito; anti-DOM.
 
 ## Ola 6 (cierre)
-- [ ] T17 Limpieza: quitar CSS y JS muertos de la UI antigua; repasar que cada método de la lista blanca se usa y que no quedan IDs huérfanos (internal/ui/web/*, ui_test.go) — `go vet`, `go test ./...` y `-race` en verde; test de ids de index.html referenciados por el JS.
+- [x] T17 Limpieza: quitar CSS y JS muertos de la UI antigua; repasar que cada método de la lista blanca se usa y que no quedan IDs huérfanos (internal/ui/web/*, ui_test.go) — `go vet`, `go test ./...` y `-race` en verde; test de ids de index.html referenciados por el JS.
 - [x] T18 `docs/validacion-gui-v2.md` completo con los criterios 11-22 paso a paso (docs/validacion-gui-v2.md) — el reviewer comprueba que cada criterio manual tiene pasos y resultado esperado; validación del usuario en Windows 10 y 11.

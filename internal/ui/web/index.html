@@ -21,7 +21,7 @@
     <button id="hdr-settings" class="hdr-btn" type="button" title="Ajustes" aria-expanded="false"><span class="gear" aria-hidden="true">&#9881;</span><span class="lbl">Ajustes</span></button>
   </div>
 </header>
-<div id="banners">
+<div>
   <div id="config-error" class="alert err" role="alert" hidden><span id="config-error-text" class="grow"></span><button id="config-open" class="btn sm" type="button">Abrir Ajustes</button></div>
   <div id="firewall" class="alert warn" role="status" hidden></div>
   <div id="history-warning" class="alert warn" role="status" hidden></div>
@@ -52,7 +52,7 @@
 
   <main class="shell-content">
     <section id="view-panel" class="view pw">
-      <div class="surf opbar" id="opbar">
+      <div class="surf opbar">
         <div class="oprow">
           <label class="fld inline">Sentido
             <select id="direction" class="inp"></select>
@@ -67,7 +67,7 @@
           <button id="test" class="btn primary" type="button">TEST!</button>
           <button id="cancel" class="btn danger" type="button" hidden>Cancelar</button>
         </div>
-        <div id="probe-bar" class="oprow">
+        <div class="oprow">
           <button id="probe-ping" class="btn sm" type="button" data-kind="ping">Ping</button>
           <button id="probe-trace" class="btn sm" type="button" data-kind="trace">Traceroute</button>
           <button id="probe-mtu" class="btn sm" type="button" data-kind="mtu">MTU</button>
@@ -84,14 +84,13 @@
         </div>
       </div>
       <div id="panel-progress"></div>
-      <div id="slot-panel" class="pw0">
-        <input id="detailed" type="checkbox" hidden aria-hidden="true">
+      <div class="pw0">
         <div id="detail" class="pw0"></div>
       </div>
     </section>
 
     <section id="view-history" class="view hw" hidden>
-      <section id="history-panel" class="hw0" aria-label="Historial">
+      <section class="hw0" aria-label="Historial">
       <div id="hist-list-view">
         <div class="detail-head">
           <h2>Historial</h2>
@@ -110,7 +109,7 @@
           <label class="stack">Hasta
             <input id="hist-until" type="date">
           </label>
-          <span class="row hist-filter-btns"><button id="hist-apply" type="submit">Filtrar</button><button id="hist-reset" type="button">Limpiar</button></span>
+          <span class="row hist-filter-btns"><button type="submit">Filtrar</button><button id="hist-reset" type="button">Limpiar</button></span>
         </form>
         <p id="hist-msg" class="muted" role="status"></p>
         <div class="hist-actions">
@@ -159,7 +158,6 @@
     <div id="monitor" class="monitor"></div>
   </div>
   <div id="drawer-settings" class="drawer-pane" hidden></div>
-  <!-- Restos ocultos para internet.js hasta T15 (los Ajustes los construye drawers.js). -->
 </aside>
 
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>

@@ -10,7 +10,6 @@ const SPEED_LIMIT = 'Solo se hace cuando tú lo pides; el límite es de 40 prueb
 const SPEED_ATTRIBUTION = 'Velocidad medida con NDT7 de M-Lab (Measurement Lab), https://www.measurementlab.net/';
 const SPEED_DAILY_LIMIT = 40;
 
-function inetErr(e) { return String(e && e.message ? e.message : e); }
 function inetWhen(iso) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? String(iso || '-') : d.toLocaleString('es', { dateStyle: 'short', timeStyle: 'medium' });
