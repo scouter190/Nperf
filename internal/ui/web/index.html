@@ -85,9 +85,8 @@
       </div>
       <div id="panel-progress"></div>
       <div id="slot-panel" class="pw0">
-        <label class="chk"><input id="detailed" type="checkbox"> Modo detallado</label>
-        <div id="detail"></div>
-        <div id="charts"></div>
+        <input id="detailed" type="checkbox" hidden aria-hidden="true">
+        <div id="detail" class="pw0"></div>
       </div>
     </section>
 
@@ -96,9 +95,8 @@
       <div id="hist-list-view">
         <div class="detail-head">
           <h2>Historial</h2>
-          <label class="check"><input id="hist-enabled" type="checkbox"> Guardar resultados en el historial</label>
         </div>
-        <p id="hist-disabled" class="banner warn" role="status" hidden>El historial está desactivado: los nuevos resultados no se guardan. Los ya guardados se pueden consultar, exportar y borrar.</p>
+        <p id="hist-disabled" class="banner warn" role="status" hidden>El historial está desactivado: los nuevos resultados no se guardan. Los ya guardados se pueden consultar, exportar y borrar. <button id="hist-enable-link" type="button" class="linkbtn">Activar en Ajustes</button></p>
         <form id="hist-filters" class="hist-filters" autocomplete="off">
           <label class="stack">Equipo
             <input id="hist-host" type="text" maxlength="255" placeholder="Alias o IP">
@@ -112,20 +110,16 @@
           <label class="stack">Hasta
             <input id="hist-until" type="date">
           </label>
-          <span class="row hist-filter-btns"><button id="hist-apply" type="submit">Filtrar</button><button id="hist-reset" type="button">Quitar filtros</button></span>
+          <span class="row hist-filter-btns"><button id="hist-apply" type="submit">Filtrar</button><button id="hist-reset" type="button">Limpiar</button></span>
         </form>
         <p id="hist-msg" class="muted" role="status"></p>
         <div class="hist-actions">
           <label class="check"><input id="hist-all" type="checkbox"> Seleccionar todo</label>
           <span id="hist-count" class="muted"></span>
           <span class="spacer"></span>
+          <button id="hist-export-sel" type="button" class="primary">Exportar seleccionados</button>
           <button id="hist-del-sel" type="button">Borrar seleccionados</button>
           <button id="hist-del-all" type="button" class="danger">Borrar todo</button>
-        </div>
-        <div id="hist-confirm" class="banner warn hist-confirm" role="alertdialog" aria-labelledby="hist-confirm-text" hidden>
-          <span id="hist-confirm-text"></span>
-          <button id="hist-confirm-yes" type="button" class="danger">Borrar</button>
-          <button id="hist-confirm-no" type="button">Cancelar</button>
         </div>
         <div class="hist-scroll">
           <table id="hist-table" class="hist-table">
@@ -135,35 +129,11 @@
           </table>
         </div>
         <p id="hist-empty" class="muted" hidden>No hay registros que mostrar.</p>
-        <details id="hist-export" class="settings">
-          <summary>Exportar seleccionados</summary>
-          <div class="hist-export-form">
-            <label class="stack">Formato
-              <select id="hist-format">
-                <option value="csv">CSV para Excel</option>
-                <option value="csv-std">CSV estándar</option>
-                <option value="json">JSON</option>
-                <option value="html">Informe HTML</option>
-              </select>
-            </label>
-            <label class="stack">Cliente (opcional)
-              <input id="hist-client" type="text" maxlength="200">
-            </label>
-            <label class="stack">Técnico (opcional)
-              <input id="hist-tech" type="text" maxlength="200">
-            </label>
-            <label class="stack">Notas (opcional)
-              <textarea id="hist-notes" maxlength="2000" rows="3"></textarea>
-            </label>
-            <label class="check"><input id="hist-intervals" type="checkbox"> Incluir intervalos (segundo CSV)</label>
-            <span class="row"><button id="hist-export-go" type="button" class="primary">Exportar…</button></span>
-            <p id="hist-export-msg" class="muted" role="status"></p>
-          </div>
-        </details>
       </div>
       <div id="hist-record-view" hidden>
         <div class="detail-head">
-          <button id="hist-back" type="button">Volver a la lista</button>
+          <button id="hist-back" type="button">← Volver al historial</button>
+          <button id="hist-export-one" type="button" class="primary">Exportar este registro</button>
           <label class="check"><input id="hist-detailed" type="checkbox"> Modo detallado</label>
         </div>
         <p class="banner readonly">Registro guardado: solo lectura.</p>
@@ -188,35 +158,10 @@
     <p id="monitor-msg" class="muted" hidden></p>
     <div id="monitor" class="monitor"></div>
   </div>
-  <div id="drawer-settings" class="drawer-pane" hidden>
-    <div class="surf set"><h3>Alias</h3>
-      <div class="hrow"><input id="alias" class="inp" type="text" maxlength="64" aria-label="Alias"><button id="alias-save" class="btn" type="button">Guardar</button></div></div>
-    <div class="surf set"><h3>Clave compartida <span id="key-state" class="muted2"></span></h3>
-      <div class="hrow"><input id="key" class="inp" type="password" autocomplete="new-password" placeholder="Nueva clave" aria-label="Nueva clave"><button id="key-save" class="btn" type="button">Guardar</button></div></div>
-    <div class="surf set"><h3>Historial local</h3>
-      <label class="chk"><input id="set-history" type="checkbox"> Guardar resultados en el historial</label>
-      <span id="set-history-msg" class="err-text" hidden></span></div>
-    <div class="surf set"><h3>Destinos de latencia a internet <span class="muted2">(máx. 4)</span></h3>
-      <ul id="targets" class="li"></ul>
-      <div class="hrow"><input id="target" class="inp mono" type="text" maxlength="64" placeholder="IPv4 pública, p. ej. 9.9.9.9" aria-label="Nuevo destino de latencia"><button id="target-add" class="btn" type="button">Añadir</button></div>
-      <button id="targets-default" class="btn sm" type="button">Restaurar valores por defecto</button>
-      <span id="targets-error" class="err-text" role="alert" hidden></span></div>
-    <div class="surf set"><h3>Subredes extra</h3>
-      <ul id="subnets" class="li"></ul>
-      <div class="hrow"><input id="subnet" class="inp mono" type="text" placeholder="192.168.2.0/24" aria-label="Subred"><button id="subnet-add" class="btn" type="button">Añadir</button></div></div>
-  </div>
+  <div id="drawer-settings" class="drawer-pane" hidden></div>
+  <!-- Restos ocultos para internet.js hasta T15 (los Ajustes los construye drawers.js). -->
 </aside>
 
-<div id="speed-dialog" class="modal-back" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title">
-    <h2 id="speed-title"></h2>
-    <p id="speed-ip"></p>
-    <p id="speed-data"></p>
-    <p id="speed-limit"></p>
-    <p class="row speed-policies"><button id="speed-policy-mlab" type="button">Política de M-Lab</button><button id="speed-policy-nperf" type="button">Política de NPerf</button></p>
-    <p class="row speed-buttons"><button id="speed-cancel" type="button">Cancelar</button><button id="speed-accept" type="button" class="primary">Aceptar y medir</button></p>
-  </div>
-</div>
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 <script src="chart.js"></script>
 <script src="app.js"></script>

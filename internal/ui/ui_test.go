@@ -176,7 +176,7 @@ func TestHistoryUI(t *testing.T) {
 			t.Errorf("mock.js no simula %s", c[1])
 		}
 	}
-	for _, s := range []string{"nperf.exportHistory(", "nperf.deleteAllHistory(", "nperf.deleteHistory(", "nperf.setHistoryEnabled(", "history_warning", "cancelado", "reportView(", "chartBlock("} {
+	for _, s := range []string{"nperf.exportHistory(", "nperf.deleteAllHistory(", "nperf.deleteHistory(", "history_warning", "cancelado", "reportView(", "chartBlock("} {
 		if !strings.Contains(js, s) {
 			t.Errorf("history.js no contiene %q", s)
 		}
@@ -184,6 +184,21 @@ func TestHistoryUI(t *testing.T) {
 	// El campo de ruta nunca se envía: la elige el diálogo nativo.
 	if regexp.MustCompile(`\bpath\b`).MatchString(js) {
 		t.Error("history.js no debe manejar rutas de entrada")
+	}
+}
+
+// Rediseño del Historial (spec 008 T16): modales compartidos, sin checkbox ni formulario embebidos.
+func TestHistoryRedesign(t *testing.T) {
+	js, h := read(t, "history.js"), read(t, "index.html")
+	for _, s := range []string{"openExport(", "openConfirmDelete(", "hist-kind-name", "hist-export-one", "Activar en Ajustes"} {
+		if !strings.Contains(js+h, s) {
+			t.Errorf("falta %q", s)
+		}
+	}
+	for _, id := range []string{`id="hist-enabled"`, `id="hist-export-go"`, `id="hist-confirm"`, `id="hist-format"`} {
+		if strings.Contains(h, id) {
+			t.Errorf("index.html no debe contener %s", id)
+		}
 	}
 }
 
@@ -200,7 +215,7 @@ func TestInternetUI(t *testing.T) {
 		t.Error("index.html no debe tener URLs externas")
 	}
 	for _, s := range []string{"nperf.openPrivacy('" + app.PrivacyMLab + "')", "nperf.openPrivacy('" + app.PrivacyNPerf + "')", "nperf.startInternet(", "nperf.setInternetTargets(", "Aceptar y medir"} {
-		if !strings.Contains(js+html, s) {
+		if !strings.Contains(js+html+read(t, "drawers.js"), s) {
 			t.Errorf("falta %q", s)
 		}
 	}
@@ -223,7 +238,8 @@ func TestInternetUI(t *testing.T) {
 	if m == nil || !strings.Contains(m[1], "nperf.startSpeed(true)") {
 		t.Error("startSpeed(true) debe estar dentro de acceptSpeed")
 	}
-	if strings.Count(js, "acceptSpeed") != 2 || !strings.Contains(js, "$('speed-accept').addEventListener('click', acceptSpeed)") {
+	// acceptSpeed solo se enlaza como onClick de la acción "Aceptar y medir" del modal.
+	if strings.Count(js, "acceptSpeed") != 2 || !regexp.MustCompile(`label: 'Aceptar y medir'[^\n]*onClick: function \(\) \{ acceptSpeed\(\); \}`).MatchString(js) {
 		t.Error("acceptSpeed solo debe ser el manejador del botón de aceptar")
 	}
 	if strings.Contains(js, "startSpeed(false") || strings.Contains(mock, "startSpeed(") {
@@ -231,34 +247,80 @@ func TestInternetUI(t *testing.T) {
 	}
 }
 
-// reportView no debe fallar con resultados parciales (TEST! cancelado sin rtt, tcp o udp).
-func TestReportViewPartial(t *testing.T) {
+// El consentimiento de M-Lab usa el modal genérico: foco en Cancelar, enlaces a la izquierda,
+// sin diálogo propio en el HTML y Repetir reabre el modal.
+func TestInternetConsentModal(t *testing.T) {
+	js, html := read(t, "internet.js"), read(t, "index.html")
+	if strings.Contains(html, "speed-dialog") || strings.Contains(js, "speed-dialog") {
+		t.Error("el consentimiento no debe tener diálogo propio")
+	}
+	for _, s := range []string{"NPerfModals", "links: [", "buttons.cancel.focus()", "SPEED_LIMIT", "NPerfInternet", "openSpeedConsent"} {
+		if !strings.Contains(js, s) {
+			t.Errorf("internet.js no contiene %q", s)
+		}
+	}
+	if !strings.Contains(js, "límite es de 40 pruebas al día") {
+		t.Error("falta el texto fijo del límite de 40 pruebas al día")
+	}
+	if regexp.MustCompile(`(?i)innerHTML|insertAdjacentHTML|outerHTML`).MatchString(js) {
+		t.Error("internet.js no debe usar HTML dinámico")
+	}
+}
+
+// Resultados del Panel (spec 008 T10): informes parciales sin error y "—" en lugar de 0.
+func TestPanelResultsPartial(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node no disponible")
 	}
 	dir := t.TempDir()
-	script := filepath.Join(dir, "t.js")
-	app := filepath.Join(dir, "app.js")
-	if err := os.WriteFile(app, []byte(read(t, "app.js")), 0o600); err != nil {
+	app := read(t, "app.js")
+	core := app[strings.Index(app, "// Núcleo reutilizable"):]
+	if err := os.WriteFile(filepath.Join(dir, "core.js"), []byte(core), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	js := `const vm=require('vm'),fs=require('fs');
-function node(tag){return {tag,children:[],textContent:'',className:'',appendChild(c){this.children.push(c);return c;}};}
-const ctx={window:{},document:{createElement:node,addEventListener(){},getElementById(){return null;},querySelector(){return null;}},JSON,Date,Promise,Object,Array,String,Number,setTimeout(){},setInterval(){},clearTimeout(){}};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
-const st={directions:[{value:'fwd',label:'a'},{value:'rev',label:'b'}],self:{alias:'x'},peers:[],no_agent:[],selected_id:'',test:{report:null,diagnosis:null}};
-for (const r of [{}, {tcp:{fwd:{status:'measured',throughput_mbps:5,bytes:1,retransmissions:null}}}, {rtt:{status:'measured',min_ms:1,avg_ms:1,max_ms:1}, udp:{}}, {tcp:{}, notes:null}]) {
-  st.test.report=r;
-  for (const d of [true,false]) { ctx.__r=r; ctx.__s=st; ctx.__d=d; vm.runInContext('reportView(__s, __d)',ctx); }
+	if err := os.WriteFile(filepath.Join(dir, "panel.js"), []byte(read(t, "panel.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert'),path=require('path');
+function node(tag){return {tag,children:[],textContent:'',className:'',appendChild(c){this.children.push(c);this.lastChild=c;return c;},setAttribute(){},addEventListener(){}};}
+const ctx={window:{},document:{createElement:node,createTextNode:(x)=>({text:x}),addEventListener(){},getElementById(){return null;}},JSON,Date,Promise,Object,Array,String,Number,Math,Set,isFinite,setTimeout(){},clearTimeout(){}};
+ctx.el=(tag,cls,text)=>{const e=node(tag);e.className=cls||'';if(text!==undefined)e.textContent=String(text);return e;};
+vm.createContext(ctx);
+for (const f of ['core.js','panel.js']) vm.runInContext(fs.readFileSync(path.join(process.argv[2],f),'utf8'),ctx);
+const P=ctx.window.NPerfPanel;
+const peer={id:'p1',alias:'Srv',ips:['10.0.0.2']};
+const base=()=>({directions:[],self:{alias:'x'},peers:[peer],no_agent:[],selected_id:'p1',direction:'both',can_test:true,can_probe:true,test:{status:'done',report:null,diagnosis:null},probe:{status:'idle'}});
+const reports=[{},{tcp:{fwd:{status:'measured',throughput_mbps:5,bytes:1,retransmissions:null}}},{rtt:{status:'measured',min_ms:1,avg_ms:1,max_ms:1},udp:{}},{tcp:{},notes:null},{tcp:{fwd:{status:'unavailable'}},udp:{fwd:{status:'measured',throughput_mbps:1,udp:null}}}];
+for (const r of reports) for (const det of [true,false]) {
+  ctx.window.NPerfCore.ui.isDetailedMode=det;
+  const s=base();s.test.report=r;
+  P.buildResult(s,'test');
+  const k=P.kpiModels(s);
+  assert.strictEqual(k.length,4);
+  if(!r.tcp||!r.tcp.rev){const v=k.filter(x=>x.id==='tcp_rev')[0];assert.strictEqual(v.value,'—');assert.strictEqual(v.foot,'No medido');}
+  if(!r.rtt){assert.strictEqual(k.filter(x=>x.id==='rtt')[0].value,'—');}
+  if(!r.udp||!r.udp.fwd||!r.udp.fwd.udp){assert.strictEqual(k.filter(x=>x.id==='udp')[0].value,'—');}
 }
+let s=base();s.test.report={tcp:{fwd:{status:'unavailable'}}};
+assert.strictEqual(P.kpiModels(s)[0].foot,'No disponible');
+// cancelado sin informe ni gráfica, error, probe parcial
+s=base();s.test={status:'cancelled'};P.buildResult(s,'test');
+s=base();s.test={status:'error',error:'x'};P.buildResult(s,'test');
+s=base();s.test={status:'running',phase:'tcp_fwd',chart:{phases:[{phase:'tcp_fwd',available:true,samples:[[0,1,300,null,null,null]],rtt_initial:null,loaded_rtt:null}]}};
+assert.strictEqual(P.kpiModels(s)[0].value,'300');assert.strictEqual(P.kpiModels(s)[1].value,'—');
+for (const k of ['ping','trace','mtu','ports','internet','speed']){s=base();s.probe={status:'done',kind:k,target_id:'p1',result:{},combined:null};s.test={status:'idle'};assert.strictEqual(P.viewMode(s,false),'probe');P.buildResult(s,'probe');}
+// internet y velocidad no dependen del destino seleccionado
+s=base();s.selected_id='';s.test={status:'idle'};s.probe={status:'done',kind:'internet',result:{}};assert.strictEqual(P.viewMode(s,false),'probe');
+assert(P.headModel(s,'probe').repeat.enabled);
 console.log('ok');`
+	script := filepath.Join(t.TempDir(), "t.js")
 	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(node, script, app).CombinedOutput()
+	out, err := exec.Command(node, script, dir).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok") {
-		t.Fatalf("reportView falla con resultados parciales: %v\n%s", err, out)
+		t.Fatalf("resultados del Panel: %v\n%s", err, out)
 	}
 }
 
@@ -544,5 +606,72 @@ console.log('ok');`
 	out, err := exec.Command(node, script, panel).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok") {
 		t.Fatalf("panel.js: %v\n%s", err, out)
+	}
+}
+
+// drawers.js Ajustes (spec 008 T13): la clave no se escribe en ningun nodo; el reinicio solo con alias/clave/subredes.
+func TestSettingsDrawer(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "drawers.js")
+	if err := os.WriteFile(src, []byte(read(t, "drawers.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "t.js")
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+function node(tag){const n={tag,children:[],listeners:{},className:'',textContent:'',value:'',hidden:false,disabled:false,attrs:{},
+ appendChild(c){n.children.push(c);return c;},get firstChild(){return n.children[0]||null;},removeChild(c){n.children.splice(n.children.indexOf(c),1);},
+ addEventListener(e,f){n.listeners[e]=f;},setAttribute(k,v){n.attrs[k]=v;},click(){return n.listeners.click&&n.listeners.click();}};return n;}
+function all(n,out){out=out||[];out.push(n);n.children.forEach(c=>all(c,out));return out;}
+const doc={createElement:node,addEventListener(){},activeElement:null};
+const pending=new Set();
+const core={ui:{pendingActions:pending},setValueIfIdle(i,v){i.value=v;},renderIf(k,v,f){f(v);},
+ busy(b,p,t){if(b){pending.add(b);b.disabled=true;}return Promise.resolve(p).then(v=>{if(b){pending.delete(b);b.disabled=false;}return v;},e=>{if(b){pending.delete(b);b.disabled=false;}throw e;});}};
+const ctx={window:{},document:doc,Promise,isFinite,String,Number,Set,JSON};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const calls=[];let fail=false;
+const nperf=new Proxy({},{get:(_,m)=>(...a)=>{calls.push(m);return fail?Promise.reject(new Error('boom')):Promise.resolve();}});
+const S=ctx.window.NPerfDrawers.createSettings(core,nperf);
+const els=all(S.root);
+const byAria=l=>els.find(e=>e.ariaLabel===l);
+const btnIn=i=>{const row=els.find(e=>e.className==='hrow'&&e.children.includes(i));return row.children[1];};
+const tick=()=>new Promise(r=>setTimeout(r,5));
+(async()=>{
+ S.render({alias:'PC',has_key:true,history_enabled:true,internet_targets:['1.1.1.1'],extra_subnets:['10.0.0.0/24']});
+ assert(els.some(e=>e.textContent==='Configurada'));
+ const alias=byAria('Alias'),key=byAria('Nueva clave'),sub=byAria('Subred'),tin=byAria('Nuevo destino de latencia');
+ assert.strictEqual(btnIn(alias).disabled,true);           // sin cambios
+ alias.value='Otro';alias.listeners.input();assert.strictEqual(btnIn(alias).disabled,false);
+ btnIn(alias).click();await tick();assert.strictEqual(S.banner.textContent,'Guardado · servidor reiniciado');
+ const SECRET='s3cr3t-clave';key.value=SECRET;key.listeners.input();btnIn(key).click();
+ assert.strictEqual(key.value,'');
+ await tick();assert.strictEqual(S.banner.textContent,'Guardado · servidor reiniciado');
+ assert(!all(S.root).some(e=>String(e.textContent).includes(SECRET)||String(e.value).includes(SECRET)));
+ assert.deepStrictEqual(calls,['setAlias','setKey']);
+ // destinos: sin texto de reinicio; IPv4 invalida no llama
+ tin.value='999.1.1.1';btnIn(tin).click();await tick();assert.deepStrictEqual(calls,['setAlias','setKey']);
+ tin.value='9.9.9.9';btnIn(tin).click();await tick();
+ assert.strictEqual(S.banner.textContent,'Guardado');assert.strictEqual(calls[2],'setInternetTargets');
+ const rest=els.find(e=>e.textContent==='Restaurar valores por defecto');rest.click();await tick();
+ assert.strictEqual(S.banner.textContent,'Guardado');
+ S.render({alias:'PC',has_key:false,history_enabled:false,internet_targets:['a','b','c','d'],extra_subnets:[]});
+ assert.strictEqual(btnIn(tin).disabled,true);              // tope 4
+ const h=els.find(e=>e.type==='checkbox');h.checked=true;h.listeners.change();await tick();
+ assert.strictEqual(S.banner.textContent,'Guardado');assert.strictEqual(calls[calls.length-1],'setHistoryEnabled');
+ sub.value='192.168.2.0/24';btnIn(sub).click();await tick();
+ assert.strictEqual(S.banner.textContent,'Guardado · servidor reiniciado');assert.strictEqual(calls[calls.length-1],'addSubnet');
+ fail=true;sub.value='192.168.3.0/24';btnIn(sub).click();await tick();
+ assert(S.banner.textContent.startsWith('No se pudo guardar'));assert.strictEqual(btnIn(sub).disabled,false);
+ console.log('ok');
+})().catch(e=>{console.error(e);process.exit(1);});`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, src).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("ajustes: %v\n%s", err, out)
 	}
 }

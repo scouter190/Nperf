@@ -1,5 +1,5 @@
 'use strict';
-// Drawers de Tarjetas de red (T12) y Ajustes (T13 lo completa).
+// Drawers de Tarjetas de red (T12) y Ajustes (T13).
 // Todo dato de la red se inserta como texto. BSSID y MAC solo se muestran aquí.
 (function () {
   const ADAPTERS_MS = 5000, MONITOR_MS = 1000;
@@ -217,8 +217,179 @@
     });
   }
 
+  // ---- Ajustes (T13) ----
+  // La clave es solo escritura: nunca se guarda en un nodo, banner, toast ni registro.
+  const MAX_TARGETS = 4;
+  const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  const CIDR = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/(3[0-2]|[12]?\d)$/;
+  const RESTART_TEXT = 'Guardado · servidor reiniciado';
+
+  function createSettings(core, nperf) {
+    const root = mk('div', 'settings-pane');
+    let last = null;
+    const banner = mk('div', 'alert');
+    banner.hidden = true;
+    banner.role = 'status';
+    root.appendChild(banner);
+
+    function card(title) {
+      const c = mk('div', 'surf set');
+      const h = mk('h3', '', title);
+      c.appendChild(h);
+      root.appendChild(c);
+      return { el: c, h: h };
+    }
+    function button(text, cls) { const b = mk('button', cls || 'btn', text); b.type = 'button'; return b; }
+    function input(cls, label, type) {
+      const i = mk('input', cls); i.type = type || 'text'; i.ariaLabel = label;
+      return i;
+    }
+    function inlineError() { const e = mk('span', 'err-text'); e.hidden = true; e.role = 'alert'; return e; }
+    function setErr(e, msg) { e.hidden = !msg; e.textContent = msg || ''; }
+
+    function showBanner(kind, text) { banner.className = 'alert ' + kind; banner.hidden = false; banner.textContent = text; }
+    // restart: solo alias, clave y subredes reinician el servidor.
+    function run(btn, busyText, restart, call) {
+      showBanner('info', restart ? 'Aplicando y reiniciando el servidor…' : 'Guardando…');
+      return core.busy(btn, Promise.resolve().then(call), busyText).then(function () {
+        showBanner('ok', restart ? RESTART_TEXT : 'Guardado');
+        return true;
+      }, function (e) {
+        showBanner('err', 'No se pudo guardar: ' + errText(e));
+        return false;
+      });
+    }
+
+    // Alias
+    const aliasCard = card('Alias');
+    const aliasRow = mk('div', 'hrow'), aliasIn = input('inp', 'Alias'), aliasBtn = button('Guardar');
+    aliasIn.maxLength = 64;
+    aliasRow.appendChild(aliasIn); aliasRow.appendChild(aliasBtn); aliasCard.el.appendChild(aliasRow);
+    function aliasRefresh() {
+      const v = String(aliasIn.value || '').trim();
+      aliasBtn.disabled = !v || (last !== null && v === last.alias) || core.ui.pendingActions.has(aliasBtn);
+    }
+    aliasIn.addEventListener('input', aliasRefresh);
+    aliasBtn.addEventListener('click', function () {
+      const v = String(aliasIn.value).trim();
+      if (!v) return;
+      run(aliasBtn, 'Guardando…', true, function () { return nperf.setAlias(v); }).then(aliasRefresh);
+    });
+
+    // Clave
+    const keyCard = card('Clave compartida ');
+    const keyBadge = mk('span', 'tag', 'No configurada');
+    keyCard.h.appendChild(keyBadge);
+    keyCard.el.appendChild(mk('p', '', 'Solo escritura; nunca se muestra.'));
+    const keyRow = mk('div', 'hrow'), keyIn = input('inp', 'Nueva clave', 'password'), keyBtn = button('Guardar');
+    keyIn.placeholder = 'Nueva clave'; keyIn.autocomplete = 'new-password';
+    keyRow.appendChild(keyIn); keyRow.appendChild(keyBtn); keyCard.el.appendChild(keyRow);
+    function keyRefresh() { keyBtn.disabled = !String(keyIn.value) || core.ui.pendingActions.has(keyBtn); }
+    keyIn.addEventListener('input', keyRefresh);
+    keyBtn.addEventListener('click', function () {
+      const k = String(keyIn.value);
+      if (!k) return;
+      keyIn.value = '';   // vaciado antes de enviar: el campo nunca conserva la clave
+      keyRefresh();
+      run(keyBtn, 'Guardando…', true, function () { return nperf.setKey(k); }).then(keyRefresh);
+    });
+
+    // Historial
+    const histCard = card('Historial local');
+    const histLbl = mk('label', 'chk'), histChk = mk('input'); histChk.type = 'checkbox';
+    histLbl.appendChild(histChk); histLbl.appendChild(mk('span', '', ' Guardar resultados en el historial'));
+    histCard.el.appendChild(histLbl);
+    histCard.el.appendChild(mk('p', '', 'Se conservan 90 días o 50 MB como máximo.'));
+    let histBusy = false;
+    histChk.addEventListener('change', function () {
+      const on = !!histChk.checked;
+      histBusy = true; histChk.disabled = true;
+      run(null, '', false, function () { return nperf.setHistoryEnabled(on); }).then(function (ok) {
+        histBusy = false; histChk.disabled = false;
+        if (!ok && last) histChk.checked = !!last.history_enabled;
+      });
+    });
+
+    // Destinos de latencia
+    const tCard = card('Destinos de latencia a internet ');
+    tCard.h.appendChild(mk('span', 'muted2', '(máx. 4)'));
+    const tList = mk('ul', 'li');
+    const tRow = mk('div', 'hrow'), tIn = input('inp mono', 'Nuevo destino de latencia'), tAdd = button('Añadir');
+    tIn.placeholder = 'IPv4 pública, p. ej. 9.9.9.9'; tIn.maxLength = 64;
+    const tDef = button('Restaurar valores por defecto', 'btn sm'), tErr = inlineError();
+    tRow.appendChild(tIn); tRow.appendChild(tAdd);
+    [tList, tRow, tDef, tErr].forEach(function (n) { tCard.el.appendChild(n); });
+    function targets() { return (last && last.internet_targets) || []; }
+    function tRefresh() { tAdd.disabled = targets().length >= MAX_TARGETS || core.ui.pendingActions.has(tAdd); }
+    function setTargets(btn, list) {
+      setErr(tErr, '');
+      return run(btn, '…', false, function () { return nperf.setInternetTargets(list); }).then(function (ok) { tRefresh(); return ok; });
+    }
+    tAdd.addEventListener('click', function () {
+      const v = String(tIn.value).trim(), cur = targets();
+      if (!IPV4.test(v)) { setErr(tErr, 'Indique una dirección IPv4 válida (n.n.n.n).'); return; }
+      if (cur.indexOf(v) >= 0) { setErr(tErr, 'Ese destino ya está en la lista.'); return; }
+      if (cur.length >= MAX_TARGETS) { setErr(tErr, 'Máximo ' + MAX_TARGETS + ' destinos.'); return; }
+      setTargets(tAdd, cur.concat([v])).then(function (ok) { if (ok) tIn.value = ''; });
+    });
+    tIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tAdd.click(); } });
+    tDef.addEventListener('click', function () { setTargets(tDef, []); });
+
+    // Subredes
+    const sCard = card('Subredes extra');
+    const sList = mk('ul', 'li');
+    const sRow = mk('div', 'hrow'), sIn = input('inp mono', 'Subred'), sAdd = button('Añadir');
+    sIn.placeholder = '192.168.2.0/24';
+    const sErr = inlineError();
+    sRow.appendChild(sIn); sRow.appendChild(sAdd);
+    [sList, sRow, sErr].forEach(function (n) { sCard.el.appendChild(n); });
+    sAdd.addEventListener('click', function () {
+      const v = String(sIn.value).trim(), cur = (last && last.extra_subnets) || [];
+      setErr(sErr, '');
+      if (!CIDR.test(v)) { setErr(sErr, 'Indique una subred en formato 192.168.2.0/24.'); return; }
+      if (cur.indexOf(v) >= 0) { setErr(sErr, 'Esa subred ya está en la lista.'); return; }
+      run(sAdd, 'Añadiendo…', true, function () { return nperf.addSubnet(v); }).then(function (ok) { if (ok) sIn.value = ''; });
+    });
+    sIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sAdd.click(); } });
+
+    function listItems(ul, items, cls, onRemove, restart) {
+      emptyNode(ul);
+      if (!items.length) { ul.appendChild(mk('li', 'muted2', 'Ninguno')); return; }
+      items.forEach(function (n) {
+        const li = mk('li'), b = button('Quitar', 'btn sm');
+        li.appendChild(mk('span', cls, n));
+        b.title = 'Quitar ' + n;
+        b.addEventListener('click', function () { onRemove(b, n); });
+        li.appendChild(b); ul.appendChild(li);
+      });
+    }
+
+    function render(s) {
+      if (!s) return;
+      last = s;
+      keyBadge.className = 'tag' + (s.has_key ? ' ok' : '');
+      keyBadge.textContent = s.has_key ? 'Configurada' : 'No configurada';
+      core.setValueIfIdle(aliasIn, s.alias);
+      aliasRefresh(); keyRefresh();
+      if (!histBusy) histChk.checked = !!s.history_enabled;
+      core.renderIf('drawers.targets', s.internet_targets || [], function (list) {
+        listItems(tList, list, 'mono', function (b, n) {
+          setTargets(b, targets().filter(function (v) { return v !== n; }));
+        });
+      });
+      tRefresh();
+      core.renderIf('drawers.subnets', s.extra_subnets || [], function (list) {
+        listItems(sList, list, 'mono', function (b, n) {
+          run(b, '…', true, function () { return nperf.removeSubnet(n); });
+        });
+      });
+    }
+    return { root: root, render: render, banner: banner };
+  }
+
   function errText(e) { return String(e && e.message ? e.message : e); }
 
+  let settings = null;
   function init() {
     const core = window.NPerfCore, shell = window.NPerfShell;
     const poller = createPoller({
@@ -237,9 +408,15 @@
     byId('location-open').addEventListener('click', function () {
       Promise.resolve(window.nperf.openLocationSettings()).then(null, function (e) { core.pushToast(errText(e), 'error'); });
     });
+    const pane = byId('drawer-settings');
+    if (pane) {
+      settings = createSettings(core, window.nperf);
+      emptyNode(pane);
+      pane.appendChild(settings.root);
+    }
     poller.load(); // carga inicial; después solo con el drawer abierto
   }
 
-  window.NPerfDrawers = { render: function (s) { void s; }, wifiStandard: wifiStandard, createPoller: createPoller };
+  window.NPerfDrawers = { render: function (s) { if (settings) settings.render(s); }, wifiStandard: wifiStandard, createPoller: createPoller, createSettings: createSettings };
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('DOMContentLoaded', init);
 })();

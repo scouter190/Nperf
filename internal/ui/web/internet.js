@@ -10,8 +10,6 @@ const SPEED_LIMIT = 'Solo se hace cuando tú lo pides; el límite es de 40 prueb
 const SPEED_ATTRIBUTION = 'Velocidad medida con NDT7 de M-Lab (Measurement Lab), https://www.measurementlab.net/';
 const SPEED_DAILY_LIMIT = 40;
 
-let inetFocusBack = null;
-
 function inetErr(e) { return String(e && e.message ? e.message : e); }
 function inetWhen(iso) {
   const d = new Date(iso);
@@ -23,11 +21,18 @@ function statOk(st) { return st && st.rtt_status === 'ok' && typeof st.avg_ms ==
 function internetView(x, combined) {
   const box = el('div');
   if (!x) return box;
-  if (combined && combined.messages && combined.messages.length) box.appendChild(combinedView(combined));
+  // Cada hallazgo se muestra una sola vez aunque venga del diagnóstico combinado, el veredicto o la ruta.
+  const seen = Object.create(null);
+  const fresh = function (list) { return (list || []).filter(function (m) { if (seen[m]) return false; seen[m] = true; return true; }); };
+  const msgs = combined ? fresh(combined.messages) : [];
+  if (msgs.length) box.appendChild(combinedView({ healthy: combined.healthy, messages: msgs }));
   else if (x.verdict) {
-    box.appendChild(el('p', 'status-line inet-kind', x.verdict.message || 'Sin veredicto'));
-    if (Array.isArray(x.verdict.notes) && x.verdict.notes.length) box.appendChild(listOf('notes warn-notes', x.verdict.notes));
+    const vm = x.verdict.message || 'Sin veredicto';
+    seen[vm] = true;
+    box.appendChild(el('p', 'status-line inet-kind', vm));
   }
+  const vn = x.verdict ? fresh(x.verdict.notes) : [];
+  if (vn.length) box.appendChild(listOf('notes warn-notes', vn));
   const t = el('table');
   const hr = el('tr');
   ['Destino', 'RTT medio', 'Jitter', 'Pérdida', 'TCP 443'].forEach(function (c) { hr.appendChild(el('th', '', c)); });
@@ -63,7 +68,8 @@ function internetView(x, combined) {
     });
     box.appendChild(tt);
   }
-  if (Array.isArray(x.trace_notes) && x.trace_notes.length) box.appendChild(listOf('notes', x.trace_notes));
+  const tn = fresh(x.trace_notes);
+  if (tn.length) box.appendChild(listOf('notes', tn));
   return box;
 }
 
@@ -104,36 +110,42 @@ function speedView(x) {
   return box;
 }
 
-// ---- consentimiento de la prueba de velocidad ----
+// ---- consentimiento de la prueba de velocidad (modal de modals.js) ----
+let speedModal = null;
+
+function speedLink(text, which) {
+  const b = el('button', 'lnk', text); b.type = 'button';
+  b.addEventListener('click', function () {
+    if (which === 'mlab') Promise.resolve().then(function () { return nperf.openPrivacy('mlab'); }).then(null, toast);
+    else Promise.resolve().then(function () { return nperf.openPrivacy('nperf'); }).then(null, toast);
+  });
+  return b;
+}
 function openSpeedDialog() {
-  inetFocusBack = document.activeElement;
-  $('speed-title').textContent = SPEED_TITLE;
-  $('speed-ip').textContent = SPEED_IP;
-  $('speed-data').textContent = SPEED_DATA;
-  $('speed-limit').textContent = SPEED_LIMIT;
-  $('speed-dialog').hidden = false;
-  $('speed-cancel').focus();
+  const M = window.NPerfModals;
+  if (!M || speedModal) return null;
+  speedModal = M.open({
+    name: 'speed-consent',
+    title: SPEED_TITLE,
+    content: [el('p', '', SPEED_IP), el('p', '', SPEED_DATA), el('p', '', SPEED_LIMIT)],
+    links: [speedLink('Política de privacidad de M-Lab', 'mlab'), speedLink('Política de privacidad de NPerf', 'nperf')],
+    actions: [
+      { id: 'cancel', label: 'Cancelar', onClick: function (h) { h.close(); } },
+      { id: 'accept', label: 'Aceptar y medir', kind: 'primary', onClick: function () { acceptSpeed(); } }
+    ],
+    onClose: function () { speedModal = null; }
+  });
+  if (speedModal) speedModal.buttons.cancel.focus();
+  return speedModal;
 }
-function closeSpeedDialog() {
-  $('speed-dialog').hidden = true;
-  if (inetFocusBack && inetFocusBack.focus) inetFocusBack.focus();
-  inetFocusBack = null;
-}
-// Único punto desde el que se llama a startSpeed: el botón "Aceptar y medir" del diálogo.
+// Único punto desde el que se llama a startSpeed: el botón "Aceptar y medir" del modal.
 function acceptSpeed() {
-  closeSpeedDialog();
+  if (speedModal) speedModal.close();
   showProbe = true; delete sig.detail;
   act(nperf.startSpeed(true));
 }
-function speedDialogKeys(e) {
-  if (e.key === 'Escape') { e.preventDefault(); closeSpeedDialog(); return; }
-  if (e.key !== 'Tab') return;
-  const bs = Array.prototype.slice.call($('speed-dialog').querySelectorAll('button'));
-  const i = bs.indexOf(document.activeElement);
-  const n = e.shiftKey ? (i <= 0 ? bs.length - 1 : i - 1) : (i === bs.length - 1 ? 0 : i + 1);
-  e.preventDefault();
-  bs[n].focus();
-}
+// "Repetir" de una velocidad reabre el consentimiento; nunca mide directamente.
+window.NPerfInternet = { openSpeedConsent: openSpeedDialog };
 
 // ---- barra de pruebas a internet y ajustes (desde render de app.js) ----
 const INET_BTNS = [['internet', 'probe-internet', 'Internet'], ['speed', 'probe-speed', 'Velocidad a internet']];
@@ -148,27 +160,6 @@ function renderInternetState(s) {
     b.disabled = own ? p.status === 'cancelling' : !s.can_probe;
     b.title = own || s.can_probe ? '' : s.probe_blocked_reason;
   });
-  $('set-history').checked = !!s.history_enabled;
-  if (changed('targets', s.internet_targets)) {
-    const ul = $('targets'); clear(ul);
-    (s.internet_targets || []).forEach(function (n) {
-      const li = el('li'); li.appendChild(el('span', 'mono', n));
-      const b = el('button', '', 'Quitar'); b.type = 'button'; b.title = 'Quitar el destino ' + n;
-      b.addEventListener('click', function () { setTargets((last.internet_targets || []).filter(function (v) { return v !== n; })); });
-      li.appendChild(b); ul.appendChild(li);
-    });
-    $('target-add').disabled = (s.internet_targets || []).length >= 4;
-  }
-}
-
-function setTargetsError(msg) {
-  const e = $('targets-error');
-  e.hidden = !msg; e.textContent = msg || '';
-}
-function setTargets(list) {
-  setTargetsError('');
-  return Promise.resolve().then(function () { return nperf.setInternetTargets(list); })
-    .then(function () { delete sig.targets; return poll(); }, function (e) { setTargetsError(inetErr(e)); });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -180,25 +171,5 @@ document.addEventListener('DOMContentLoaded', function () {
   $('probe-speed').addEventListener('click', function () {
     if (last && last.probe && last.probe.running && last.probe.kind === 'speed') { act(nperf.cancelProbe()); return; }
     openSpeedDialog();
-  });
-  $('speed-accept').addEventListener('click', acceptSpeed);
-  $('speed-cancel').addEventListener('click', closeSpeedDialog);
-  $('speed-dialog').addEventListener('keydown', speedDialogKeys);
-  $('speed-policy-mlab').addEventListener('click', function () { Promise.resolve().then(function () { return nperf.openPrivacy('mlab'); }).then(null, toast); });
-  $('speed-policy-nperf').addEventListener('click', function () { Promise.resolve().then(function () { return nperf.openPrivacy('nperf'); }).then(null, toast); });
-  $('target-add').addEventListener('click', function () {
-    const v = $('target').value.trim();
-    if (!v) { setTargetsError('Indique una dirección IPv4 pública.'); return; }
-    const cur = (last && last.internet_targets) || [];
-    if (cur.indexOf(v) >= 0) { setTargetsError('Ese destino ya está en la lista.'); return; }
-    setTargets(cur.concat([v])).then(function () { if ($('targets-error').hidden) $('target').value = ''; });
-  });
-  $('target').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('target-add').click(); } });
-  $('targets-default').addEventListener('click', function () { setTargets([]); });
-  $('set-history').addEventListener('change', function () {
-    const on = $('set-history').checked, m = $('set-history-msg');
-    m.hidden = true;
-    Promise.resolve().then(function () { return nperf.setHistoryEnabled(on); })
-      .then(poll, function (e) { m.textContent = inetErr(e); m.hidden = false; return poll(); });
   });
 });

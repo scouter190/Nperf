@@ -6,16 +6,13 @@
 const HIST_KINDS = [['', 'Todos'], ['test', 'TEST!'], ['ping', 'Ping'], ['trace', 'Traceroute'], ['mtu', 'MTU'], ['ports', 'Puertos'], ['internet', 'Internet'], ['speed', 'Velocidad (M-Lab)']];
 const HIST_KIND_NAMES = { test: 'TEST!', ping: 'Ping', trace: 'Traceroute', mtu: 'MTU', ports: 'Puertos', internet: 'Internet', speed: 'Velocidad (M-Lab)' };
 const HIST_STATUS = { done: 'terminado', cancelled: 'cancelado', error: 'error' };
-const HIST_FORMATS = { csv: 1, 'csv-std': 1, json: 1, html: 1 };
 
 let histRecords = [];
 let histSkipped = 0;
 let histSelected = {};      // id -> true
 let histOpen = null;        // registro abierto (solo lectura) o null
-let histPending = null;     // 'sel' | 'all' mientras se pide confirmación
 let histLoading = false, histReload = false;
 let histSig = '';
-let histEnabledBusy = false;
 
 function histShown() { return !!(window.NPerfShell && window.NPerfShell.state.view === 'history'); }
 
@@ -90,11 +87,11 @@ function histSelectedIds() { return histRecords.map(function (r) { return r.id; 
 
 function histUpdateButtons() {
   const n = histSelectedIds().length, total = histRecords.length;
-  $('hist-count').textContent = total + ' registro' + (total === 1 ? '' : 's') + (n ? ' · ' + n + ' seleccionado' + (n === 1 ? '' : 's') : '');
+  $('hist-count').textContent = total + ' registro' + (total === 1 ? '' : 's') + ' · ' + n + ' seleccionado' + (n === 1 ? '' : 's');
   $('hist-del-sel').disabled = n === 0;
   $('hist-del-all').disabled = total === 0;
-  $('hist-export-go').disabled = n === 0;
-  $('hist-export').querySelector('summary').textContent = n ? 'Exportar seleccionados (' + n + ')' : 'Exportar seleccionados';
+  $('hist-export-sel').disabled = n === 0;
+  $('hist-export-sel').textContent = 'Exportar seleccionados (' + n + ')';
   const all = $('hist-all');
   all.checked = total > 0 && n === total;
   all.indeterminate = n > 0 && n < total;
@@ -109,8 +106,10 @@ function histRow(r) {
   cb.addEventListener('change', function () { if (cb.checked) histSelected[r.id] = true; else delete histSelected[r.id]; histUpdateButtons(); });
   c0.appendChild(cb); tr.appendChild(c0);
   tr.appendChild(el('td', '', histWhen(r.time)));
-  const k = el('td'); k.appendChild(document.createTextNode((HIST_KIND_NAMES[r.kind] || r.kind) + ' '));
-  k.appendChild(el('span', 'hist-badge ' + (HIST_STATUS[r.status] ? r.status : 'error'), HIST_STATUS[r.status] || r.status));
+  const k = el('td'); const kw = el('span', 'hist-kind');
+  kw.appendChild(el('span', 'hist-kind-name', HIST_KIND_NAMES[r.kind] || r.kind));
+  kw.appendChild(el('span', 'hist-badge ' + (HIST_STATUS[r.status] ? r.status : 'error'), HIST_STATUS[r.status] || r.status));
+  k.appendChild(kw);
   tr.appendChild(k);
   tr.appendChild(el('td', '', histDest(r)));
   tr.appendChild(el('td', 'hist-res', histSummary(r)));
@@ -145,48 +144,28 @@ function histLoad() {
     .then(function () { histLoading = false; if (histReload) { histReload = false; return histLoad(); } });
 }
 
-// ---- borrado con confirmación ----
-function histAskDelete(mode) {
-  const n = mode === 'all' ? histRecords.length : histSelectedIds().length;
-  if (!n) return;
-  histPending = mode;
-  $('hist-confirm-text').textContent = mode === 'all'
-    ? '¿Borrar TODO el historial? Se perderán todos los registros guardados; no se puede deshacer.'
-    : '¿Borrar ' + n + ' registro' + (n === 1 ? '' : 's') + ' seleccionado' + (n === 1 ? '' : 's') + '? No se puede deshacer.';
-  $('hist-confirm').hidden = false;
-  $('hist-confirm-no').focus();
+// ---- borrado y exportación (modales de NPerfModals) ----
+function histModals() { return window.NPerfModals; }
+function histAfterChange(r) {
+  histMsg('', false);
+  return histLoad().then(function () {
+    if (window.NPerfSidebar) window.NPerfSidebar.refreshHistCount();
+    return poll();
+  });
 }
-function histCancelDelete() { histPending = null; $('hist-confirm').hidden = true; }
-function histDoDelete() {
-  const mode = histPending;
-  histCancelDelete();
-  const p = mode === 'all' ? nperf.deleteAllHistory() : nperf.deleteHistory(histSelectedIds());
-  Promise.resolve(p).then(function (n) {
-    if (mode === 'all') histSelected = {};
-    histMsg((typeof n === 'number' ? n : 0) + ' registro' + (n === 1 ? '' : 's') + ' borrado' + (n === 1 ? '' : 's') + '.', false);
-    return histLoad().then(function () { return poll(); });
-  }, function (e) { histMsg('No se pudo borrar: ' + histErr(e), true); return histLoad(); });
-}
-
-// ---- exportación ----
-function histExport() {
+function histAskDelete(scope) {
   const ids = histSelectedIds();
-  const msg = $('hist-export-msg');
-  if (!ids.length) { msg.textContent = 'Seleccione al menos un registro.'; msg.className = 'err-text'; return; }
-  const format = $('hist-format').value;
-  if (!HIST_FORMATS[format]) return;
-  const csv = format === 'csv' || format === 'csv-std';
-  const opts = { client: $('hist-client').value.trim(), technician: $('hist-tech').value.trim(), notes: $('hist-notes').value.trim(), intervals: csv && $('hist-intervals').checked };
-  msg.textContent = 'Elija dónde guardar el archivo…'; msg.className = 'muted';
-  $('hist-export-go').disabled = true;
-  Promise.resolve().then(function () { return nperf.exportHistory(ids, format, opts); })
-    .then(function (r) {
-      if (r === 'cancelado') { msg.textContent = 'Exportación cancelada.'; msg.className = 'muted'; return; }
-      const paths = Array.isArray(r) ? r : [];
-      msg.textContent = paths.length ? 'Exportado en: ' + paths.join(' y ') : 'Exportación terminada.';
-      msg.className = 'muted';
-    }, function (e) { msg.textContent = 'No se pudo exportar: ' + histErr(e); msg.className = 'err-text'; })
-    .then(histUpdateButtons);
+  const n = scope === 'all' ? histRecords.length : ids.length;
+  if (!n) return;
+  histModals().openConfirmDelete({
+    scope: scope, count: n,
+    run: function () { return scope === 'all' ? nperf.deleteAllHistory() : nperf.deleteHistory(ids); },
+    onDone: function () { if (scope === 'all') histSelected = {}; else ids.forEach(function (id) { delete histSelected[id]; }); histAfterChange(); }
+  });
+}
+function histExport(ids) {
+  if (!ids.length) return;
+  histModals().openExport({ ids: ids, run: function (i, format, o) { return nperf.exportHistory(i, format, o); } });
 }
 
 // ---- registro abierto (solo lectura) ----
@@ -279,8 +258,6 @@ function renderHistoryState(s) {
   const w = $('history-warning');
   w.hidden = !s.history_warning;
   w.textContent = s.history_warning ? 'Aviso: ' + s.history_warning + '.' : '';
-  const en = $('hist-enabled');
-  if (!histEnabledBusy) en.checked = !!s.history_enabled;
   $('hist-disabled').hidden = !!s.history_enabled;
   // Si termina un TEST! o diagnóstico con el panel abierto en la lista, se recarga.
   const sg = JSON.stringify([s.test && s.test.status, s.probe && s.probe.status, s.history_warning]);
@@ -304,23 +281,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if ($('hist-all').checked) histRecords.forEach(function (r) { histSelected[r.id] = true; });
     histRender();
   });
-  $('hist-del-sel').addEventListener('click', function () { histAskDelete('sel'); });
+  $('hist-del-sel').addEventListener('click', function () { histAskDelete('selected'); });
   $('hist-del-all').addEventListener('click', function () { histAskDelete('all'); });
-  $('hist-confirm-yes').addEventListener('click', histDoDelete);
-  $('hist-confirm-no').addEventListener('click', histCancelDelete);
-  $('hist-confirm').addEventListener('keydown', function (e) { if (e.key === 'Escape') histCancelDelete(); });
-  $('hist-export-go').addEventListener('click', histExport);
-  $('hist-format').addEventListener('change', function () {
-    const csv = $('hist-format').value.indexOf('csv') === 0;
-    $('hist-intervals').disabled = !csv;
-    if (!csv) $('hist-intervals').checked = false;
-  });
+  $('hist-export-sel').addEventListener('click', function () { histExport(histSelectedIds()); });
+  $('hist-export-one').addEventListener('click', function () { if (histOpen) histExport([histOpen.id]); });
+  $('hist-enable-link').addEventListener('click', function () { window.NPerfShell.openDrawer('settings'); });
   $('hist-back').addEventListener('click', histShowList);
   $('hist-detailed').addEventListener('change', histRenderRecord);
-  $('hist-enabled').addEventListener('change', function () {
-    const on = $('hist-enabled').checked;
-    histEnabledBusy = true;
-    Promise.resolve().then(function () { return nperf.setHistoryEnabled(on); })
-      .then(function () { histEnabledBusy = false; return poll(); }, function (e) { histEnabledBusy = false; histMsg('No se pudo cambiar el ajuste: ' + histErr(e), true); return poll(); });
-  });
 });

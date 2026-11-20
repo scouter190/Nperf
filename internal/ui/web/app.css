@@ -183,7 +183,10 @@ textarea{resize:vertical;width:100%}
 #hist-record .chart-phase{margin-top:10px}
 .hist-badge{font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid currentColor;white-space:nowrap}
 .hist-badge.done{color:var(--ok)}.hist-badge.cancelled{color:var(--warn)}.hist-badge.error{color:var(--err)}
-.hist-badge{margin-left:6px}
+.hist-kind{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hist-actions{flex-wrap:wrap}
+.hist-table tr.hist-err td:nth-child(2),.hist-table tr.hist-err td:nth-child(3){background:var(--err-bg,transparent)}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font:inherit}
 
 /* Internet y velocidad */
 .probe-sep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
@@ -194,7 +197,8 @@ textarea{resize:vertical;width:100%}
 .modal p{margin:8px 0}
 .modal .row{justify-content:flex-end;flex-wrap:wrap}
 .modal .row button{flex:none}
-.speed-policies{justify-content:flex-start!important}
+.mdl .links .lnk{background:none;border:0;padding:2px 0;font:inherit;color:var(--accent-primary);text-decoration:underline;cursor:pointer}
+.mdl .links .lnk:hover{color:var(--accent-primary-hover)}
 .inet-kind{font-weight:600}
 .speed-attr{font-size:12px}
 .mono{font-family:var(--font-mono)}
@@ -458,3 +462,23 @@ body.captura .m-tool{display:none}
 .btn.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:panel-spin .8s linear infinite}
 @keyframes panel-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.btn.busy::before{animation:none}}
+
+/* ---- Drawer Ajustes (T13) ---- */
+.settings-pane{display:flex;flex-direction:column;gap:0}
+.settings-pane>.alert{margin-bottom:12px}
+.settings-pane .set .tag{margin-left:6px;vertical-align:middle}
+.settings-pane .set .err-text{font-size:12px}
+.settings-pane .li li.muted2{justify-content:flex-start;font-family:var(--font-sans)}
+.sem.err{border-color:var(--err-border);border-left-color:var(--err-fg);background:var(--err-bg)}
+.sem.err .sem-ico{background:var(--err-fg)}
+.rhead .acts .btn[disabled]{opacity:.55}
+.gcard .chart{margin:0}
+.gcard .chart-title,.gcard .chart-legend{display:none}
+.gcard .chart-svg{max-height:170px;background:transparent}
+.gcard .chart .line.s0,.gcard .chart .mk.s0{stroke:var(--chart-fwd)}.gcard .chart .mk.s0{fill:var(--chart-fwd)}
+.gcard .chart .line.s1,.gcard .chart .mk.s1{stroke:var(--chart-rev)}.gcard .chart .mk.s1{fill:var(--chart-rev)}
+.gcard .chart-svg .grid{stroke:var(--chart-grid)}
+.gcard .chart-data summary{font-size:11px}
+.gcard .chart-box{max-width:none}
+.notes{margin:0;padding:8px 12px 8px 28px;font-size:12px;color:var(--text-secondary)}
+.surf>.tw{margin:0}

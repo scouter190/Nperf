@@ -62,20 +62,6 @@ function renderBanners(s) {
   window.NPerfCore.renderIf('firewall', s.firewall_hint || '', function (h) { $('firewall').hidden = !h; $('firewall').textContent = h; });
 }
 
-function renderSettings(s) {
-  if (document.activeElement !== $('alias')) $('alias').value = s.alias;
-  $('key-state').textContent = s.has_key ? '(clave configurada: sí)' : '(clave configurada: no)';
-  if (changed('subnets', s.extra_subnets)) {
-    const ul = $('subnets'); clear(ul);
-    s.extra_subnets.forEach(function (n) {
-      const li = el('li'); li.appendChild(el('span', '', n));
-      const b = el('button', '', 'Quitar'); b.type = 'button';
-      b.addEventListener('click', function () { act(nperf.removeSubnet(n)); });
-      li.appendChild(b); ul.appendChild(li);
-    });
-  }
-}
-
 function fmtBytes(n) {
   if (n === null || n === undefined) return '-';
   const u = ['B', 'KB', 'MB', 'GB', 'TB']; let v = Number(n), i = 0;
@@ -282,52 +268,8 @@ function combinedView(c) {
   (c.messages || []).forEach(function (m) { box.appendChild(el('p', 'cmb-msg', m)); });
   return box;
 }
-function probeDetail(s, c) {
-  const p = s.probe;
-  const dev = (s.peers || []).concat(s.no_agent || []).filter(function (x) { return x.id === p.target_id; })[0];
-  c.appendChild(el('p', 'status-line', (PROBE_NAMES[p.kind] || 'Diagnóstico') + (dev ? ' a ' + dev.alias + ' (' + (dev.ips || []).join(', ') + ')' : '')));
-  if (p.status === 'running') c.appendChild(el('p', 'muted', 'Ejecutando…'));
-  else if (p.status === 'cancelling') c.appendChild(el('p', 'muted', p.label || 'Cancelando…'));
-  else if (p.status === 'cancelled') c.appendChild(el('p', 'muted', 'Diagnóstico cancelado.'));
-  else if (p.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + p.error));
-  else if (p.status === 'done' && p.result) {
-    if (p.kind === 'internet') { c.appendChild(internetView(p.result, p.combined)); return; }
-    if (p.kind === 'speed') { c.appendChild(speedView(p.result)); return; }
-    if (p.combined && p.combined.messages && p.combined.messages.length) c.appendChild(combinedView(p.combined));
-    const detailed = $('detailed').checked;
-    if (p.kind === 'ping') c.appendChild(pingView(p.result, detailed));
-    else if (p.kind === 'trace') c.appendChild(traceView(p.result));
-    else if (p.kind === 'mtu') c.appendChild(mtuView(p.result));
-    else if (p.kind === 'ports') c.appendChild(portsView(p.result));
-  }
-}
-
-function testNoChart(t) {
-  const c = Object.assign({}, t); delete c.chart; return c;
-}
-
-function renderDetail(s) {
-  const detailed = $('detailed').checked;
-  document.body.classList.toggle('compact', !detailed);
-  if (s.probe && s.probe.running) showProbe = true;
-  if (s.test && s.test.running) showProbe = false;
-  if (!changed('detail', [testNoChart(s.test), s.probe, showProbe, s.directions, detailed, s.selected_id, s.no_agent])) return;
-  const c = $('detail'); clear(c);
-  const t = s.test;
-  const peer = selectedDevice(s);
-  if (showProbe && s.probe && s.probe.status !== 'idle') { probeDetail(s, c); return; }
-  c.appendChild(el('p', 'status-line', peer ? 'Destino: ' + peer.alias + ' (' + (peer.ips || []).join(', ') + ')' : 'Sin destino seleccionado'));
-  if (t.status === 'queued' || t.status === 'running' || t.status === 'cancelling') { /* la franja del Panel muestra el progreso */ }
-  else if (t.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + t.error));
-  else if (t.status === 'cancelled') c.appendChild(el('p', 'muted', 'Prueba cancelada.'));
-  else if (t.status === 'done' && t.report) c.appendChild(reportView(s, detailed));
-  else c.appendChild(el('p', 'muted', peer && isNoAgent(s, peer.id) ? 'Equipo sin NPerf: use Ping, Traceroute, MTU o Puertos.' : 'Elija un equipo y pulse TEST! o un diagnóstico.'));
-}
-
-// ---- gráficas del TEST! (NPerfChart); el monitor de tarjetas vive en drawers.js ----
-const CHART_MIN_MS = 1000; // redibujo como máximo 1 vez por segundo
+// ---- gráficas por fase (las usa history.js hasta T16; el Panel dibuja las suyas en panel.js) ----
 const openData = {};        // clave de gráfica -> "Valores" abierto (se conserva al redibujar)
-let chartDrawn = 0, chartPending = false;
 
 // Dibuja una gráfica en un contenedor propio y conserva el estado del desplegable de valores.
 function drawChart(parent, key, opts) {
@@ -380,30 +322,9 @@ function chartBlock(p, cancelled) {
   return box;
 }
 
-function renderCharts(s) {
-  const c = $('charts');
-  const ch = s.test && s.test.chart;
-  if (showProbe && s.probe && s.probe.status !== 'idle') { if (changed('charts', 'probe')) clear(c); return; }
-  if (!ch || !ch.phases || !ch.phases.length) { if (changed('charts', 'none')) clear(c); return; }
-  if (!changed('charts', [ch, s.test.status])) return;
-  const now = Date.now();
-  if (now - chartDrawn < CHART_MIN_MS) {
-    // Demasiado pronto: se reintenta con el siguiente sondeo (la firma se invalida).
-    delete sig.charts;
-    if (!chartPending) { chartPending = true; setTimeout(function () { chartPending = false; if (last) renderCharts(last); }, CHART_MIN_MS - (now - chartDrawn)); }
-    return;
-  }
-  chartDrawn = now;
-  clear(c);
-  const h = el('h2', '', 'Gráficas del TEST!');
-  c.appendChild(h);
-  if (ch.cancelled || s.test.status === 'cancelled') c.appendChild(el('p', 'muted chart-cancelled', 'Cancelado: se muestran las muestras recibidas antes de cancelar.'));
-  ch.phases.forEach(function (p) { c.appendChild(chartBlock(p, ch.cancelled)); });
-}
-
 function render(s) {
   last = s;
-  renderBanners(s); renderSettings(s); renderDetail(s); renderCharts(s);
+  renderBanners(s);
   ['NPerfSidebar', 'NPerfPanel', 'NPerfDrawers', 'NPerfModals'].forEach(function (n) {
     if (window[n] && typeof window[n].render === 'function') window[n].render(s);
   });
@@ -420,17 +341,6 @@ function poll() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); });
-  $('alias-save').addEventListener('click', function () { act(nperf.setAlias($('alias').value)); });
-  $('key-save').addEventListener('click', function () {
-    const k = $('key').value;
-    $('key').value = '';
-    act(nperf.setKey(k));
-  });
-  $('subnet-add').addEventListener('click', function () {
-    const v = $('subnet').value; $('subnet').value = '';
-    act(nperf.addSubnet(v));
-  });
   // Un único sondeo de state() (NPerfCore.startPolling); poll() solo se usa tras una acción.
   window.NPerfCore.startPolling(function () { return nperf.state(); }, render, toast);
 });
