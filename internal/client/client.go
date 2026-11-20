@@ -616,28 +616,58 @@ func runUDP(ctx context.Context, dialer *net.Dialer, addr string, session string
 	return lv.attach(res), nil
 }
 
-// greetUDP asocia el socket UDP con la sesión: envía el saludo hasta recibir el acuse.
+// greetUDP asocia el socket UDP con la sesión: envía el saludo cada greetWait (máx. greetTries
+// envíos) y espera el acuse hasta un plazo total greetTotal. Lo que no es el acuse se ignora sin
+// gastar envíos ni cortar la espera.
 var (
-	greetTries = 10
+	greetTries = 16
 	greetWait  = 300 * time.Millisecond
+	greetTotal = 5 * time.Second
 )
 
 func greetUDP(ctx context.Context, uc net.Conn, session string) error {
 	hello := []byte(udpMagic + session)
 	buf := make([]byte, 64)
-	for i := 0; i < greetTries; i++ {
-		if _, err := uc.Write(hello); err != nil {
-			return fmt.Errorf("no se pudo enviar el saludo UDP: %w", err)
+	stop := context.AfterFunc(ctx, func() { uc.SetReadDeadline(time.Now()) })
+	defer stop()
+	end := time.Now().Add(greetTotal)
+	var next time.Time // próximo envío
+	sent := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		uc.SetReadDeadline(time.Now().Add(greetWait))
+		now := time.Now()
+		if !now.Before(end) {
+			break
+		}
+		if sent < greetTries && !now.Before(next) {
+			if _, err := uc.Write(hello); err != nil {
+				return fmt.Errorf("no se pudo enviar el saludo UDP: %w", err)
+			}
+			sent++
+			next = now.Add(greetWait)
+		}
+		dl := end
+		if sent < greetTries && next.Before(dl) {
+			dl = next
+		}
+		uc.SetReadDeadline(dl)
 		n, err := uc.Read(buf)
-		if err == nil && string(buf[:n]) == udpMagic+"ok" {
-			uc.SetReadDeadline(time.Time{})
-			return nil
+		if err == nil {
+			if string(buf[:n]) == udpMagic+"ok" {
+				uc.SetReadDeadline(time.Time{})
+				return nil
+			}
+			continue
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
+		var ne net.Error
+		if !(errors.As(err, &ne) && ne.Timeout()) {
+			time.Sleep(10 * time.Millisecond) // p. ej. ICMP de puerto inalcanzable: no girar en vacío
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return fmt.Errorf("el servidor no respondió al saludo UDP (¿puerto UDP bloqueado?)")
 }
