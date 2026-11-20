@@ -45,7 +45,7 @@
       { id: 'gateway', alias: 'Puerta de enlace (sin NPerf)', ips: ['192.168.1.1'], status: 'noagent', status_label: 'sin NPerf', queue: 0, link: 'unknown', link_speed: '' },
       { id: 'h1', alias: 'Router del taller', ips: ['192.168.2.1'], status: 'noagent', status_label: 'sin NPerf', queue: 0, link: 'unknown', link_speed: '' }
     ],
-    history_enabled: true, history_warning: '', probe: { running: false, status: 'idle' }, can_probe: false, probe_blocked_reason: '',
+    history_enabled: true, internet_targets: ['1.1.1.1', '8.8.8.8'], history_warning: '', probe: { running: false, status: 'idle' }, can_probe: false, probe_blocked_reason: '',
     selected_id: '', direction: 'both', directions: [], duration_seconds: 10, total_seconds: 20, total_label: '',
     alias: 'PC-Oficina', extra_subnets: ['192.168.2.0/24'], firewall_hint: '', has_key: false,
     test: { running: false, status: 'idle' }, can_test: false, test_blocked_reason: 'elija un equipo de destino', config_error: ''
@@ -112,6 +112,17 @@
 
   // ---- historial de ejemplo (forma de internal/history.Record) ----
   const me = { alias: 'PC-Oficina', ip: '192.168.1.10', link: 'eth', nominal_mbps: 1000 };
+
+  const stt = function (avg, loss, recv) { return { sent: 10, received: recv === undefined ? 10 : recv, loss_pct: loss || 0, min_ms: avg * 0.8, avg_ms: avg, max_ms: avg * 1.6, rtt_status: recv === 0 ? 'unavailable' : 'ok', jitter_ms: 1.2, jitter_status: recv === 0 ? 'unavailable' : 'ok' }; };
+  const inetResult = { format_version: 1, command: 'internet', gateway: Object.assign({ ip: '192.168.1.1', status: 'ok' }, stt(1.1)),
+    targets: [Object.assign({ ip: '1.1.1.1', status: 'ok', tcp443: true, tcp443_status: 'ok' }, stt(14.2)), Object.assign({ ip: '8.8.8.8', status: 'ok', tcp443: null, tcp443_status: 'unavailable' }, stt(52.8, 10, 9))],
+    verdict: { kind: 'provider', message: 'El problema está después de su router: la red local responde bien pero internet es lenta.', notes: ['La pérdida hacia 8.8.8.8 es del 10 %.'] },
+    trace: { target: '1.1.1.1', reached: true, hops: [{ ttl: 1, from: '192.168.1.1', status: 'ok' }, { ttl: 2, from: null, status: 'unavailable' }, { ttl: 3, from: '1.1.1.1', status: 'ok' }].map(function (h) { return Object.assign(h, stt(h.ttl * 5, h.from ? 0 : 100, h.from ? 10 : 0)); }) },
+    trace_notes: ['El salto 2 no responde, pero los siguientes sí.'] };
+  const speedResult = { format_version: 1, command: 'speed', time: new Date().toISOString(), provider: 'M-Lab NDT7', attribution: 'Velocidad medida con NDT7 de M-Lab (Measurement Lab), https://www.measurementlab.net/', tests_today: 3,
+    server: { machine: 'mlab1-mad01', city: 'Madrid', country: 'ES' },
+    download: { mbps: 487.2, bytes: 600000000, duration_s: 10, min_rtt_ms: 9.4, incomplete: false }, download_status: 'ok',
+    upload: { mbps: 96.4, bytes: 70000000, duration_s: 7.5, min_rtt_ms: 9.1, incomplete: true, reason: 'terminó antes de 9 s', notes: ['Subida acortada por el servidor.'] }, upload_status: 'incomplete', upload_reason: 'terminó antes de 9 s' };
   const mkRec = function (id, iso, kind, status, dest, extra) { return Object.assign({ format_version: 1, id: id, time: iso, kind: kind, status: status, version: '0.6.0', source: me, dest: dest }, extra); };
   const srv = { alias: 'Servidor', ip: '192.168.1.20', link: 'eth', nominal_mbps: 1000 };
   const ana = { alias: 'Portátil Ana', ip: '192.168.1.31', link: 'wifi', ssid: 'Oficina-5G', nominal_mbps: 300 };
@@ -124,10 +135,12 @@
     mkRec('20260119-161230-aaaa0004', day(1, 16), 'trace', 'done', { alias: 'dns.google', ip: '8.8.8.8' }, { result: probes.trace }),
     mkRec('20260118-101230-aaaa0005', day(2, 10), 'ports', 'done', gw, { result: probes.ports }),
     mkRec('20260118-091230-aaaa0006', day(2, 9), 'mtu', 'error', { alias: 'dns.google', ip: '8.8.8.8' }, { error: 'no se pudo abrir el socket ICMP' }),
-    mkRec('20260117-101230-aaaa0007', day(3, 10), 'speed', 'done', { alias: 'M-Lab NDT7' }, { result: { format_version: 1, command: 'speed', provider: 'M-Lab', attribution: 'Medición con M-Lab NDT7.', server: { machine: 'mlab1-mad01', city: 'Madrid', country: 'ES' }, download: { mbps: 487.2, bytes: 600000000, duration_s: 10 }, download_status: 'ok', upload: { mbps: 96.4, bytes: 120000000, duration_s: 10 }, upload_status: 'ok' } }),
-    mkRec('20260117-091230-aaaa0008', day(3, 9), 'internet', 'done', { alias: 'Internet' }, { result: { format_version: 1, command: 'internet', verdict: { kind: 'ok', message: 'Internet funciona con normalidad.', notes: [] }, targets: [{ target: '1.1.1.1', status: 'ok' }, { target: '8.8.8.8', status: 'ok' }] } })
+    mkRec('20260117-101230-aaaa0007', day(3, 10), 'speed', 'done', { alias: 'M-Lab NDT7' }, { result: speedResult }),
+    mkRec('20260117-091230-aaaa0008', day(3, 9), 'internet', 'done', { alias: 'Internet' }, { result: inetResult, diagnosis: { healthy: false, messages: [inetResult.verdict.message].concat(inetResult.verdict.notes, inetResult.trace_notes) } }),
+    mkRec('20260116-101230-aaaa0009', day(4, 10), 'test', 'cancelled', srv, { result: { format_version: 1, params: report.params, tcp: { fwd: { status: 'measured', throughput_mbps: 900, bytes: 1, duration_s: 3, retransmissions: null, udp: null } }, notes: [] } })
   ];
   let timers = [];
+  const internetCombined = { healthy: false, messages: [inetResult.verdict.message].concat(inetResult.verdict.notes, inetResult.trace_notes) };
   function sync() {
     const p = st.peers.concat(st.no_agent).filter(function (x) { return x.id === st.selected_id; })[0];
     const pa = p ? p.alias : 'destino', me = st.alias;
@@ -232,6 +245,32 @@
       return Promise.resolve(opts.intervals ? [p, p.replace('.csv', '-intervalos.csv')] : [p]);
     },
     setHistoryEnabled: function (on) { st.history_enabled = !!on; return Promise.resolve(); },
+    startInternet: function () {
+      if (st.test.running || st.probe.running) return Promise.reject(new Error('hay otra prueba en curso'));
+      st.probe = { running: true, status: 'running', kind: 'internet' };
+      later(1500, function () { st.probe = { running: false, status: 'done', kind: 'internet', result: inetResult, combined: internetCombined }; });
+      return Promise.resolve();
+    },
+    startSpeed: function (consent) {
+      if (consent !== true) return Promise.reject(new Error('hace falta aceptar el aviso de M-Lab en cada prueba de velocidad'));
+      if (st.test.running || st.probe.running) return Promise.reject(new Error('hay otra prueba en curso'));
+      window.__speedCalls = (window.__speedCalls || 0) + 1;
+      st.probe = { running: true, status: 'running', kind: 'speed' };
+      later(2000, function () { st.probe = { running: false, status: 'done', kind: 'speed', result: speedResult }; });
+      return Promise.resolve();
+    },
+    openPrivacy: function (which) { if (which !== 'mlab' && which !== 'nperf') return Promise.reject(new Error('política no permitida')); window.__privacy = which; return Promise.resolve(); },
+    setInternetTargets: function (list) {
+      for (const t of list) {
+        const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(t);
+        if (!m) return Promise.reject(new Error('destino no válido: use una dirección IPv4 pública'));
+        const a = +m[1], b = +m[2];
+        if (a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)) return Promise.reject(new Error('destino no válido: ' + t + ' no es una dirección pública'));
+      }
+      if (list.length > 4) return Promise.reject(new Error('máximo 4 destinos'));
+      st.internet_targets = list.length ? list.slice() : ['1.1.1.1', '8.8.8.8'];
+      return Promise.resolve();
+    },
     cancelTest: function () { timers.forEach(clearTimeout); timers = []; const ch = st.test.chart; if (ch) ch.cancelled = true; st.test = { running: false, status: 'cancelled', chart: ch }; return Promise.resolve(); }
   };
   window.nperf = api;

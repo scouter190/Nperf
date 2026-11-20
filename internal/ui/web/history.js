@@ -109,7 +109,7 @@ function histRow(r) {
   cb.addEventListener('change', function () { if (cb.checked) histSelected[r.id] = true; else delete histSelected[r.id]; histUpdateButtons(); });
   c0.appendChild(cb); tr.appendChild(c0);
   tr.appendChild(el('td', '', histWhen(r.time)));
-  const k = el('td'); k.appendChild(document.createTextNode(HIST_KIND_NAMES[r.kind] || r.kind + ' '));
+  const k = el('td'); k.appendChild(document.createTextNode((HIST_KIND_NAMES[r.kind] || r.kind) + ' '));
   k.appendChild(el('span', 'hist-badge ' + (HIST_STATUS[r.status] ? r.status : 'error'), HIST_STATUS[r.status] || r.status));
   tr.appendChild(k);
   tr.appendChild(el('td', '', histDest(r)));
@@ -213,15 +213,6 @@ function histEndpoint(label, e) {
   if (e.nominal_mbps) parts.push('nominal ' + Math.round(e.nominal_mbps) + ' Mbps');
   return label + ': ' + (parts.join(' · ') || '-');
 }
-function histScalars(obj, rows, prefix) {
-  Object.keys(obj || {}).forEach(function (k) {
-    const v = obj[k];
-    if (v === null || v === undefined) return;
-    if (typeof v === 'object' && !Array.isArray(v)) histScalars(v, rows, prefix + k + '.');
-    else if (typeof v !== 'object') rows.push([prefix + k, String(v)]);
-  });
-}
-
 function histRecordBody(r, box, charts) {
   const detailed = $('hist-detailed').checked;
   const x = r.result;
@@ -243,18 +234,8 @@ function histRecordBody(r, box, charts) {
   else if (r.kind === 'trace') box.appendChild(traceView(x));
   else if (r.kind === 'mtu') box.appendChild(mtuView(x));
   else if (r.kind === 'ports') box.appendChild(portsView(x));
-  else if (r.kind === 'internet') {
-    box.appendChild(el('p', 'status-line', (x.verdict && x.verdict.message) || 'Sin veredicto'));
-    if (x.verdict && x.verdict.notes && x.verdict.notes.length) box.appendChild(listOf('notes warn-notes', x.verdict.notes));
-    const rows = [];
-    (x.targets || []).forEach(function (t) { rows.push([t.target || t.ip || 'destino', t.status === 'ok' ? 'responde' : 'sin respuesta']); });
-    if (rows.length) box.appendChild(kvTable(rows));
-  } else if (r.kind === 'speed') {
-    const rows = [];
-    histScalars({ servidor: x.server, descarga: x.download, subida: x.upload, estado_descarga: x.download_status, estado_subida: x.upload_status }, rows, '');
-    if (rows.length) box.appendChild(kvTable(rows));
-    if (x.attribution) box.appendChild(el('p', 'muted', x.attribution));
-  }
+  else if (r.kind === 'internet') box.appendChild(internetView(x, r.diagnosis));
+  else if (r.kind === 'speed') box.appendChild(speedView(x));
 }
 
 function histRenderRecord() {

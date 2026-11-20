@@ -24,7 +24,7 @@ func get(t *testing.T, h http.Handler, method, host, path string) *httptest.Resp
 
 func TestStaticHandler(t *testing.T) {
 	h := StaticHandler(ui.Files(), "tok", "127.0.0.1:1", "sec123")
-	for p, ct := range map[string]string{"/tok/": "text/html", "/tok/index.html": "text/html", "/tok/app.js": "text/javascript", "/tok/chart.js": "text/javascript", "/tok/history.js": "text/javascript", "/tok/app.css": "text/css"} {
+	for p, ct := range map[string]string{"/tok/": "text/html", "/tok/index.html": "text/html", "/tok/app.js": "text/javascript", "/tok/chart.js": "text/javascript", "/tok/history.js": "text/javascript", "/tok/internet.js": "text/javascript", "/tok/app.css": "text/css"} {
 		w := get(t, h, "GET", "127.0.0.1:1", p)
 		if got := w.Header().Get("Content-Security-Policy"); got != csp || !strings.Contains(got, "frame-ancestors 'none'") {
 			t.Errorf("%s: CSP: %q", p, got)

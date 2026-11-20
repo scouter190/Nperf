@@ -163,3 +163,18 @@ textarea{resize:vertical;width:100%}
 .hist-badge{font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid currentColor;white-space:nowrap}
 .hist-badge.done{color:var(--ok)}.hist-badge.cancelled{color:var(--warn)}.hist-badge.error{color:var(--err)}
 .hist-badge{margin-left:6px}
+
+/* Internet y velocidad */
+.probe-sep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+.speed-notice{margin:0 0 6px;font-size:12px}
+.modal-back{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+.modal{background:var(--panel);color:var(--text);border:2px solid var(--accent);border-radius:4px;padding:14px 18px;max-width:580px;margin:10px}
+.modal h2{color:var(--text);font-size:15px;text-transform:none;letter-spacing:0}
+.modal p{margin:8px 0}
+.modal .row{justify-content:flex-end;flex-wrap:wrap}
+.modal .row button{flex:none}
+.speed-policies{justify-content:flex-start!important}
+.inet-kind{font-weight:600}
+.speed-attr{font-size:12px}
+.mono{font-family:Consolas,monospace}
+td.warn-cell{color:var(--warn);font-weight:600}

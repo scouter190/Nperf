@@ -180,7 +180,7 @@
 - Usuario (aprobación de la spec), condiciones de M-Lab verificadas en sus páginas oficiales:
   - **Consentimiento informado antes de cada prueba** de velocidad (https://www.measurementlab.net/develop/: "prior to installation of the client or initiation of the test"): diálogo en la UI; en la CLI confirmación por stdin salvo `-accept-mlab`. Enlaces a la política de M-Lab (https://www.measurementlab.net/privacy/) y a la de NPerf.
   - **Política de privacidad propia** publicada (`docs/privacidad.md`), compatible con la AUP (https://www.measurementlab.net/aup/): NPerf no envía datos fuera del equipo salvo la prueba a M-Lab; M-Lab publica IP pública, fecha/hora y metadatos como CC0 con retención indefinida.
-  - **Máx. 40 pruebas interactivas al día por equipo** (AUP): contador local persistente; sin pruebas M-Lab automáticas ni programadas.
+  - **Máx. 40 pruebas interactivas al día por usuario de Windows en este equipo** (AUP): contador local persistente; sin pruebas M-Lab automáticas ni programadas.
   - **Locate v2** (https://www.measurementlab.net/develop/locate-v2) con las URLs devueltas sin tocar (`access_token`); identificación del cliente (`NPerf/<versión>`) según ndt7 (https://github.com/m-lab/ndt-server/blob/main/spec/ndt7-protocol.md); hasta ~10 s por sentido (el servidor puede cerrar a los 13 s).
   - Prohibido alterar resultados, compensar por medir o interferir con la plataforma.
   - **Pendiente de producto (no bloquea)**: si NPerf se comercializa, la AUP pide a integradores comerciales una contribución a M-Lab (patrocinio o en especie).

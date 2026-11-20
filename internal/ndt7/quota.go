@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// DailyLimit es el máximo de pruebas M-Lab al día por equipo/perfil (AUP de M-Lab).
+// DailyLimit es el máximo de pruebas M-Lab al día por usuario de Windows en este equipo (AUP de M-Lab).
 const DailyLimit = 40
 
 const (

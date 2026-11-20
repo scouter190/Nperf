@@ -24,11 +24,12 @@ import (
 
 // servidos es la lista blanca de archivos (mock.js no se sirve nunca).
 var servidos = map[string]string{
-	"index.html": "text/html; charset=utf-8",
-	"app.css":    "text/css; charset=utf-8",
-	"app.js":     "text/javascript; charset=utf-8",
-	"chart.js":   "text/javascript; charset=utf-8",
-	"history.js": "text/javascript; charset=utf-8",
+	"index.html":  "text/html; charset=utf-8",
+	"app.css":     "text/css; charset=utf-8",
+	"app.js":      "text/javascript; charset=utf-8",
+	"chart.js":    "text/javascript; charset=utf-8",
+	"history.js":  "text/javascript; charset=utf-8",
+	"internet.js": "text/javascript; charset=utf-8",
 }
 
 // csp es la misma política que el meta de index.html más las directivas que un meta no admite.

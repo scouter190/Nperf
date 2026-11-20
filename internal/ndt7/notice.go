@@ -18,7 +18,7 @@ const (
 	NoticeData = "La prueba descarga y sube datos durante unos 20 s: puede consumir cientos de MB " +
 		"en conexiones rápidas; tenlo en cuenta en conexiones móviles o con tarifa por datos."
 	// NoticeLimit informa del límite diario.
-	NoticeLimit = "Solo se hace cuando tú lo pides; el límite es de 40 pruebas al día por equipo."
+	NoticeLimit = "Solo se hace cuando tú lo pides; el límite es de 40 pruebas al día por usuario de Windows en este equipo."
 	// Attribution es la atribución a M-Lab.
 	Attribution = "Velocidad medida con NDT7 de M-Lab (Measurement Lab), https://www.measurementlab.net/"
 )

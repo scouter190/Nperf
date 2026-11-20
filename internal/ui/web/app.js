@@ -4,7 +4,7 @@
 // Puente con Go: T15 define window.nperfCall(secreto, nombre, ...args) -> Promise.
 // El secreto de sesión lo entrega Go dentro del HTML servido (meta nperf-session).
 // Para previsualizar, mock.js define window.nperf antes de cargar este archivo.
-const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe', 'monitor', 'history', 'historyRecord', 'deleteHistory', 'deleteAllHistory', 'exportHistory', 'setHistoryEnabled'];
+const NPERF_METHODS = ['state', 'selectPeer', 'setDirection', 'setDuration', 'setAlias', 'setKey', 'addSubnet', 'removeSubnet', 'startTest', 'cancelTest', 'adapters', 'openLocationSettings', 'addHost', 'removeHost', 'startProbe', 'cancelProbe', 'monitor', 'history', 'historyRecord', 'deleteHistory', 'deleteAllHistory', 'exportHistory', 'setHistoryEnabled', 'startInternet', 'startSpeed', 'openPrivacy', 'setInternetTargets'];
 if (!window.nperf) {
   const api = {};
   NPERF_METHODS.forEach(function (m) {
@@ -235,7 +235,7 @@ function diagnosisView(s) {
 function reportView(s, detailed) {
   const r = s.test.report;
   const box = el('div');
-  const rtt = r.rtt;
+  const rtt = r.rtt || { status: 'not_measured' };
   const dgn = s.test.diagnosis;
   if (dgn && (dgn.fwd || dgn.rev)) box.appendChild(diagnosisView(s));
   box.appendChild(el('h3', '', 'RTT'));
@@ -253,7 +253,7 @@ function reportView(s, detailed) {
     cols.forEach(function (c) { hr.appendChild(el('th', '', c)); });
     t.appendChild(hr);
     ['fwd', 'rev'].forEach(function (dir) {
-      const d = r[proto][dir];
+      const d = (r[proto] || {})[dir] || { status: 'not_measured' };
       const tr = el('tr');
       cell(tr, dirLabel(s, dir));
       if (d.status !== 'measured') {
@@ -273,7 +273,7 @@ function reportView(s, detailed) {
     });
     box.appendChild(t);
   });
-  if (detailed && r.notes && r.notes.length) {
+  if (detailed && Array.isArray(r.notes) && r.notes.length) {
     const ul = el('ul', 'notes');
     r.notes.forEach(function (n) { ul.appendChild(el('li', '', n)); });
     box.appendChild(ul);
@@ -283,7 +283,7 @@ function reportView(s, detailed) {
 
 // ---- diagnósticos sin agente ----
 const PROBES = [['ping', 'Ping', 'probe-ping'], ['trace', 'Traceroute', 'probe-trace'], ['mtu', 'MTU', 'probe-mtu'], ['ports', 'Puertos', 'probe-ports']];
-const PROBE_NAMES = { ping: 'Ping', trace: 'Traceroute', mtu: 'MTU de la ruta', ports: 'Puertos TCP' };
+const PROBE_NAMES = { ping: 'Ping', trace: 'Traceroute', mtu: 'MTU de la ruta', ports: 'Puertos TCP', internet: 'Latencia a internet', speed: 'Velocidad a internet (M-Lab)' };
 const PORT_STATES = { open: 'abierto', closed: 'cerrado', filtered: 'filtrado', canceled: 'cancelado', cancelled: 'cancelado' };
 const REPLY_STATES = { ok: 'respuesta', timeout: 'tiempo agotado', ttl_expired: 'TTL expirado', host_unreachable: 'host inaccesible', net_unreachable: 'red inaccesible', port_unreachable: 'puerto inaccesible', frag_needed: 'fragmentación necesaria', other: 'sin respuesta' };
 
@@ -389,6 +389,8 @@ function probeDetail(s, c) {
   else if (p.status === 'cancelled') c.appendChild(el('p', 'muted', 'Diagnóstico cancelado.'));
   else if (p.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + p.error));
   else if (p.status === 'done' && p.result) {
+    if (p.kind === 'internet') { c.appendChild(internetView(p.result, p.combined)); return; }
+    if (p.kind === 'speed') { c.appendChild(speedView(p.result)); return; }
     if (p.combined && p.combined.messages && p.combined.messages.length) c.appendChild(combinedView(p.combined));
     const detailed = $('detailed').checked;
     if (p.kind === 'ping') c.appendChild(pingView(p.result, detailed));
@@ -617,6 +619,7 @@ function render(s) {
   last = s;
   renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s); renderCharts(s);
   if (typeof renderHistoryState === 'function') renderHistoryState(s);
+  if (typeof renderInternetState === 'function') renderInternetState(s);
 }
 
 let polling = false;

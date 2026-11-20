@@ -62,6 +62,16 @@
       <label class="stack">Clave compartida <span id="key-state" class="muted"></span>
         <span class="row"><input id="key" type="password" autocomplete="new-password" placeholder="Nueva clave"><button id="key-save" type="button">Guardar</button></span>
       </label>
+      <div class="stack">Historial
+        <label class="check"><input id="set-history" type="checkbox"> Guardar resultados en el historial</label>
+        <span id="set-history-msg" class="err-text" hidden></span>
+      </div>
+      <div class="stack">Destinos de latencia a internet (máx. 4)
+        <ul id="targets" class="subnets"></ul>
+        <span class="row"><input id="target" type="text" maxlength="64" placeholder="IPv4 pública, p. ej. 9.9.9.9" aria-label="Nuevo destino de latencia"><button id="target-add" type="button">Añadir</button></span>
+        <span class="row"><button id="targets-default" type="button">Restaurar valores por defecto</button></span>
+        <span id="targets-error" class="err-text" role="alert" hidden></span>
+      </div>
       <div class="stack">Subredes extra
         <ul id="subnets" class="subnets"></ul>
         <span class="row"><input id="subnet" type="text" placeholder="192.168.2.0/24"><button id="subnet-add" type="button">Añadir</button></span>
@@ -78,8 +88,12 @@
       <button id="probe-trace" type="button" data-kind="trace">Traceroute</button>
       <button id="probe-mtu" type="button" data-kind="mtu">MTU</button>
       <button id="probe-ports" type="button" data-kind="ports">Puertos</button>
+      <span class="probe-sep" aria-hidden="true"></span>
+      <button id="probe-internet" type="button">Internet</button>
+      <button id="probe-speed" type="button">Velocidad a internet</button>
       <span id="probe-blocked" class="blocked"></span>
     </div>
+    <p id="speed-notice" class="muted speed-notice">Velocidad a internet usa un servidor de M-Lab y publica su IP pública; se le pedirá confirmación antes de cada prueba.</p>
     <div id="detail"></div>
     <div id="charts"></div>
   </section>
@@ -163,8 +177,19 @@
     </div>
   </section>
 </main>
+<div id="speed-dialog" class="modal-back" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title">
+    <h2 id="speed-title"></h2>
+    <p id="speed-ip"></p>
+    <p id="speed-data"></p>
+    <p id="speed-limit"></p>
+    <p class="row speed-policies"><button id="speed-policy-mlab" type="button">Política de M-Lab</button><button id="speed-policy-nperf" type="button">Política de NPerf</button></p>
+    <p class="row speed-buttons"><button id="speed-cancel" type="button">Cancelar</button><button id="speed-accept" type="button" class="primary">Aceptar y medir</button></p>
+  </div>
+</div>
 <script src="chart.js"></script>
 <script src="app.js"></script>
+<script src="internet.js"></script>
 <script src="history.js"></script>
 </body>
 </html>

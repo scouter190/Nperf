@@ -132,6 +132,7 @@ type State struct {
 	HasKey          bool              `json:"has_key"` // la clave nunca se expone
 	HistoryEnabled  bool              `json:"history_enabled"`
 	HistoryWarning  string            `json:"history_warning,omitempty"`
+	InternetTargets []string          `json:"internet_targets"`
 }
 
 // App es el backend de la interfaz. Seguro para uso concurrente.
@@ -523,7 +524,7 @@ func (a *App) State() State {
 	case pr.Running:
 		canProbe, probeBlocked = false, probeAlreadyRunning
 	}
-	return State{HistoryEnabled: a.historyOn(cfg), HistoryWarning: hw, Probe: pr, CanProbe: canProbe, ProbeBlocked: probeBlocked, HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
+	return State{InternetTargets: cfg.Targets(), HistoryEnabled: a.historyOn(cfg), HistoryWarning: hw, Probe: pr, CanProbe: canProbe, ProbeBlocked: probeBlocked, HasKey: cfg.Key != "", CanTest: canTest, TestBlocked: blocked, ConfigError: cfgText, Self: self, Peers: peers, NoAgent: noAgent, SelectedID: sel, Direction: dir, Directions: directionOptions(alias, peerAlias),
 		DurationSeconds: dur, TotalSeconds: total, TotalLabel: label, Alias: alias, ExtraSubnets: subs,
 		FirewallHint: hint, Test: test}
 }

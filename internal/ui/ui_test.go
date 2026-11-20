@@ -2,12 +2,16 @@ package ui
 
 import (
 	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 
 	"nperf/internal/app"
+	"nperf/internal/ndt7"
 )
 
 func read(t *testing.T, name string) string {
@@ -23,7 +27,7 @@ func read(t *testing.T, name string) string {
 }
 
 func TestEmbedded(t *testing.T) {
-	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js", "history.js"} {
+	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js", "history.js", "internet.js"} {
 		read(t, n)
 	}
 }
@@ -47,7 +51,7 @@ var unsafeJS = regexp.MustCompile(`innerHTML|insertAdjacentHTML|outerHTML|docume
 func unsafeUse(js string) []string { return unsafeJS.FindAllString(js, -1) }
 
 func TestNoUnsafeDOM(t *testing.T) {
-	for _, n := range []string{"app.js", "mock.js", "history.js"} {
+	for _, n := range []string{"app.js", "mock.js", "history.js", "internet.js"} {
 		if bad := unsafeUse(read(t, n)); len(bad) > 0 {
 			t.Errorf("%s usa API insegura: %v", n, bad)
 		}
@@ -111,15 +115,15 @@ func TestBindingsExistInApp(t *testing.T) {
 	}
 	typ := reflect.TypeOf(&app.App{})
 	names := regexp.MustCompile(`'(\w+)'`).FindAllStringSubmatch(m[1], -1)
-	if len(names) != 23 {
-		t.Fatalf("se esperaban 23 métodos, hay %d", len(names))
+	if len(names) != 27 {
+		t.Fatalf("se esperaban 27 métodos, hay %d", len(names))
 	}
 	for _, n := range names {
 		goName := strings.ToUpper(n[1][:1]) + n[1][1:]
 		if _, ok := typ.MethodByName(goName); !ok {
 			t.Errorf("app.App no tiene %s (JS %s)", goName, n[1])
 		}
-		if !strings.Contains(js+read(t, "history.js"), "nperf."+n[1]+"(") && n[1] != "state" {
+		if !strings.Contains(js+read(t, "history.js")+read(t, "internet.js"), "nperf."+n[1]+"(") && n[1] != "state" {
 			t.Errorf("la UI no usa nperf.%s", n[1])
 		}
 	}
@@ -172,5 +176,80 @@ func TestHistoryUI(t *testing.T) {
 	// El campo de ruta nunca se envía: la elige el diálogo nativo.
 	if regexp.MustCompile(`\bpath\b`).MatchString(js) {
 		t.Error("history.js no debe manejar rutas de entrada")
+	}
+}
+
+// internet.js: aviso de M-Lab idéntico a notice.go, startSpeed solo desde "Aceptar y medir",
+// sin URLs externas en el HTML y con los valores exactos de openPrivacy del puente.
+func TestInternetUI(t *testing.T) {
+	js, html, mock := read(t, "internet.js"), read(t, "index.html"), read(t, "mock.js")
+	for _, txt := range []string{ndt7.NoticeTitle, ndt7.NoticeIP, ndt7.NoticeData, ndt7.NoticeLimit, ndt7.Attribution} {
+		if !strings.Contains(js, "'"+txt+"'") {
+			t.Errorf("internet.js no contiene el texto de notice.go: %q", txt)
+		}
+	}
+	if regexp.MustCompile(`(?i)https?://`).MatchString(html) {
+		t.Error("index.html no debe tener URLs externas")
+	}
+	for _, s := range []string{"nperf.openPrivacy('" + app.PrivacyMLab + "')", "nperf.openPrivacy('" + app.PrivacyNPerf + "')", "nperf.startInternet(", "nperf.setInternetTargets(", "Aceptar y medir"} {
+		if !strings.Contains(js+html, s) {
+			t.Errorf("falta %q", s)
+		}
+	}
+	if !strings.Contains(html, `<script src="internet.js"></script>`) {
+		t.Error("index.html no carga internet.js")
+	}
+	// Exactamente una llamada a startSpeed, dentro de acceptSpeed, que solo enlaza el botón de aceptar.
+	for _, n := range []string{"app.js", "history.js", "internet.js"} {
+		src := read(t, n)
+		c := strings.Count(src, "nperf.startSpeed(")
+		if n == "internet.js" {
+			if c != 1 {
+				t.Errorf("internet.js debe llamar a startSpeed una sola vez, hay %d", c)
+			}
+		} else if c != 0 {
+			t.Errorf("%s no debe llamar a startSpeed", n)
+		}
+	}
+	m := regexp.MustCompile(`(?s)function acceptSpeed\(\) \{(.*?)\n\}`).FindStringSubmatch(js)
+	if m == nil || !strings.Contains(m[1], "nperf.startSpeed(true)") {
+		t.Error("startSpeed(true) debe estar dentro de acceptSpeed")
+	}
+	if strings.Count(js, "acceptSpeed") != 2 || !strings.Contains(js, "$('speed-accept').addEventListener('click', acceptSpeed)") {
+		t.Error("acceptSpeed solo debe ser el manejador del botón de aceptar")
+	}
+	if strings.Contains(js, "startSpeed(false") || strings.Contains(mock, "startSpeed(") {
+		t.Error("uso inesperado de startSpeed")
+	}
+}
+
+// reportView no debe fallar con resultados parciales (TEST! cancelado sin rtt, tcp o udp).
+func TestReportViewPartial(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "t.js")
+	app := filepath.Join(dir, "app.js")
+	if err := os.WriteFile(app, []byte(read(t, "app.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	js := `const vm=require('vm'),fs=require('fs');
+function node(tag){return {tag,children:[],textContent:'',className:'',appendChild(c){this.children.push(c);return c;}};}
+const ctx={window:{},document:{createElement:node,addEventListener(){},getElementById(){return null;},querySelector(){return null;}},JSON,Date,Promise,Object,Array,String,Number,setTimeout(){},setInterval(){},clearTimeout(){}};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const st={directions:[{value:'fwd',label:'a'},{value:'rev',label:'b'}],self:{alias:'x'},peers:[],no_agent:[],selected_id:'',test:{report:null,diagnosis:null}};
+for (const r of [{}, {tcp:{fwd:{status:'measured',throughput_mbps:5,bytes:1,retransmissions:null}}}, {rtt:{status:'measured',min_ms:1,avg_ms:1,max_ms:1}, udp:{}}, {tcp:{}, notes:null}]) {
+  st.test.report=r;
+  for (const d of [true,false]) { ctx.__r=r; ctx.__s=st; ctx.__d=d; vm.runInContext('reportView(__s, __d)',ctx); }
+}
+console.log('ok');`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, app).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("reportView falla con resultados parciales: %v\n%s", err, out)
 	}
 }
