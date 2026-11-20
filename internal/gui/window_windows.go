@@ -32,6 +32,7 @@ func RunWindow(url, dataDir string, call func(secret, name string, args ...json.
 		return WindowCreateError(CheckWebView2())
 	}
 	defer w.Destroy()
+	ownerHWND.Store(uintptr(w.Window()))
 	w.SetSize(1000, 640, webview2.HintNone)
 	w.SetSize(720, 480, webview2.HintMin)
 	// Un panic en un método no debe tumbar la app: llega a la UI como error.

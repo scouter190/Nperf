@@ -3,14 +3,47 @@ package gui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"nperf/internal/app"
+	"nperf/internal/config"
 	"nperf/internal/discovery"
+	"nperf/internal/history"
+	"nperf/internal/ndt7"
 	"nperf/internal/netinfo"
 	"nperf/internal/probe"
+	"nperf/internal/version"
+	"nperf/internal/ws"
 )
+
+// localAppData devuelve %LocalAppData% ("" si no existe); variable para pruebas.
+var localAppData = func() string { return os.Getenv("LOCALAPPDATA") }
+
+// historyAndSpeed crea el almacén del historial (activado según la configuración) y las
+// opciones de la prueba M-Lab con la cuota en %LocalAppData%\NPerf. Sin LocalAppData
+// devuelve nil en ambos (las funciones quedan "no disponibles"). Locate y WS usan la
+// red real: sin proxy y con la verificación TLS del sistema.
+func historyAndSpeed(configDir string) (*history.Store, *ndt7.RunOptions) {
+	la := localAppData()
+	if la == "" {
+		return nil, nil
+	}
+	on := true
+	if c, err := config.LoadFull(configDir); err == nil {
+		on = c.HistoryOn()
+	}
+	st, err := history.Open(history.DefaultDir(la), nil, on)
+	if err != nil {
+		st = nil
+	}
+	return st, &ndt7.RunOptions{
+		Quota: &ndt7.Quota{Dir: filepath.Join(la, "NPerf")},
+		WS:    ws.Options{UserAgent: "NPerf/" + version.Current},
+	}
+}
 
 // OpenURL abre una URL en el sistema; lo asigna la implementación de cada plataforma
 // (open_windows.go, T14). nil = no disponible.
@@ -61,7 +94,9 @@ func NewService(ctx context.Context, configDir string, base func() app.RuntimeOp
 	}
 	penv, pclose := probe.System()
 	s.closeProbe = pclose
+	hist, speed := historyAndSpeed(configDir)
 	a, err := app.New(app.Deps{
+		History: hist, Speed: speed,
 		Probe: penv, Router: penv.Router,
 		ConfigDir: configDir, Table: s.table, SelfID: id, SelfState: s.selfState,
 		Net: s.net, OpenURL: OpenURL, Counters: netinfo.NewSystemCounters(),
@@ -180,3 +215,17 @@ func (b backend) State() any { return b.App.State() }
 func (b backend) Monitor(active bool) (any, error) { return b.App.Monitor(active) }
 
 func (b backend) Adapters(detailed bool) (any, error) { return b.App.Adapters(detailed) }
+
+func (b backend) History(host, kind string, since, until time.Time) (any, error) {
+	r, err := b.App.History(history.Filter{Host: host, Kind: kind, Since: since, Until: until})
+	if err != nil {
+		return nil, err
+	}
+	recs := r.Records
+	if recs == nil {
+		recs = []*history.Record{}
+	}
+	return map[string]any{"records": recs, "skipped": r.Skipped}, nil
+}
+
+func (b backend) HistoryRecord(id string) (any, error) { return b.App.HistoryRecord(id) }

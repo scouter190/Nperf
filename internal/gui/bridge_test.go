@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"nperf/internal/app"
 )
 
 const sec = "s3creto"
@@ -235,5 +238,204 @@ func TestBridgeMonitor(t *testing.T) {
 	}
 	if len(f.calls) != 2 {
 		t.Errorf("llamadas inesperadas: %v", f.calls)
+	}
+}
+
+func (f *fake) History(h, k string, s, u time.Time) (any, error) {
+	return "hist", f.rec("history:" + h + "|" + k + "|" + s.UTC().Format(time.RFC3339))
+}
+func (f *fake) HistoryRecord(id string) (any, error) { return "rec", f.rec("historyRecord:" + id) }
+func (f *fake) DeleteHistory(ids []string) (int, error) {
+	return len(ids), f.rec("deleteHistory:" + strings.Join(ids, ","))
+}
+func (f *fake) DeleteAllHistory() (int, error) { return 7, f.rec("deleteAllHistory") }
+func (f *fake) ExportHistory(ids []string, format string, o app.ExportOpts, path string) ([]string, error) {
+	return []string{path}, f.rec("exportHistory:" + strings.Join(ids, ",") + "|" + format + "|" + o.Client + "|" + path)
+}
+func (f *fake) SetHistoryEnabled(on bool) error {
+	if on {
+		return f.rec("setHistoryEnabled:true")
+	}
+	return f.rec("setHistoryEnabled:false")
+}
+func (f *fake) SetInternetTargets(t []string) error {
+	return f.rec("setInternetTargets:" + strings.Join(t, ","))
+}
+func (f *fake) StartInternet() error       { return f.rec("startInternet") }
+func (f *fake) StartSpeed(c bool) error    { return f.rec("startSpeed") }
+func (f *fake) OpenPrivacy(w string) error { return f.rec("openPrivacy:" + w) }
+
+const (
+	id1 = "20260102-030405-abcdef01"
+	id2 = "20260102-030406-abcdef01"
+)
+
+func TestBridgeHistoryAccepted(t *testing.T) {
+	f := &fake{}
+	b := &Bridge{Secret: sec, B: f}
+	for _, c := range []struct {
+		name, args, want string
+	}{
+		{"history", `{"host":"pc","kind":"test","since":"2026-01-02T03:04:05Z"}`, "history:pc|test|2026-01-02T03:04:05Z"},
+		{"historyRecord", `"` + id1 + `"`, "historyRecord:" + id1},
+		{"deleteHistory", `["` + id1 + `","` + id2 + `"]`, "deleteHistory:" + id1 + "," + id2},
+		{"setHistoryEnabled", `false`, "setHistoryEnabled:false"},
+		{"setInternetTargets", `["1.1.1.1","8.8.4.4"]`, "setInternetTargets:1.1.1.1,8.8.4.4"},
+		{"openPrivacy", `"mlab"`, "openPrivacy:mlab"},
+		{"startSpeed", `true`, "startSpeed"},
+	} {
+		f.calls = nil
+		if _, err := b.Call(sec, c.name, rawj(c.args)...); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if len(f.calls) != 1 || f.calls[0] != c.want {
+			t.Errorf("%s: %v, quería %q", c.name, f.calls, c.want)
+		}
+	}
+	for _, n := range []string{"deleteAllHistory", "startInternet"} {
+		if _, err := b.Call(sec, n); err != nil {
+			t.Fatalf("%s: %v", n, err)
+		}
+	}
+}
+
+func TestBridgeHistoryRejected(t *testing.T) {
+	f := &fake{}
+	b := &Bridge{Secret: sec, B: f, SaveDialog: func(string, string) (string, error) { return `C:\x.csv`, nil }}
+	long := strings.Repeat("a", 300)
+	bad := []struct{ name, args string }{
+		{"history", ``},
+		{"history", `{}, {}`},
+		{"history", `"x"`},
+		{"history", `null`},
+		{"history", `{"path":"C:\\x"}`},
+		{"history", `{"since":"ayer"}`},
+		{"history", `{"host":"` + long + `"}`},
+		{"historyRecord", ``},
+		{"historyRecord", `"..\\..\\x"`},
+		{"historyRecord", `"` + id1 + `","x"`},
+		{"historyRecord", `5`},
+		{"deleteHistory", `["../x"]`},
+		{"deleteHistory", `"` + id1 + `"`},
+		{"deleteHistory", `[5]`},
+		{"deleteHistory", `["` + id1 + `"], 1`},
+		{"deleteAllHistory", `1`},
+		{"setHistoryEnabled", `"true"`},
+		{"setHistoryEnabled", `true, false`},
+		{"setHistoryEnabled", ``},
+		{"setInternetTargets", `"1.1.1.1"`},
+		{"setInternetTargets", `["1","2","3","4","5"]`},
+		{"setInternetTargets", `["` + long + `"]`},
+		{"setInternetTargets", `[1]`},
+		{"startInternet", `1`},
+		{"startSpeed", `false`},
+		{"startSpeed", ``},
+		{"startSpeed", `"true"`},
+		{"startSpeed", `true, true`},
+		{"openPrivacy", `"otra"`},
+		{"openPrivacy", `"https://x.example"`},
+		{"openPrivacy", ``},
+		{"exportHistory", ``},
+		{"exportHistory", `["` + id1 + `"], "csv"`},
+		{"exportHistory", `[], "csv", {}`},
+		{"exportHistory", `["` + id1 + `"], "exe", {}`},
+		{"exportHistory", `["` + id1 + `"], "csv", {"path":"C:\\x.csv"}`},
+		{"exportHistory", `["` + id1 + `"], "csv", {}, "C:\\x.csv"`},
+		{"exportHistory", `["C:\\x"], "csv", {}`},
+		{"exportHistory", `["` + id1 + `"], "csv", {"notes":"` + strings.Repeat("n", 2001) + `"}`},
+		{"exportHistory", `["` + id1 + `"], 1, {}`},
+	}
+	for _, c := range bad {
+		f.calls = nil
+		var args []json.RawMessage
+		if c.args != "" {
+			args = rawj(c.args)
+		}
+		if _, err := b.Call(sec, c.name, args...); err == nil {
+			t.Errorf("%s(%s) debería fallar", c.name, c.args)
+		}
+		if len(f.calls) != 0 {
+			t.Errorf("%s(%s) llegó al backend: %v", c.name, c.args, f.calls)
+		}
+	}
+}
+
+func TestBridgeExportPathFromDialog(t *testing.T) {
+	f := &fake{}
+	var gotFmt, gotName string
+	b := &Bridge{Secret: sec, B: f, Now: func() time.Time { return time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC) },
+		SaveDialog: func(format, sug string) (string, error) {
+			gotFmt, gotName = format, sug
+			return `C:\elegida\h.html`, nil
+		}}
+	v, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "html", {"client":"ACME"}`)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotFmt != "html" || gotName != "nperf-historial-20260304.html" {
+		t.Errorf("diálogo: %q %q", gotFmt, gotName)
+	}
+	if want := "exportHistory:" + id1 + "|html|ACME|" + `C:\elegida\h.html`; f.calls[0] != want {
+		t.Errorf("llamada %q, quería %q", f.calls[0], want)
+	}
+	if p, ok := v.([]string); !ok || len(p) != 1 {
+		t.Errorf("resultado %v", v)
+	}
+}
+
+func TestBridgeExportCancelled(t *testing.T) {
+	f := &fake{}
+	b := &Bridge{Secret: sec, B: f, SaveDialog: func(string, string) (string, error) { return "", ErrSaveCancelled }}
+	v, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...)
+	if err != nil || v != "cancelado" || len(f.calls) != 0 {
+		t.Fatalf("cancelado: %v %v %v", v, err, f.calls)
+	}
+	b.SaveDialog = func(string, string) (string, error) { return "", errors.New("boom") }
+	if _, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...); err == nil || len(f.calls) != 0 {
+		t.Fatal("el error del diálogo debe propagarse sin exportar")
+	}
+	b.SaveDialog = nil
+	if _, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...); err == nil {
+		t.Fatal("sin diálogo debe fallar")
+	}
+}
+
+// rawj convierte una lista de argumentos JSON separados por comas en argumentos del puente.
+func rawj(s string) []json.RawMessage {
+	var out []json.RawMessage
+	if err := json.Unmarshal([]byte("["+s+"]"), &out); err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func TestBridgeSaveDialogReentrant(t *testing.T) {
+	f := &fake{}
+	inside, release := make(chan struct{}), make(chan struct{})
+	b := &Bridge{Secret: sec, B: f}
+	b.SaveDialog = func(string, string) (string, error) {
+		close(inside)
+		<-release
+		return "", ErrSaveCancelled
+	}
+	done := make(chan any)
+	go func() {
+		v, _ := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...)
+		done <- v
+	}()
+	<-inside
+	if _, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...); err == nil || !strings.Contains(err.Error(), "ya hay un diálogo") {
+		t.Fatalf("segunda llamada debe rechazarse: %v", err)
+	}
+	if _, err := b.Call(sec, "startInternet"); err != nil {
+		t.Fatalf("otros métodos deben funcionar: %v", err)
+	}
+	close(release)
+	if v := <-done; v != "cancelado" {
+		t.Fatalf("primera: %v", v)
+	}
+	b.SaveDialog = func(string, string) (string, error) { return "", ErrSaveCancelled }
+	if v, err := b.Call(sec, "exportHistory", rawj(`["`+id1+`"], "csv", {}`)...); err != nil || v != "cancelado" {
+		t.Fatalf("guard no liberado: %v %v", v, err)
 	}
 }
