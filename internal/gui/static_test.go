@@ -24,7 +24,7 @@ func get(t *testing.T, h http.Handler, method, host, path string) *httptest.Resp
 
 func TestStaticHandler(t *testing.T) {
 	h := StaticHandler(ui.Files(), "tok", "127.0.0.1:1", "sec123")
-	for p, ct := range map[string]string{"/tok/": "text/html", "/tok/index.html": "text/html", "/tok/app.js": "text/javascript", "/tok/chart.js": "text/javascript", "/tok/history.js": "text/javascript", "/tok/internet.js": "text/javascript", "/tok/app.css": "text/css"} {
+	for p, ct := range map[string]string{"/tok/": "text/html", "/tok/index.html": "text/html", "/tok/app.js": "text/javascript", "/tok/chart.js": "text/javascript", "/tok/history.js": "text/javascript", "/tok/internet.js": "text/javascript", "/tok/shell.js": "text/javascript", "/tok/sidebar.js": "text/javascript", "/tok/panel.js": "text/javascript", "/tok/drawers.js": "text/javascript", "/tok/modals.js": "text/javascript", "/tok/app.css": "text/css"} {
 		w := get(t, h, "GET", "127.0.0.1:1", p)
 		if got := w.Header().Get("Content-Security-Policy"); got != csp || !strings.Contains(got, "frame-ancestors 'none'") {
 			t.Errorf("%s: CSP: %q", p, got)
@@ -102,5 +102,25 @@ func TestSessionMetaInjected(t *testing.T) {
 	}
 	if strings.Contains(get(t, h, "GET", "h", "/tok/app.js").Body.String(), "abc123") {
 		t.Fatal("el secreto solo va en index.html")
+	}
+}
+
+// Todo script o estilo que carga index.html se sirve (y mock.js nunca).
+func TestIndexAssetsServed(t *testing.T) {
+	b, err := fs.ReadFile(ui.Files(), "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := regexp.MustCompile(`(?:src|href)="([a-z0-9.]+\.(?:js|css))"`).FindAllStringSubmatch(string(b), -1)
+	if len(refs) < 9 {
+		t.Fatalf("pocas referencias en index.html: %d", len(refs))
+	}
+	for _, m := range refs {
+		if _, ok := servidos[m[1]]; !ok {
+			t.Errorf("%s no está en servidos", m[1])
+		}
+	}
+	if _, ok := servidos["mock.js"]; ok {
+		t.Error("mock.js no debe servirse")
 	}
 }

@@ -36,6 +36,14 @@
 
   function byId(id) { return root.document ? root.document.getElementById(id) : null; }
 
+  var TITLES = { adapters: 'Tarjetas de red', settings: 'Ajustes' };
+
+  // fire avisa a las vistas (nperf:view, nperf:drawer) sin acoplarlas al shell.
+  function fire(name) {
+    var d = root.document;
+    if (d && typeof root.CustomEvent === 'function') d.dispatchEvent(new root.CustomEvent(name));
+  }
+
   function setView(v) {
     if (v !== 'panel' && v !== 'history') return;
     st.view = v;
@@ -47,6 +55,7 @@
         tab.ariaCurrent = name === v ? 'page' : 'false';
       }
     });
+    fire('nperf:view');
   }
 
   // openDrawer reutiliza el mismo fondo: al cambiar de drawer solo se alternan los paneles.
@@ -62,9 +71,12 @@
         btn.ariaExpanded = n === name ? 'true' : 'false';
       }
     });
+    var title = byId('drawer-title');
+    if (title) title.textContent = TITLES[name] || '';
     drawer.classList.add('open');
     back.classList.add('open');
     layers.open('drawer', closeDrawer);
+    fire('nperf:drawer');
   }
 
   function closeDrawer() {
@@ -77,6 +89,7 @@
       var btn = byId('hdr-' + n);
       if (btn) { btn.classList.remove('active'); btn.ariaExpanded = 'false'; }
     });
+    fire('nperf:drawer');
   }
 
   function toggleDrawer(name) {
@@ -139,6 +152,10 @@
     on('server-pill', function () {
       var pill = byId('server-pill');
       if (pill && pill.classList.contains('err')) openDrawer('settings');
+    });
+    on('btn-info', function () {
+      var pop = byId('pop-info');
+      if (pop) togglePopover(byId('btn-info'), pop);
     });
     on('backdrop', closeDrawer);
     on('drawer-close', closeDrawer);

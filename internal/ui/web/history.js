@@ -17,7 +17,7 @@ let histLoading = false, histReload = false;
 let histSig = '';
 let histEnabledBusy = false;
 
-function histShown() { return !$('history-panel').hidden; }
+function histShown() { return !!(window.NPerfShell && window.NPerfShell.state.view === 'history'); }
 
 function histErr(e) { return String(e && e.message ? e.message : e); }
 
@@ -269,14 +269,9 @@ function histOpenRecord(id) {
 }
 
 // ---- panel ----
-function histToggle() {
-  const p = $('history-panel');
-  const show = p.hidden;
-  p.hidden = !show;
-  document.querySelector('.detail-panel').hidden = show;
-  $('history-toggle').ariaExpanded = show ? 'true' : 'false';
-  $('history-toggle').textContent = show ? 'Volver al panel' : 'Historial';
-  if (show) { histOpen = null; $('hist-record-view').hidden = true; $('hist-list-view').hidden = false; histLoad(); }
+// La vista la muestra NPerfShell (cabecera); al entrar se reinicia a la lista y se recarga.
+function histEnter() {
+  histOpen = null; $('hist-record-view').hidden = true; $('hist-list-view').hidden = false; histLoad();
 }
 
 // Llamada desde render() de app.js con cada estado.
@@ -298,7 +293,7 @@ function renderHistoryState(s) {
 document.addEventListener('DOMContentLoaded', function () {
   const kind = $('hist-kind');
   HIST_KINDS.forEach(function (k) { const o = el('option', '', k[1]); o.value = k[0]; kind.appendChild(o); });
-  $('history-toggle').addEventListener('click', histToggle);
+  document.addEventListener('nperf:view', function () { if (histShown()) histEnter(); });
   $('hist-filters').addEventListener('submit', function (e) { e.preventDefault(); histLoad(); });
   $('hist-reset').addEventListener('click', function () {
     $('hist-host').value = ''; $('hist-kind').value = ''; $('hist-since').value = ''; $('hist-until').value = '';

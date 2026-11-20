@@ -442,3 +442,9 @@ body.captura .m-tool{display:none}
 .prog .grow{flex:1 1 170px}
 .drawer-pane>.alert{margin-bottom:12px}
 .li .btn{font-family:var(--font-sans)}
+
+/* ===== T8: sidebar conectado, toasts ===== */
+.sb-list{display:flex;flex-direction:column;gap:6px}
+.toasts{position:fixed;right:14px;bottom:14px;z-index:var(--z-toast);display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none}
+.toasts .toast{position:static;pointer-events:auto;max-width:360px}
+.toasts .toast.error{border-color:var(--err-border);background:var(--err-bg)}

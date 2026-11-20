@@ -27,7 +27,7 @@ func read(t *testing.T, name string) string {
 }
 
 func TestEmbedded(t *testing.T) {
-	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js", "history.js", "internet.js"} {
+	for _, n := range []string{"index.html", "app.css", "app.js", "mock.js", "chart.js", "history.js", "internet.js", "shell.js", "sidebar.js", "panel.js", "drawers.js", "modals.js"} {
 		read(t, n)
 	}
 }
@@ -51,7 +51,7 @@ var unsafeJS = regexp.MustCompile(`innerHTML|insertAdjacentHTML|outerHTML|docume
 func unsafeUse(js string) []string { return unsafeJS.FindAllString(js, -1) }
 
 func TestNoUnsafeDOM(t *testing.T) {
-	for _, n := range []string{"app.js", "mock.js", "history.js", "internet.js", "shell.js"} {
+	for _, n := range []string{"app.js", "mock.js", "history.js", "internet.js", "shell.js", "sidebar.js", "panel.js", "drawers.js", "modals.js"} {
 		if bad := unsafeUse(read(t, n)); len(bad) > 0 {
 			t.Errorf("%s usa API insegura: %v", n, bad)
 		}
@@ -123,7 +123,7 @@ func TestBindingsExistInApp(t *testing.T) {
 		if _, ok := typ.MethodByName(goName); !ok {
 			t.Errorf("app.App no tiene %s (JS %s)", goName, n[1])
 		}
-		if !strings.Contains(js+read(t, "history.js")+read(t, "internet.js"), "nperf."+n[1]+"(") && n[1] != "state" {
+		if !strings.Contains(js+read(t, "history.js")+read(t, "internet.js")+read(t, "sidebar.js"), "nperf."+n[1]+"(") && n[1] != "state" {
 			t.Errorf("la UI no usa nperf.%s", n[1])
 		}
 	}
@@ -132,10 +132,13 @@ func TestBindingsExistInApp(t *testing.T) {
 // La UI cubre iconos, panel de tarjetas, aviso de ubicación y semáforo, sin recursos externos.
 func TestNetworkDetectionUI(t *testing.T) {
 	js, css, html := read(t, "app.js"), read(t, "app.css"), read(t, "index.html")
-	for _, s := range []string{"nperf.adapters(", "nperf.monitor(true)", "nperf.monitor(false)", "NPerfChart.render", "gráfica no disponible: el otro equipo no envía muestras", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "$('adapters-box').open", "d.ssid", "diagnosis", "'parcial'"} {
+	for _, s := range []string{"nperf.adapters(", "nperf.monitor(true)", "nperf.monitor(false)", "NPerfChart.render", "gráfica no disponible: el otro equipo no envía muestras", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "adaptersOpen()", "diagnosis", "'parcial'"} {
 		if !strings.Contains(js, s) {
 			t.Errorf("app.js no contiene %q", s)
 		}
+	}
+	if !strings.Contains(read(t, "sidebar.js"), "d.ssid") {
+		t.Error("sidebar.js no muestra el SSID")
 	}
 	for _, s := range []string{".ico.eth", ".ico.wifi", ".ico.other", ".ico.unknown", ".dot.green", ".dot.amber", ".dot.red", "prefers-color-scheme:dark"} {
 		if !strings.Contains(css, s) {
@@ -145,7 +148,7 @@ func TestNetworkDetectionUI(t *testing.T) {
 	if regexp.MustCompile(`(?i)url\((["']?)(https?:|//)`).MatchString(css) {
 		t.Error("app.css no debe cargar recursos externos")
 	}
-	for _, id := range []string{`id="adapters-box"`, `id="location-open"`, `id="adapters"`} {
+	for _, id := range []string{`id="drawer-adapters"`, `id="location-open"`, `id="adapters"`} {
 		if !strings.Contains(html, id) {
 			t.Errorf("index.html sin %s", id)
 		}
@@ -321,5 +324,51 @@ p.then(v=>{assert.strictEqual(v,7);assert(!b.disabled&&b.textContent==='Ok'&&C.u
 	out, err := exec.Command(node, script, app).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok") {
 		t.Fatalf("núcleo app.js: %v\n%s", err, out)
+	}
+}
+
+var scriptRe = regexp.MustCompile(`<script src="([a-z0-9.]+\.js)"></script>`)
+
+// index.html carga los scripts en el orden de dependencias y todos están embebidos.
+func TestIndexScriptsOrder(t *testing.T) {
+	h := read(t, "index.html")
+	var got []string
+	for _, m := range scriptRe.FindAllStringSubmatch(h, -1) {
+		got = append(got, m[1])
+		read(t, m[1])
+	}
+	want := []string{"chart.js", "app.js", "shell.js", "sidebar.js", "panel.js", "drawers.js", "modals.js", "internet.js", "history.js"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("scripts de index.html: %v, se esperaba %v", got, want)
+	}
+}
+
+// Cada id que sidebar.js y shell.js piden al DOM existe en index.html.
+func TestSidebarIDs(t *testing.T) {
+	h := read(t, "index.html")
+	re := regexp.MustCompile(`(?:\$|byId)\('([a-z0-9-]+)'\)`)
+	ids := map[string]bool{}
+	for _, n := range []string{"sidebar.js", "shell.js"} {
+		for _, m := range re.FindAllStringSubmatch(read(t, n), -1) {
+			ids[m[1]] = true
+		}
+	}
+	for _, id := range []string{"sb-self", "sb-peers", "sb-noagent", "sb-empty", "host-form", "host-open", "hist-badge", "hdr-net", "toasts", "server-pill"} {
+		ids[id] = true
+	}
+	for id := range ids {
+		if !strings.Contains(h, `id="`+id+`"`) {
+			t.Errorf("index.html no tiene id=%q", id)
+		}
+	}
+	// El aviso de firewall: banner persistente bajo la cabecera, pintado por renderIf con el texto de Go.
+	if !strings.Contains(h, `id="firewall"`) || !strings.Contains(read(t, "app.js"), "renderIf('firewall', s.firewall_hint") {
+		t.Error("falta el banner persistente de firewall_hint")
+	}
+	// El sidebar antiguo ya no existe.
+	for _, id := range []string{`id="self"`, `id="peers"`, `id="noagent"`, `id="adapters-box"`, `id="history-toggle"`} {
+		if strings.Contains(h, id) {
+			t.Errorf("index.html conserva %s", id)
+		}
 	}
 }

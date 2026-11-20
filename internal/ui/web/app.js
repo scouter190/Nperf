@@ -40,78 +40,17 @@ function changed(key, value) {
   sig[key] = s;
   return true;
 }
-let toastTimer = null;
+// Avisos: pila #toasts (NPerfCore.pushToast, definido al final de este archivo).
+let toastLast = '', toastAt = 0;
 function toast(msg) {
-  const t = $('toast');
-  t.textContent = String(msg && msg.message ? msg.message : msg);
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () { t.hidden = true; }, 6000);
+  const txt = String(msg && msg.message ? msg.message : msg), now = Date.now();
+  if (txt === toastLast && now - toastAt < 6000) return; // un fallo persistente no apila avisos
+  toastLast = txt; toastAt = now;
+  window.NPerfCore.pushToast(txt, 'error');
 }
 function act(p) { return Promise.resolve(p).then(poll, function (e) { toast(e); return poll(); }); }
 
 const KINDS = { eth: 'Cable (Ethernet)', wifi: 'WiFi', other: 'Otro tipo de enlace', unknown: 'Tipo de enlace desconocido' };
-function linkLine(d) {
-  const parts = [];
-  if (d.link_speed && d.link_speed !== 'no disponible') parts.push(d.link_speed);
-  if (d.ssid) parts.push(d.ssid);
-  return parts.join(' · ');
-}
-
-const GATEWAY_ID = 'gateway';
-function deviceRow(d, selectable, selected, noAgent) {
-  const gw = noAgent && d.id === GATEWAY_ID;
-  const row = el('div', 'dev' + (selectable ? '' : ' self') + (selected ? ' sel' : '') + (d.status === 'unreachable' ? ' unreachable' : '') + (noAgent ? ' noagent' : '') + (gw ? ' gw' : ''));
-  const kind = noAgent ? 'noagent' : (KINDS[d.link] ? d.link : 'unknown');
-  const ico = el('span', 'ico ' + kind); ico.title = noAgent ? (gw ? 'Puerta de enlace (sin NPerf)' : 'Equipo sin NPerf') : KINDS[kind];
-  row.appendChild(ico);
-  const info = el('div', 'info');
-  info.appendChild(el('span', 'name', d.alias));
-  info.appendChild(el('span', 'ip', (d.ips || []).join(', ')));
-  const ln = noAgent ? '' : linkLine(d);
-  if (ln) info.appendChild(el('span', 'ip', ln));
-  row.appendChild(info);
-  row.appendChild(el('span', 'badge ' + d.status, d.status_label));
-  if (noAgent && !gw) {
-    const rm = el('button', 'rm', 'Quitar'); rm.type = 'button';
-    rm.title = 'Quitar ' + d.alias + ' de la lista';
-    rm.addEventListener('click', function (e) { e.stopPropagation(); act(nperf.removeHost(d.id)); });
-    rm.addEventListener('keydown', function (e) { e.stopPropagation(); });
-    row.appendChild(rm);
-  }
-  row.tabIndex = selectable && d.status !== 'unreachable' ? 0 : -1;
-  if (selectable) {
-    row.role = 'button';
-    row.ariaDisabled = d.status === 'unreachable' ? 'true' : 'false';
-    row.ariaPressed = selected ? 'true' : 'false';
-  }
-  row.title = d.alias + ' - ' + (d.ips || []).join(', ');
-  if (selectable && d.status !== 'unreachable') {
-    const pick = function () { act(nperf.selectPeer(d.id)); };
-    row.addEventListener('click', pick);
-    row.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
-    });
-  }
-  return row;
-}
-
-function renderList(s) {
-  if (changed('self', s.self)) {
-    const c = $('self'); clear(c); c.appendChild(deviceRow(s.self, false, false));
-  }
-  if (changed('peers', [s.peers, s.selected_id])) {
-    const c = $('peers'); clear(c);
-    s.peers.forEach(function (p) { c.appendChild(deviceRow(p, true, p.id === s.selected_id)); });
-  }
-  const na = s.no_agent || [];
-  if (changed('noagent', [na, s.selected_id])) {
-    const c = $('noagent'); clear(c);
-    na.forEach(function (p) { c.appendChild(deviceRow(p, true, p.id === s.selected_id, true)); });
-  }
-  $('empty').hidden = s.peers.length > 0;
-}
-
 function selectedDevice(s) {
   const all = (s.peers || []).concat(s.no_agent || []);
   return all.filter(function (p) { return p.id === s.selected_id; })[0];
@@ -127,7 +66,7 @@ function renderBar(s) {
     sel.value = s.direction;
   }
   const dur = $('duration');
-  if (document.activeElement !== dur) dur.value = s.duration_seconds;
+  window.NPerfCore.setValueIfIdle(dur, s.duration_seconds);
   $('total').textContent = s.direction === 'both' ? s.total_label : '';
   const running = s.test.running;
   $('test').hidden = running || isNoAgent(s, s.selected_id);
@@ -138,8 +77,9 @@ function renderBar(s) {
   $('blocked').textContent = s.can_test || isNoAgent(s, s.selected_id) ? '' : s.test_blocked_reason;
   $('direction').disabled = running;
   dur.disabled = running;
-  const ce = $('config-error'); ce.hidden = !s.config_error; ce.textContent = s.config_error || '';
-  const fw = $('firewall'); fw.hidden = !s.firewall_hint; fw.textContent = s.firewall_hint || '';
+  $('config-error').hidden = !s.config_error;
+  $('config-error-text').textContent = s.config_error || '';
+  window.NPerfCore.renderIf('firewall', s.firewall_hint || '', function (h) { $('firewall').hidden = !h; $('firewall').textContent = h; });
 }
 
 function renderSettings(s) {
@@ -478,11 +418,13 @@ function renderAdapters(v, detailed) {
   (v.adapters || []).forEach(function (a) { c.appendChild(adapterCard(a, detailed)); });
 }
 
+// El drawer de tarjetas de red lo gestiona NPerfShell (T12 lo reescribe en drawers.js).
+function adaptersOpen() { return !!(window.NPerfShell && window.NPerfShell.state.drawer === 'adapters'); }
 let adaptersBusy = false;
 function refreshAdapters() {
-  if (!$('adapters-box').open || adaptersBusy) return;
+  if (!adaptersOpen() || adaptersBusy) return;
   adaptersBusy = true;
-  const detailed = $('detailed').checked;
+  const detailed = true; // BSSID y MAC solo se ven en este drawer
   Promise.resolve().then(function () { return nperf.adapters(detailed); })
     .then(function (v) { renderAdapters(v, detailed); }, function (e) { $('adapters').textContent = String(e && e.message ? e.message : e); delete sig.adapters; })
     .then(function () { adaptersBusy = false; });
@@ -606,18 +548,21 @@ function renderMonitor(v) {
 }
 // Solo con el panel abierto y la ventana visible; si no, se detiene el muestreo.
 function refreshMonitor() {
-  if (!$('adapters-box').open || document.hidden) { stopMonitor(); return; }
+  if (!adaptersOpen() || document.hidden) { stopMonitor(); return; }
   if (monitorBusy) return;
   monitorBusy = true; monitorOn = true;
   Promise.resolve().then(function () { return nperf.monitor(true); })
-    .then(function (v) { if ($('adapters-box').open && !document.hidden) renderMonitor(v); },
+    .then(function (v) { if (adaptersOpen() && !document.hidden) renderMonitor(v); },
       function (e) { $('monitor-msg').hidden = false; $('monitor-msg').textContent = String(e && e.message ? e.message : e); delete sig.monitor; })
     .then(function () { monitorBusy = false; });
 }
 
 function render(s) {
   last = s;
-  renderBar(s); renderProbeBar(s); renderList(s); renderSettings(s); renderDetail(s); renderCharts(s);
+  renderBar(s); renderProbeBar(s); renderSettings(s); renderDetail(s); renderCharts(s);
+  ['NPerfSidebar', 'NPerfPanel', 'NPerfDrawers', 'NPerfModals'].forEach(function (n) {
+    if (window[n] && typeof window[n].render === 'function') window[n].render(s);
+  });
   if (typeof renderHistoryState === 'function') renderHistoryState(s);
   if (typeof renderInternetState === 'function') renderInternetState(s);
 }
@@ -629,7 +574,6 @@ function poll() {
   return Promise.resolve().then(function () { return nperf.state(); }).then(render, function (e) { toast(e); })
     .then(function () { polling = false; }, function () { polling = false; });
 }
-function loop() { poll().then(function () { setTimeout(loop, 500); }); }
 
 function commitDuration() {
   const v = parseInt($('duration').value, 10);
@@ -647,16 +591,9 @@ document.addEventListener('DOMContentLoaded', function () {
       else startProbe(x[0]);
     });
   });
-  $('host-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    const err = $('host-error'); err.hidden = true;
-    Promise.resolve().then(function () { return nperf.addHost($('host-target').value, $('host-alias').value); })
-      .then(function () { $('host-target').value = ''; $('host-alias').value = ''; return poll(); },
-        function (x) { err.textContent = String(x && x.message ? x.message : x); err.hidden = false; });
-  });
   $('cancel').addEventListener('click', function () { act(nperf.cancelTest()); });
-  $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); refreshAdapters(); });
-  $('adapters-box').addEventListener('toggle', function () { refreshAdapters(); if ($('adapters-box').open) refreshMonitor(); else stopMonitor(); });
+  $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); });
+  document.addEventListener('nperf:drawer', function () { refreshAdapters(); if (adaptersOpen()) refreshMonitor(); else stopMonitor(); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) stopMonitor(); else refreshMonitor(); });
   window.addEventListener('pagehide', stopMonitor);
   setInterval(refreshMonitor, 1000);
@@ -672,7 +609,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const v = $('subnet').value; $('subnet').value = '';
     act(nperf.addSubnet(v));
   });
-  loop();
+  // Un único sondeo de state() (NPerfCore.startPolling); poll() solo se usa tras una acción.
+  window.NPerfCore.startPolling(function () { return nperf.state(); }, render, toast);
 });
 
 // Núcleo reutilizable por las vistas (spec 008): window.NPerfCore. Convive con el código anterior.

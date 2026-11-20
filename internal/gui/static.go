@@ -30,6 +30,11 @@ var servidos = map[string]string{
 	"chart.js":    "text/javascript; charset=utf-8",
 	"history.js":  "text/javascript; charset=utf-8",
 	"internet.js": "text/javascript; charset=utf-8",
+	"shell.js":    "text/javascript; charset=utf-8",
+	"sidebar.js":  "text/javascript; charset=utf-8",
+	"panel.js":    "text/javascript; charset=utf-8",
+	"drawers.js":  "text/javascript; charset=utf-8",
+	"modals.js":   "text/javascript; charset=utf-8",
 }
 
 // csp es la misma política que el meta de index.html más las directivas que un meta no admite.
