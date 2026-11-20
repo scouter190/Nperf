@@ -674,3 +674,101 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   loop();
 });
+
+// Núcleo reutilizable por las vistas (spec 008): window.NPerfCore. Convive con el código anterior.
+// Estado local de UI (nunca lo toca el polling), render con firma, protección de foco, busy, toasts y formateadores.
+(function () {
+  const DASH = '—';
+  const ui = { activeView: 'panel', activeDrawer: null, isAddHostOpen: false, isDetailedMode: false, isInactiveAdaptersOpen: false, activeModal: null, pendingActions: new Set() };
+  const sigs = {};
+  const POLL_MS = 500;
+
+  // Llama a fn solo si la firma (JSON) de value cambió desde la última vez para esa clave.
+  function renderIf(key, value, fn) {
+    const s = JSON.stringify(value === undefined ? null : value);
+    if (sigs[key] === s) return false;
+    sigs[key] = s;
+    fn(value);
+    return true;
+  }
+  function resetSig(key) { if (key === undefined) { Object.keys(sigs).forEach(function (k) { delete sigs[k]; }); } else delete sigs[key]; }
+
+  // No pisa lo que el usuario escribe: ignora el input con foco.
+  function setValueIfIdle(input, value) {
+    if (!input || document.activeElement === input) return false;
+    const v = value === null || value === undefined ? '' : String(value);
+    if (input.value !== v) input.value = v;
+    return true;
+  }
+
+  // Deshabilita el botón mientras dura la promesa; devuelve la misma promesa (con el mismo resultado o error).
+  function busy(btn, promise, busyText) {
+    const prev = btn ? btn.textContent : '';
+    if (btn) {
+      ui.pendingActions.add(btn);
+      btn.disabled = true;
+      if (busyText) btn.textContent = busyText;
+    }
+    const done = function () {
+      if (!btn) return;
+      ui.pendingActions.delete(btn);
+      btn.disabled = false;
+      if (busyText) btn.textContent = prev;
+    };
+    return Promise.resolve(promise).then(function (v) { done(); return v; }, function (e) { done(); throw e; });
+  }
+
+  // Toasts: contenedor #toasts si existe; texto siempre con textContent.
+  function toastText(m) { return String(m && m.message ? m.message : m); }
+  function pushToast(msg, kind) {
+    const box = document.getElementById('toasts');
+    if (!box) return null;
+    const t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = toastText(msg);
+    box.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, kind === 'error' ? 8000 : 4000);
+    return t;
+  }
+
+  // Formateadores: "—" para null, no medido o no disponible.
+  function missing(v) {
+    if (v === null || v === undefined || (typeof v === 'number' && !isFinite(v))) return true;
+    return typeof v === 'object' && (v.status === 'not_measured' || v.status === 'unavailable');
+  }
+  function num(v, decimals, unit) {
+    if (missing(v)) return DASH;
+    const n = Number(v);
+    if (!isFinite(n)) return DASH;
+    return n.toFixed(decimals) + (unit ? ' ' + unit : '');
+  }
+  function fmtMbps(v) { return num(v, 1, 'Mbps'); }
+  function fmtMs(v) { return num(v, 1, 'ms'); }
+  function fmtPct(v) { return num(v, 1, '%'); }
+  function fmtCount(v) {
+    if (missing(v)) return DASH;
+    return typeof v === 'string' ? v : Number(v).toLocaleString('es');
+  }
+  // Métrica de un objeto con status: valor solo si status = measured.
+  function metric(obj, field, fmtFn) {
+    if (!obj || missing(obj)) return DASH;
+    return fmtFn(obj[field]);
+  }
+
+  // Sondeo periódico: una petición en vuelo, siguiente a los 500 ms de acabar la anterior.
+  function startPolling(fetchState, render, onError) {
+    let running = true, inflight = false, timer = null;
+    function tick() {
+      if (!running) return;
+      inflight = true;
+      Promise.resolve().then(fetchState).then(render, function (e) { if (onError) onError(e); })
+        .then(function () { inflight = false; if (running) timer = setTimeout(tick, POLL_MS); },
+          function () { inflight = false; if (running) timer = setTimeout(tick, POLL_MS); });
+    }
+    tick();
+    return { stop: function () { running = false; clearTimeout(timer); }, isBusy: function () { return inflight; } };
+  }
+
+  window.NPerfCore = { ui: ui, POLL_MS: POLL_MS, DASH: DASH, renderIf: renderIf, resetSig: resetSig, setValueIfIdle: setValueIfIdle, busy: busy, pushToast: pushToast,
+    fmt: { mbps: fmtMbps, ms: fmtMs, pct: fmtPct, count: fmtCount, num: num, metric: metric, missing: missing }, startPolling: startPolling };
+})();

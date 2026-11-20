@@ -285,3 +285,41 @@ console.log('ok');`
 		t.Fatalf("pila de Escape: %v\n%s", err, out)
 	}
 }
+
+// Núcleo de app.js (spec 008 T6): renderIf, setValueIfIdle, busy y formateadores.
+func TestAppCore(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	app := filepath.Join(dir, "app.js")
+	if err := os.WriteFile(app, []byte(read(t, "app.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "t.js")
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+const ctx={window:{},document:{createElement(){return {};},addEventListener(){},getElementById(){return null;},querySelector(){return null;},activeElement:null},JSON,Date,Promise,Object,Array,String,Number,Set,isFinite,setTimeout(){},setInterval(){},clearTimeout(){}};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const C=ctx.window.NPerfCore;
+let n=0;
+assert(C.renderIf('k',{a:1},()=>n++));assert(!C.renderIf('k',{a:1},()=>n++));assert.strictEqual(n,1);
+assert(C.renderIf('k',{a:2},()=>n++));assert.strictEqual(n,2);
+const inp={value:'x'};ctx.document.activeElement=inp;
+assert(!C.setValueIfIdle(inp,'y'));assert.strictEqual(inp.value,'x');
+ctx.document.activeElement=null;assert(C.setValueIfIdle(inp,'y'));assert.strictEqual(inp.value,'y');
+const F=C.fmt;
+for (const v of [null,undefined,{status:'not_measured'},{status:'unavailable'}]) assert.strictEqual(F.mbps(v),'—');
+assert.strictEqual(F.metric({status:'not_measured'},'x',F.ms),'—');
+assert.strictEqual(F.ms(1.25),'1.3 ms');
+const b={disabled:false,textContent:'Ok'};
+const p=C.busy(b,Promise.resolve(7),'...');assert(b.disabled&&b.textContent==='...'&&C.ui.pendingActions.has(b));
+p.then(v=>{assert.strictEqual(v,7);assert(!b.disabled&&b.textContent==='Ok'&&C.ui.pendingActions.size===0);console.log('ok');});`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, app).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("núcleo app.js: %v\n%s", err, out)
+	}
+}
