@@ -42,10 +42,10 @@
 - **Recuerda** la última elección. Aplica a pruebas **manuales y programadas**.
 
 ## 7. Interfaz
-- Tema tipo **MikroTik / WinBox**: grises con acento azul, colores suaves.
+- ~~Tema tipo **MikroTik / WinBox**: grises con acento azul, colores suaves.~~ Desde la spec 008: paleta "NOC Telemetry + Precision Slate" (§23).
 - Claro/oscuro **automático** según el sistema. Idioma **español**.
 - **Compacta** por defecto, con modo **detallado**.
-- Barra superior fija: **[Sentido ▾] [Duración ▾] [TEST!]**.
+- ~~Barra superior fija: **[Sentido ▾] [Duración ▾] [TEST!]**.~~ Desde la spec 008: barra de TEST! fija solo en la vista Panel (§23).
 - Selección: **clic en dos nodos** del mapa, luego TEST!.
 - Resultado: en el **panel de detalle** y el enlace cambia de color en el mapa.
 
@@ -200,3 +200,13 @@
 - Publicación: tag `vX.Y.Z` → windows-latest, vet + tests, zip `NPerf-X.Y.Z-windows-amd64.zip` (exes, README.md, privacidad.md, licencias de terceros, LICENSE si existe) + `SHA256SUMS`, Release **borrador** con la sección del CHANGELOG. Empaquetado en `tools/release` (Go estándar), probado en cada CI con un paquete de prueba.
 - Saludo UDP (T1/T2): causa = `greetUDP` medía el presupuesto en intentos (10 × 300 ms = 3 s), no en tiempo, y cada datagrama ajeno (restos de la fase anterior) gastaba un intento y reenviaba al instante; con CPU saturada (-race, UDP de Gbps en loopback) el servidor tardaba > 3 s o los intentos se agotaban en ms. Corrección: plazo total 5 s, reenvío cada 300 ms (tope 16), lecturas ajenas sin gastar reenvíos, mismo error, respeta ctx. Efecto aceptado: un error de lectura no-timeout (ICMP inalcanzable) espera hasta 5 s.
 - Usuario (spec 007): licencia propietaria, "todos los derechos reservados" (el código es visible en GitHub pero sin permiso de reutilizar ni redistribuir); titular del copyright: scouter190. Las dependencias de terceros mantienen sus licencias (docs/licencias-terceros.txt).
+
+## 23. Spec 008 (rediseño de la interfaz)
+- Usuario: rediseño según `docs/nperf_gui_parameters.md` (app shell, drawers, modales). Se aprueban la paleta "NOC Telemetry + Precision Slate" y la barra de TEST! solo en la vista Panel (sustituyen dos puntos de §7).
+- Usuario: sin estado de reinicio del servidor en State; el indicador de la cabecera muestra solo "Activo" o "con error" (`config_error`), y el resultado de guardar se ve en el banner del drawer Ajustes.
+- Usuario: `test.history_id` y `probe.history_id` (aditivos, vacíos si no se guardó o se borró). Exportar del Panel usa ese registro; con el historial desactivado, el botón queda deshabilitado con el motivo.
+- Usuario: en el modal M-Lab, texto fijo "límite de 40 pruebas al día" (la cuota restante no se expone).
+- Usuario: solo fuentes de Windows (Segoe UI Variable / Cascadia Mono con fallbacks); sin fuentes embebidas, sin cambios de CSP, sin selector manual de tema (solo `prefers-color-scheme`).
+- Usuario: se ajustan solo los tokens del documento que no alcanzan el contraste AA (4,5:1), con un test de contraste en CI.
+- Usuario: BSSID y MAC solo en el drawer local de Tarjetas de red; nunca en Copiar resumen ni en exportaciones (coherente con §18 y §21).
+- Puente sin métodos nuevos. Copiar resumen y Repetir son solo frontend; la velocidad a internet vuelve a pedir el consentimiento en cada Repetir.
