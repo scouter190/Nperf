@@ -21,7 +21,6 @@ if (!window.nperf) {
 const nperf = window.nperf;
 
 const $ = function (id) { return document.getElementById(id); };
-const PHASES = [['rtt', 'RTT'], ['tcp_fwd', 'TCP ida'], ['tcp_rev', 'TCP vuelta'], ['udp_fwd', 'UDP ida'], ['udp_rev', 'UDP vuelta']];
 let last = null;
 let showProbe = false;
 const sig = {};
@@ -57,26 +56,7 @@ function selectedDevice(s) {
 }
 function isNoAgent(s, id) { return (s.no_agent || []).some(function (p) { return p.id === id; }); }
 
-function renderBar(s) {
-  if (changed('dirs', [s.directions, s.direction])) {
-    const sel = $('direction'); clear(sel);
-    s.directions.forEach(function (o) {
-      const op = el('option', '', o.label); op.value = o.value; sel.appendChild(op);
-    });
-    sel.value = s.direction;
-  }
-  const dur = $('duration');
-  window.NPerfCore.setValueIfIdle(dur, s.duration_seconds);
-  $('total').textContent = s.direction === 'both' ? s.total_label : '';
-  const running = s.test.running;
-  $('test').hidden = running || isNoAgent(s, s.selected_id);
-  $('cancel').hidden = !running;
-  $('cancel').disabled = s.test.status === 'cancelling';
-  $('test').disabled = !s.can_test;
-  $('test').title = s.can_test ? '' : s.test_blocked_reason;
-  $('blocked').textContent = s.can_test || isNoAgent(s, s.selected_id) ? '' : s.test_blocked_reason;
-  $('direction').disabled = running;
-  dur.disabled = running;
+function renderBanners(s) {
   $('config-error').hidden = !s.config_error;
   $('config-error-text').textContent = s.config_error || '';
   window.NPerfCore.renderIf('firewall', s.firewall_hint || '', function (h) { $('firewall').hidden = !h; $('firewall').textContent = h; });
@@ -107,23 +87,6 @@ function fmt(v, d) { return (v === null || v === undefined) ? '-' : Number(v).to
 function dirLabel(s, dir) {
   const o = s.directions.filter(function (x) { return x.value === dir; })[0];
   return o ? o.label : dir;
-}
-
-function progress(s) {
-  const t = s.test;
-  const box = el('div');
-  const line = el('div', 'status-line');
-  if (t.status === 'queued') line.textContent = t.queue_position > 0 ? 'En cola, posición ' + t.queue_position : 'Conectando…';
-  else if (t.status === 'running') line.textContent = 'Midiendo…';
-  else if (t.status === 'cancelling') line.textContent = t.label || 'Cancelando…';
-  box.appendChild(line);
-  const bar = el('div', 'progress');
-  const idx = PHASES.map(function (p) { return p[0]; }).indexOf(t.phase);
-  PHASES.forEach(function (p, i) {
-    bar.appendChild(el('span', 'step' + (idx > i ? ' done' : '') + (idx === i && t.status === 'running' ? ' cur' : ''), p[1]));
-  });
-  box.appendChild(bar);
-  return box;
 }
 
 function cell(tr, text, cls) { tr.appendChild(el('td', cls || '', text)); }
@@ -222,7 +185,6 @@ function reportView(s, detailed) {
 }
 
 // ---- diagnósticos sin agente ----
-const PROBES = [['ping', 'Ping', 'probe-ping'], ['trace', 'Traceroute', 'probe-trace'], ['mtu', 'MTU', 'probe-mtu'], ['ports', 'Puertos', 'probe-ports']];
 const PROBE_NAMES = { ping: 'Ping', trace: 'Traceroute', mtu: 'MTU de la ruta', ports: 'Puertos TCP', internet: 'Latencia a internet', speed: 'Velocidad a internet (M-Lab)' };
 const PORT_STATES = { open: 'abierto', closed: 'cerrado', filtered: 'filtrado', canceled: 'cancelado', cancelled: 'cancelado' };
 const REPLY_STATES = { ok: 'respuesta', timeout: 'tiempo agotado', ttl_expired: 'TTL expirado', host_unreachable: 'host inaccesible', net_unreachable: 'red inaccesible', port_unreachable: 'puerto inaccesible', frag_needed: 'fragmentación necesaria', other: 'sin respuesta' };
@@ -340,26 +302,6 @@ function probeDetail(s, c) {
   }
 }
 
-function renderProbeBar(s) {
-  const p = s.probe || { running: false, status: 'idle' };
-  const hasSel = !!selectedDevice(s);
-  PROBES.forEach(function (x) {
-    const b = $(x[2]);
-    const own = p.running && p.kind === x[0];
-    b.textContent = own ? (p.status === 'cancelling' ? 'Cancelando…' : 'Cancelar') : x[1];
-    b.classList.toggle('danger', own);
-    b.disabled = own ? p.status === 'cancelling' : (!hasSel || !s.can_probe);
-    b.title = own ? '' : (!hasSel ? 'elija un equipo de destino' : (s.can_probe ? '' : s.probe_blocked_reason));
-  });
-  $('probe-blocked').textContent = !s.can_probe && !p.running ? s.probe_blocked_reason : (p.running ? '' : (hasSel ? '' : 'elija un equipo de destino'));
-}
-
-function startProbe(kind) {
-  if (!last) return;
-  showProbe = true; delete sig.detail;
-  act(nperf.startProbe(kind, last.selected_id));
-}
-
 function testNoChart(t) {
   const c = Object.assign({}, t); delete c.chart; return c;
 }
@@ -375,62 +317,14 @@ function renderDetail(s) {
   const peer = selectedDevice(s);
   if (showProbe && s.probe && s.probe.status !== 'idle') { probeDetail(s, c); return; }
   c.appendChild(el('p', 'status-line', peer ? 'Destino: ' + peer.alias + ' (' + (peer.ips || []).join(', ') + ')' : 'Sin destino seleccionado'));
-  if (t.status === 'queued' || t.status === 'running' || t.status === 'cancelling') c.appendChild(progress(s));
+  if (t.status === 'queued' || t.status === 'running' || t.status === 'cancelling') { /* la franja del Panel muestra el progreso */ }
   else if (t.status === 'error') c.appendChild(el('p', 'err-text', 'Error: ' + t.error));
   else if (t.status === 'cancelled') c.appendChild(el('p', 'muted', 'Prueba cancelada.'));
   else if (t.status === 'done' && t.report) c.appendChild(reportView(s, detailed));
   else c.appendChild(el('p', 'muted', peer && isNoAgent(s, peer.id) ? 'Equipo sin NPerf: use Ping, Traceroute, MTU o Puertos.' : 'Elija un equipo y pulse TEST! o un diagnóstico.'));
 }
 
-function adapterCard(a, detailed) {
-  const card = el('div', 'card' + (a.connected ? '' : ' off') + (a.virtual === true ? ' virtual' : ''));
-  const head = el('div', 'card-head');
-  const kind = KINDS[a.kind] ? a.kind : 'unknown';
-  const ico = el('span', 'ico ' + kind); ico.title = a.kind_label || KINDS[kind];
-  head.appendChild(ico);
-  head.appendChild(el('span', 'name', a.name));
-  if (a.virtual === true) { const tag = el('span', 'tag-virtual', 'virtual'); tag.title = 'Adaptador virtual (VPN, máquina virtual...): su velocidad es nominal'; head.appendChild(tag); }
-  head.appendChild(el('span', 'card-speed', a.speed));
-  card.appendChild(head);
-  const kv = function (k, v) { if (v) card.appendChild(el('div', 'kv', k + ': ' + v)); };
-  const w = a.wifi;
-  if (w) {
-    if (!w.available) kv('WiFi', w.reason || 'no disponible');
-    else {
-      kv('SSID', w.ssid); kv('Banda', w.band); kv('Canal', w.channel); kv('Señal', w.signal);
-      if (detailed) { kv('BSSID', w.bssid); kv('RSSI', w.rssi); kv('Estándar', w.standard); kv('Tasa ↑', w.tx_rate); kv('Tasa ↓', w.rx_rate); }
-    }
-  }
-  if (detailed) {
-    kv('Descripción', a.description); kv('MAC', a.mac); kv('IPv4', (a.ipv4 || []).join(', '));
-    if (!w) { kv('Tasa ↑', a.tx_rate); kv('Tasa ↓', a.rx_rate); }
-  }
-  return card;
-}
-
-function renderAdapters(v, detailed) {
-  if (!changed('adapters', [v, detailed])) return;
-  const c = $('adapters'); clear(c);
-  const n = $('location-notice');
-  n.hidden = !v.location_denied;
-  $('location-text').textContent = v.location_notice || '';
-  if (!v.adapters || !v.adapters.length) c.appendChild(el('p', 'muted', 'No se detectaron tarjetas de red.'));
-  (v.adapters || []).forEach(function (a) { c.appendChild(adapterCard(a, detailed)); });
-}
-
-// El drawer de tarjetas de red lo gestiona NPerfShell (T12 lo reescribe en drawers.js).
-function adaptersOpen() { return !!(window.NPerfShell && window.NPerfShell.state.drawer === 'adapters'); }
-let adaptersBusy = false;
-function refreshAdapters() {
-  if (!adaptersOpen() || adaptersBusy) return;
-  adaptersBusy = true;
-  const detailed = true; // BSSID y MAC solo se ven en este drawer
-  Promise.resolve().then(function () { return nperf.adapters(detailed); })
-    .then(function (v) { renderAdapters(v, detailed); }, function (e) { $('adapters').textContent = String(e && e.message ? e.message : e); delete sig.adapters; })
-    .then(function () { adaptersBusy = false; });
-}
-
-// ---- gráficas del TEST! y monitor de tarjetas (NPerfChart) ----
+// ---- gráficas del TEST! (NPerfChart); el monitor de tarjetas vive en drawers.js ----
 const CHART_MIN_MS = 1000; // redibujo como máximo 1 vez por segundo
 const openData = {};        // clave de gráfica -> "Valores" abierto (se conserva al redibujar)
 let chartDrawn = 0, chartPending = false;
@@ -507,59 +401,9 @@ function renderCharts(s) {
   ch.phases.forEach(function (p) { c.appendChild(chartBlock(p, ch.cancelled)); });
 }
 
-let monitorBusy = false, monitorOn = false;
-function stopMonitor() {
-  if (!monitorOn) return;
-  monitorOn = false;
-  Promise.resolve().then(function () { return nperf.monitor(false); }).then(null, function () {});
-}
-function monitorPoints(a, key, last) {
-  const out = [];
-  (a.points || []).forEach(function (p, i) {
-    const x = (p.at_ms - last) / 1000;
-    if (p.gap && i > 0) out.push([x - 0.001, null]);
-    out.push([x, p.gap ? null : p[key] / 1e6]);
-  });
-  return out;
-}
-function renderMonitor(v) {
-  const msg = $('monitor-msg');
-  msg.hidden = v.available;
-  msg.textContent = v.available ? '' : (v.message || 'el monitor de tarjetas no está disponible');
-  if (!changed('monitor', v)) return;
-  const c = $('monitor'); clear(c);
-  let latest = 0;
-  (v.adapters || []).forEach(function (a) { (a.points || []).forEach(function (p) { if (p.at_ms > latest) latest = p.at_ms; }); });
-  (v.adapters || []).forEach(function (a) {
-    const box = el('div', 'mon-adapter');
-    const hd = el('div', 'card-head');
-    const kind = KINDS[a.kind] ? a.kind : 'unknown';
-    const ico = el('span', 'ico ' + kind); ico.title = KINDS[kind];
-    hd.appendChild(ico);
-    hd.appendChild(el('span', 'name', a.name));
-    hd.appendChild(el('span', 'card-speed', a.status === 'up' ? 'conectada' : 'desconectada'));
-    box.appendChild(hd);
-    if (!a.points || !a.points.length) box.appendChild(el('p', 'muted', 'Sin datos todavía.'));
-    else drawChart(box, 'mon:' + a.guid, { title: 'Tráfico de ' + a.name, xLabel: 'Hace', xUnit: 's', yUnit: 'Mbps', decimals: 2, width: 300, height: 190,
-      series: [{ name: 'Entrada', points: monitorPoints(a, 'in_bps', latest) }, { name: 'Salida', points: monitorPoints(a, 'out_bps', latest) }] });
-    c.appendChild(box);
-  });
-  if (!(v.adapters || []).length && v.available) c.appendChild(el('p', 'muted', 'No hay tarjetas físicas que monitorizar.'));
-}
-// Solo con el panel abierto y la ventana visible; si no, se detiene el muestreo.
-function refreshMonitor() {
-  if (!adaptersOpen() || document.hidden) { stopMonitor(); return; }
-  if (monitorBusy) return;
-  monitorBusy = true; monitorOn = true;
-  Promise.resolve().then(function () { return nperf.monitor(true); })
-    .then(function (v) { if (adaptersOpen() && !document.hidden) renderMonitor(v); },
-      function (e) { $('monitor-msg').hidden = false; $('monitor-msg').textContent = String(e && e.message ? e.message : e); delete sig.monitor; })
-    .then(function () { monitorBusy = false; });
-}
-
 function render(s) {
   last = s;
-  renderBar(s); renderProbeBar(s); renderSettings(s); renderDetail(s); renderCharts(s);
+  renderBanners(s); renderSettings(s); renderDetail(s); renderCharts(s);
   ['NPerfSidebar', 'NPerfPanel', 'NPerfDrawers', 'NPerfModals'].forEach(function (n) {
     if (window[n] && typeof window[n].render === 'function') window[n].render(s);
   });
@@ -575,30 +419,8 @@ function poll() {
     .then(function () { polling = false; }, function () { polling = false; });
 }
 
-function commitDuration() {
-  const v = parseInt($('duration').value, 10);
-  if (isNaN(v) || v < 3 || v > 300) { toast('La duración debe estar entre 3 y 300 segundos'); if (last) $('duration').value = last.duration_seconds; return; }
-  act(nperf.setDuration(v));
-}
-
 document.addEventListener('DOMContentLoaded', function () {
-  $('direction').addEventListener('change', function () { act(nperf.setDirection($('direction').value)); });
-  $('duration').addEventListener('change', commitDuration);
-  $('test').addEventListener('click', function () { showProbe = false; delete sig.detail; act(nperf.startTest()); });
-  PROBES.forEach(function (x) {
-    $(x[2]).addEventListener('click', function () {
-      if (last && last.probe && last.probe.running && last.probe.kind === x[0]) act(nperf.cancelProbe());
-      else startProbe(x[0]);
-    });
-  });
-  $('cancel').addEventListener('click', function () { act(nperf.cancelTest()); });
   $('detailed').addEventListener('change', function () { delete sig.detail; if (last) renderDetail(last); });
-  document.addEventListener('nperf:drawer', function () { refreshAdapters(); if (adaptersOpen()) refreshMonitor(); else stopMonitor(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) stopMonitor(); else refreshMonitor(); });
-  window.addEventListener('pagehide', stopMonitor);
-  setInterval(refreshMonitor, 1000);
-  $('location-open').addEventListener('click', function () { act(nperf.openLocationSettings()); });
-  setInterval(refreshAdapters, 5000);
   $('alias-save').addEventListener('click', function () { act(nperf.setAlias($('alias').value)); });
   $('key-save').addEventListener('click', function () {
     const k = $('key').value;

@@ -423,6 +423,10 @@ table.tbl td.wrap{white-space:normal;overflow-wrap:anywhere}
 .mdl .foot .links{display:flex;gap:14px;flex-wrap:wrap;font-size:12px}
 .mdl .foot .acts{display:flex;gap:8px;margin-left:auto}
 .mdl textarea{min-height:56px;width:100%;resize:vertical;background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text-primary);font:inherit}
+.mdl .fld{font-size:12px}
+.mdl .fld select,.mdl .fld input.inp,.mdl .fld textarea{width:100%}
+.mdl .fld.inline input{width:auto}
+.mdl .fnote[hidden]{display:none}
 .toast{position:fixed;right:14px;bottom:14px;z-index:var(--z-toast);padding:8px 12px;border-radius:var(--radius-md);background:var(--bg-surface);border:1px solid var(--ok-border);color:var(--text-primary);box-shadow:var(--shadow-modal)}
 .toast[hidden]{display:none}
 /* Maqueta (solo tools/uipreview) */
@@ -448,3 +452,9 @@ body.captura .m-tool{display:none}
 .toasts{position:fixed;right:14px;bottom:14px;z-index:var(--z-toast);display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none}
 .toasts .toast{position:static;pointer-events:auto;max-width:360px}
 .toasts .toast.error{border-color:var(--err-border);background:var(--err-bg)}
+
+/* ===== Cadena panel.js (T9-T11): barra, progreso y resultados ===== */
+.prog .elapsed{min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums}
+.btn.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:panel-spin .8s linear infinite}
+@keyframes panel-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.btn.busy::before{animation:none}}

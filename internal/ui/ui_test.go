@@ -123,7 +123,7 @@ func TestBindingsExistInApp(t *testing.T) {
 		if _, ok := typ.MethodByName(goName); !ok {
 			t.Errorf("app.App no tiene %s (JS %s)", goName, n[1])
 		}
-		if !strings.Contains(js+read(t, "history.js")+read(t, "internet.js")+read(t, "sidebar.js"), "nperf."+n[1]+"(") && n[1] != "state" {
+		if !strings.Contains(js+read(t, "history.js")+read(t, "internet.js")+read(t, "sidebar.js")+read(t, "panel.js")+read(t, "drawers.js"), "nperf."+n[1]+"(") && n[1] != "state" {
 			t.Errorf("la UI no usa nperf.%s", n[1])
 		}
 	}
@@ -131,10 +131,15 @@ func TestBindingsExistInApp(t *testing.T) {
 
 // La UI cubre iconos, panel de tarjetas, aviso de ubicación y semáforo, sin recursos externos.
 func TestNetworkDetectionUI(t *testing.T) {
-	js, css, html := read(t, "app.js"), read(t, "app.css"), read(t, "index.html")
-	for _, s := range []string{"nperf.adapters(", "nperf.monitor(true)", "nperf.monitor(false)", "NPerfChart.render", "gráfica no disponible: el otro equipo no envía muestras", "nperf.openLocationSettings(", "setInterval(refreshAdapters, 5000)", "adaptersOpen()", "diagnosis", "'parcial'"} {
+	js, dr, css, html := read(t, "app.js"), read(t, "drawers.js"), read(t, "app.css"), read(t, "index.html")
+	for _, s := range []string{"NPerfChart.render", "gráfica no disponible: el otro equipo no envía muestras", "diagnosis", "'parcial'"} {
 		if !strings.Contains(js, s) {
 			t.Errorf("app.js no contiene %q", s)
+		}
+	}
+	for _, s := range []string{"nperf.adapters(true)", "nperf.monitor(true)", "nperf.monitor(false)", "NPerfChart.render", "nperf.openLocationSettings(", "ADAPTERS_MS = 5000", "MONITOR_MS = 1000"} {
+		if !strings.Contains(dr, s) {
+			t.Errorf("drawers.js no contiene %q", s)
 		}
 	}
 	if !strings.Contains(read(t, "sidebar.js"), "d.ssid") {
@@ -370,5 +375,174 @@ func TestSidebarIDs(t *testing.T) {
 		if strings.Contains(h, id) {
 			t.Errorf("index.html conserva %s", id)
 		}
+	}
+}
+
+// Modales (spec 008 T14): foco atrapado, Escape bloqueado durante la exportación, intervalos solo con CSV.
+func TestModals(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	shell := write("shell.js", read(t, "shell.js"))
+	modals := write("modals.js", read(t, "modals.js"))
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+function el(tag){const e={tagName:tag.toUpperCase(),children:[],textContent:'',className:'',value:'',hidden:false,disabled:false,parentNode:null,ls:{},
+ appendChild(c){c.parentNode=this;this.children.push(c);return c;},removeChild(c){this.children=this.children.filter(x=>x!==c);c.parentNode=null;},
+ addEventListener(n,f){this.ls[n]=f;},focus(){doc.activeElement=this;},click(){if(!this.disabled&&this.ls.click)this.ls.click({});}};return e;}
+const doc={activeElement:null,body:null,createElement:el};doc.body=el('body');
+let pending=[];const pushed=[];
+const ctx={window:{},document:doc,Promise,Array,String,Object};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+ctx.window.NPerfCore={ui:{activeModal:null},pushToast:(m)=>pushed.push(m),busy(b,p,t){b.disabled=true;return Promise.resolve(p).then(v=>{b.disabled=false;return v;},e=>{b.disabled=false;throw e;});}};
+vm.runInContext(fs.readFileSync(process.argv[3],'utf8'),ctx);
+const M=ctx.window.NPerfModals,S=ctx.window.NPerfShell;
+let calls=0,resolve;
+const run=()=>{calls++;return new Promise(r=>{resolve=r;});};
+const h=M.openExport({ids:['a','b'],run});
+assert(h&&M.isOpen()&&!M.openExport({ids:['a'],run}));
+const f=h.fields;
+assert(!f.intervals.disabled);f.intervals.checked=true;
+f.format.value='json';f.format.ls.change();assert(f.intervals.disabled&&!f.intervals.checked);
+f.format.value='csv-std';f.format.ls.change();assert(!f.intervals.disabled);
+// foco atrapado
+const fo=h.focusables();const first=fo[0],last=fo[fo.length-1];
+assert.strictEqual(doc.activeElement,first);
+let prevented=false;doc.activeElement=last;h.back.ls.keydown({key:'Tab',preventDefault(){prevented=true;}});
+assert(prevented&&doc.activeElement===first);
+prevented=false;h.back.ls.keydown({key:'Tab',shiftKey:true,preventDefault(){prevented=true;}});
+assert(prevented&&doc.activeElement===last);
+// exportar: segundo clic no llama de nuevo; Escape bloqueado
+h.buttons.go.click();h.buttons.go.click();
+setTimeout(()=>{
+ assert.strictEqual(calls,1);
+ assert(S.layers.escape()&&M.isOpen());
+ resolve(['C:\\x.csv']);
+ setTimeout(()=>{
+ assert(!M.isOpen()&&pushed[0].startsWith('Exportado en'));
+ // Escape cierra el modal libre
+ const c=M.openConfirmDelete({scope:'all',count:8,run:()=>Promise.resolve(8)});
+ assert(M.isOpen()&&c.el.children[1].textContent==='¿Borrar todo el historial (8 registros)? Esta acción no se puede deshacer.');
+ assert(S.layers.escape()&&!M.isOpen());
+ assert.strictEqual(M.confirmText('selected',2),'¿Borrar los 2 registros seleccionados? Esta acción no se puede deshacer.');
+ assert(M.openConfirmDelete({scope:'selected',count:0,run(){}})===null);
+ console.log('ok');
+ },20);
+},20);`
+	script := write("t.js", js)
+	out, err := exec.Command(node, script, shell, modals).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("modales: %v\n%s", err, out)
+	}
+}
+
+// drawers.js (spec 008 T12): sin llamadas periodicas a adapters/monitor con el drawer cerrado; 802.11ax -> "Wi-Fi 6".
+func TestDrawersPolling(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "drawers.js")
+	if err := os.WriteFile(src, []byte(read(t, "drawers.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "t.js")
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+const ctx={window:{},document:{addEventListener(){}},Promise,isFinite,String,Number};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const D=ctx.window.NPerfDrawers;
+assert.strictEqual(D.wifiStandard('802.11ax (WiFi 6)'),'Wi-Fi 6');
+assert.strictEqual(D.wifiStandard('802.11ax (WiFi 6E)'),'Wi-Fi 6E');
+assert.strictEqual(D.wifiStandard('802.11ac'),'Wi-Fi 5');
+assert.strictEqual(D.wifiStandard('802.11n (WiFi 4)'),'Wi-Fi 4');
+assert.strictEqual(D.wifiStandard('802.11be'),'Wi-Fi 7');
+assert.strictEqual(D.wifiStandard('raro'),'raro');
+const calls=[];let open=false,timers=[];
+const nperf={adapters(d){calls.push('a'+d);return Promise.resolve({});},monitor(on){calls.push('m'+on);return Promise.resolve({});}};
+const P=D.createPoller({nperf,active:()=>open,setInterval:(f)=>{timers.push(f);return timers.length;},clearInterval:(t)=>{timers[t-1]=null;},
+ onAdapters(){},onAdaptersError(){},onMonitor(){},onMonitorError(){}});
+const tick=()=>new Promise(r=>setTimeout(r,5));
+(async()=>{
+ P.load();await tick();assert.deepStrictEqual(calls,['atrue']);      // carga inicial
+ P.sync();await tick();assert.deepStrictEqual(calls,['atrue']);      // cerrado: nada
+ assert.strictEqual(timers.length,0);
+ open=true;P.sync();await tick();assert.deepStrictEqual(calls,['atrue','atrue','mtrue']);
+ assert.strictEqual(timers.length,2);timers.forEach(f=>f());await tick();
+ assert.deepStrictEqual(calls.slice(3),['atrue','mtrue']);
+ open=false;P.sync();await tick();assert.strictEqual(calls[calls.length-1],'mfalse');
+ assert(timers.every(f=>f===null));assert(!P.isRunning());
+ const n=calls.length;P.sync();await tick();assert.strictEqual(calls.length,n);
+ // monitor(true) en vuelo al cerrar: al resolver se vuelve a apagar.
+ let res;calls.length=0;open=true;
+ nperf.monitor=(on)=>{calls.push('m'+on);return on?new Promise(r=>{res=r;}):Promise.resolve({});};
+ const Q=D.createPoller({nperf,active:()=>open,setInterval:()=>1,clearInterval(){},onAdapters(){},onAdaptersError(){},onMonitor(){},onMonitorError(){}});
+ Q.sync();await tick();open=false;Q.sync();await tick();
+ assert.deepStrictEqual(calls.filter(c=>c[0]==='m'),['mtrue','mfalse']);
+ res({});await tick();
+ assert.deepStrictEqual(calls.filter(c=>c[0]==='m'),['mtrue','mfalse','mfalse']);
+ console.log('ok');
+})().catch(e=>{console.error(e);process.exit(1);});`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, src).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("drawers.js: %v\n%s", err, out)
+	}
+}
+
+// Panel (spec 008 T9): fases visibles por sentido y motivo de bloqueo una sola vez.
+func TestPanelBarAndStrip(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	panel := filepath.Join(dir, "panel.js")
+	if err := os.WriteFile(panel, []byte(read(t, "panel.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "t.js")
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+const ctx={window:{}};vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const P=ctx.window.NPerfPanel;
+const J=(x)=>JSON.stringify(x);
+assert.strictEqual(J(P.phasesFor('fwd')),J(['rtt','tcp_fwd','udp_fwd']));
+assert.strictEqual(J(P.phasesFor('rev')),J(['rtt','tcp_rev','udp_rev']));
+assert.strictEqual(P.phasesFor('both').length,5);
+const peer={id:'p1',alias:'Srv'};
+const base=()=>({peers:[peer],no_agent:[],selected_id:'p1',direction:'fwd',can_test:true,test_blocked_reason:'',can_probe:true,probe_blocked_reason:'',test:{status:'idle'},probe:{status:'idle'}});
+let s=base();s.test={running:true,status:'running',phase:'tcp_fwd'};
+let m=P.stripModel(s);assert.strictEqual(m.chips.map(c=>c.text+':'+c.state).join(),'RTT:done,TCP Ida:cur,UDP Ida:');
+s=base();s.test={running:true,status:'queued',queue_position:2};assert(P.stripModel(s).text.includes('#2')&&P.stripModel(s).text.includes('Srv'));
+assert.strictEqual(P.stripModel(base()),null);
+// Motivo de bloqueo una sola vez: nunca en los dos sitios, y siempre el texto de Go.
+const cases=[
+ {can_test:false,test_blocked_reason:'T',can_probe:false,probe_blocked_reason:'P'},
+ {can_test:false,test_blocked_reason:'T',can_probe:true},
+ {can_test:true,can_probe:false,probe_blocked_reason:'P'},
+ {can_test:false,test_blocked_reason:'T',can_probe:false,probe_blocked_reason:'P',test:{running:true,status:'running'}},
+ {can_test:false,test_blocked_reason:'T',can_probe:false,probe_blocked_reason:'P',probe:{running:true,status:'running',kind:'ping'}}];
+for (const c of cases){ s=Object.assign(base(),c); const b=P.barModel(s);
+  assert(!(b.testText&&b.probeText),J(c)); assert(['','T','P'].includes(b.testText)&&['','P'].includes(b.probeText)); }
+s=Object.assign(base(),cases[0]);assert.strictEqual(P.barModel(s).testText,'T');assert.strictEqual(P.barModel(s).probeText,'');
+s=Object.assign(base(),cases[3]);assert.strictEqual(P.barModel(s).mode,'cancel');assert.strictEqual(P.barModel(s).probeText,'P');
+s=Object.assign(base(),{test:{status:'cancelling'},can_test:false,test_blocked_reason:'C'});assert.strictEqual(P.barModel(s).mode,'cancelling');
+console.log('ok');`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, panel).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("panel.js: %v\n%s", err, out)
 	}
 }
