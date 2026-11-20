@@ -203,7 +203,11 @@ func (a *App) cfg() (config.Config, error) {
 	if a.d.ConfigDir == "" {
 		return config.Defaults(), nil
 	}
+	// Lee bajo cfgMu: en Windows el reemplazo de config.json por update puede hacer
+	// fallar una lectura concurrente, y el error devolvía la config vacía (sin hosts manuales).
+	a.cfgMu.Lock()
 	c, err := config.LoadFull(a.d.ConfigDir)
+	a.cfgMu.Unlock()
 	if err != nil {
 		return config.Defaults(), err
 	}

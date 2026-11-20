@@ -14,6 +14,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -491,10 +492,13 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		typ, data, err := c.ReadMessage(rctx)
 		if err != nil {
 			finish()
-			if rctx.Err() != nil && ctx.Err() == nil && cfg.Fail != NoClose {
+			// El plazo de red puede saltar un instante antes de que rctx.Err() lo refleje:
+			// sin esto el servidor se iba sin cerrar ni esperar y el cliente veía un corte.
+			timedOut := (rctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || !time.Now().Before(deadline)) && ctx.Err() == nil
+			if timedOut && cfg.Fail != NoClose {
 				_ = c.WriteMessage(ctx, ws.Text, s.measurementJSON(cfg, start, get(), true))
 				_ = c.Close(ws.CloseNormal, "")
-			} else if rctx.Err() != nil && ctx.Err() == nil { // NoClose: espera al cliente
+			} else if timedOut { // NoClose: espera al cliente
 				<-ctx.Done()
 			}
 			return

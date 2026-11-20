@@ -298,3 +298,32 @@ func TestHistoryConcurrentStateAndToggle(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+// cfg() lee bajo el mismo cerrojo que update: nunca ve la config vacía a mitad de un guardado.
+func TestConfigReadDuringUpdateKeepsHosts(t *testing.T) {
+	a, _ := newProbeApp(t, probe.Env{}, nil, nil)
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_ = a.SetHistoryEnabled(i%2 == 0)
+		}
+	}()
+	for i := 0; i < 300; i++ {
+		cfg, err := a.cfg()
+		if err != nil || len(cfg.ManualHosts) != 1 {
+			close(stop)
+			wg.Wait()
+			t.Fatalf("%v %+v", err, cfg.ManualHosts)
+		}
+	}
+	close(stop)
+	wg.Wait()
+}

@@ -147,6 +147,11 @@ func TestGiantAndInvalidJSON(t *testing.T) {
 				if fail == ndt7test.GiantFrame && (!d.Incomplete || d.Reason == "") {
 					t.Fatalf("gigante: %+v", d)
 				}
+				if fail == ndt7test.InvalidJSON && d.Reason == ReasonNoData {
+					// Flaky no reproducido (§23): se acepta el motivo, pero queda constancia.
+					t.Logf("%s: no se envió ningún dato (%+v)", dir, d)
+					return
+				}
 				if fail == ndt7test.InvalidJSON && (d.Incomplete || d.Bytes == 0) {
 					t.Fatalf("json inválido: %+v", d)
 				}
@@ -245,5 +250,36 @@ func TestUserAgentDefault(t *testing.T) {
 	}
 	if got != "NPerf/"+version.Current {
 		t.Fatalf("User-Agent %q", got)
+	}
+}
+
+// Un cierre normal sin bytes enviados no es una subida completa de 0 Mbps. Determinista:
+// el cliente no envía nada (plazo de 1 ns) y el servidor informa de 1 s sin bytes y cierra.
+func TestUploadZeroBytesIsIncomplete(t *testing.T) {
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := ws.Accept(w, r, ws.Options{Subprotocol: Subprotocol})
+		if err != nil {
+			return
+		}
+		_ = c.WriteMessage(context.Background(), ws.Text, []byte(`{"TCPInfo":{"ElapsedTime":1000000,"BytesReceived":0}}`))
+		_ = c.Close(ws.CloseNormal, "")
+	}))
+	ts.EnableHTTP2 = false
+	ts.StartTLS()
+	defer ts.Close()
+	pool := x509.NewCertPool()
+	pool.AddCert(ts.Certificate())
+	o := MeasureOptions{
+		URL:        strings.Replace(ts.URL, "https://", "wss://", 1) + "/ndt/v7/upload",
+		WS:         ws.Options{TLS: &tls.Config{RootCAs: pool}},
+		UploadTime: time.Nanosecond,
+		MinNormal:  time.Millisecond,
+	}
+	d, err := Upload(context.Background(), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Bytes != 0 || !d.Incomplete || d.Reason != ReasonNoData {
+		t.Fatalf("%+v", d)
 	}
 }

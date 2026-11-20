@@ -343,9 +343,16 @@ func Upload(ctx context.Context, o MeasureOptions) (Direction, error) {
 		bytes, dur = sent, time.Duration(end-start)
 		d.Notes = append(d.Notes, "estimado por el cliente")
 	}
+	if bytes == 0 && !d.Incomplete {
+		// Un cierre normal sin ningún byte enviado no es una medida de 0 Mbps.
+		d.Incomplete, d.Reason = true, ReasonNoData
+	}
 	d.Bytes, d.DurationS, d.Mbps = bytes, dur.Seconds(), mbps(bytes, dur)
 	return d, nil
 }
+
+// ReasonNoData es el motivo de una subida sin ningún byte enviado.
+const ReasonNoData = "no se pudo enviar ningún dato"
 
 // serverElapsed es el tiempo que el servidor informa en un Measurement.
 func serverElapsed(m measurement) time.Duration {

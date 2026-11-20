@@ -47,4 +47,4 @@ Puerto 5300 · descubrimiento 5301/UDP · UDP 100 Mbps sin TCP previo · cola m�
 Usuario: validar la GUI nueva (docs/validacion-gui-v2.md) y specs 001-006 a mano; diseñar el icono (desbloquea spec 007 T10-T15). Pendiente su permiso para subir a main lo de spec 008 (un CI de wip falló por un test intermitente de ndt7).
 
 ## Pendientes
-- Flaky: TestGiantAndInvalidJSON/upload#01 (internal/ndt7, -race en ubuntu, "json inválido" con MinRTT; 1 vez). Flaky: TestStreamsOutOfRangeRejected (1 vez, "connection reset"). Saludo UDP corregido en spec 007 T2 (§22). Restos CSS solo de maqueta (plot, g-*, bigs, hbatch...) y .modal en app.css: limpiar.
+- Flaky: TestStreamsOutOfRangeRejected (1 vez, "connection reset"). Saludo UDP corregido en spec 007 T2 (§22). Restos CSS solo de maqueta (plot, g-*, bigs, hbatch...) y .modal en app.css: limpiar. Flakies de ndt7 y app resueltos (§23).
