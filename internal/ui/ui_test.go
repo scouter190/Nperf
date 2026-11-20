@@ -51,7 +51,7 @@ var unsafeJS = regexp.MustCompile(`innerHTML|insertAdjacentHTML|outerHTML|docume
 func unsafeUse(js string) []string { return unsafeJS.FindAllString(js, -1) }
 
 func TestNoUnsafeDOM(t *testing.T) {
-	for _, n := range []string{"app.js", "mock.js", "history.js", "internet.js"} {
+	for _, n := range []string{"app.js", "mock.js", "history.js", "internet.js", "shell.js"} {
 		if bad := unsafeUse(read(t, n)); len(bad) > 0 {
 			t.Errorf("%s usa API insegura: %v", n, bad)
 		}
@@ -251,5 +251,37 @@ console.log('ok');`
 	out, err := exec.Command(node, script, app).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok") {
 		t.Fatalf("reportView falla con resultados parciales: %v\n%s", err, out)
+	}
+}
+
+// La pila de Escape cierra popover, luego modal, luego drawer; una exportación en curso la bloquea.
+func TestShellEscapeStack(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	shell := filepath.Join(dir, "shell.js")
+	if err := os.WriteFile(shell, []byte(read(t, "shell.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "t.js")
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert');
+const ctx={window:{}};vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),ctx);
+const L=ctx.window.NPerfShell.createLayers();const log=[];
+L.open('drawer',()=>log.push('drawer'));L.open('modal',()=>log.push('modal'),false);L.open('popover',()=>log.push('popover'));
+assert(L.escape());assert(L.escape());assert(L.escape());assert(!L.escape());
+assert.deepStrictEqual(log,['popover','modal','drawer']);
+L.open('drawer',()=>log.push('d2'));L.open('modal',()=>log.push('m2'),true);
+assert(L.escape());assert.deepStrictEqual(log,['popover','modal','drawer']);
+L.setBlocking('modal',false);assert(L.escape());assert(L.escape());assert(!L.escape());
+assert.deepStrictEqual(log.slice(3),['m2','d2']);
+console.log('ok');`
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, shell).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("pila de Escape: %v\n%s", err, out)
 	}
 }

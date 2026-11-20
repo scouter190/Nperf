@@ -8,7 +8,7 @@ Olas: las tareas de una misma ola pueden ir en paralelo (archivos disjuntos). **
 - [x] T3 `tools/uipreview`: servidor de desarrollo en 127.0.0.1 (puerto aleatorio, misma CSP), `/maqueta` y `/app` (index.html + mock.js inyectado) leyendo del disco (tools/uipreview/main.go + test) — test con httptest: CSP presente, mock inyectado solo en `/app`, 404 fuera de la lista; `internal/gui/static.go` sin cambios.
 
 ## Ola 2 (maqueta, puerta visual)
-- [ ] T4 `shell.js` y estilos del shell: cabecera, vistas Panel/Historial, drawers con el fondo sin parpadeo, popover, pila de Escape, `:focus-visible` y breakpoints de 900 px (internal/ui/web/shell.js, app.css) — test anti-DOM inseguro incluye shell.js; test con node de la pila de Escape (popover → modal → drawer).
+- [x] T4 `shell.js` y estilos del shell: cabecera, vistas Panel/Historial, drawers con el fondo sin parpadeo, popover, pila de Escape, `:focus-visible` y breakpoints de 900 px (internal/ui/web/shell.js, app.css) — test anti-DOM inseguro incluye shell.js; test con node de la pila de Escape (popover → modal → drawer).
 - [ ] T5 Maqueta: `maqueta.html` estática con todos los estados (sidebar con disponible/ocupado/en cola/inalcanzable/vacío, barra TEST! y diagnósticos, progreso, resultado TEST! con semáforo + 4 KPI + gráfica, Internet, Historial con filtros y lote, drawer Red, drawer Ajustes, modales M-Lab/exportar/borrar) usando app.css y shell.js reales; capturas en claro/oscuro a 1000×640 y 720×480 en `docs/validacion-gui-v2.md` (tools/uipreview/maqueta.html, app.css, docs/validacion-gui-v2.md) — sin scroll horizontal a 720×480 y KPI + gráfica visibles a 1000×640 en las capturas; **el usuario aprueba la maqueta** (criterio 10).
 
 ## Ola 3 (núcleo, tras la aprobación)
