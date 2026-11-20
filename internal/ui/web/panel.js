@@ -282,6 +282,84 @@
     return { cls: c === 'green' ? 'ok' : (c === 'red' ? 'err' : 'warn'), icon: c === 'green' ? '✓' : (c === 'red' ? '✕' : '!'), title: w.text || 'Sin limitación detectada', tags: tags, text: text };
   }
 
+  // ---- Resumen en texto plano (Copiar resumen). Solo campos conocidos: nunca MAC, BSSID ni clave. ----
+  function oneLine(v) { return String(v === undefined || v === null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim(); }
+  function buildSummary(s, mode) {
+    const hm = headModel(s, mode), out = [];
+    out.push(oneLine(hm.title) + ' [' + hm.tag[1] + ']');
+    if (hm.sub) out.push(oneLine(hm.sub));
+    if (mode === 'test') {
+      const t = s.test || {};
+      if (t.status === 'error') { out.push('Error: ' + oneLine(t.error)); return out.join('\n'); }
+      const sm = semModel(s);
+      if (sm) {
+        out.push('Diagnóstico: ' + oneLine(sm.title) + (sm.tags.length ? ' (' + sm.tags.map(oneLine).join('; ') + ')' : ''));
+        if (sm.text) out.push(oneLine(sm.text));
+      }
+      kpiModels(s).forEach(function (k) {
+        const parts = [k.title + ': ' + k.value + (k.unit ? ' ' + k.unit : '')];
+        if (k.tag) parts.push(k.tag);
+        k.subs.forEach(function (x) { parts.push(x.text); });
+        if (k.foot) parts.push(k.foot);
+        out.push(oneLine(parts.join(' · ')));
+      });
+      const notes = (t.report && Array.isArray(t.report.notes)) ? t.report.notes : [];
+      notes.forEach(function (n) { out.push('Aviso: ' + oneLine(n)); });
+      return out.join('\n');
+    }
+    const p = s.probe || {}, r = p.result || {};
+    if (p.status === 'error') { out.push('Error: ' + oneLine(p.error)); return out.join('\n'); }
+    const cs = combinedSem(p.combined);
+    if (cs) { out.push('Diagnóstico: ' + oneLine(cs.title)); if (cs.text) out.push(oneLine(cs.text)); }
+    if (p.kind === 'ping' && p.status === 'done') {
+      out.push('Enviados ' + nf(r.sent, 0) + ' · recibidos ' + nf(r.received, 0) + ' · pérdida ' + nf(r.loss_pct, 1) + ' %');
+      if (r.rtt_status === 'ok') out.push('RTT mín ' + nf(r.min_ms) + ' / media ' + nf(r.avg_ms) + ' / máx ' + nf(r.max_ms) + ' ms');
+    } else if (p.kind === 'trace' && p.status === 'done') {
+      out.push((r.reached ? 'Destino alcanzado' : 'Destino no alcanzado') + ' en ' + (r.hops || []).length + ' saltos');
+      (r.findings || []).forEach(function (f) { out.push(oneLine(f)); });
+    } else if (p.kind === 'mtu' && p.status === 'done') {
+      out.push(r.status === 'ok' ? 'MTU de la ruta: ' + r.mtu_bytes + ' bytes' : 'MTU no disponible: ' + oneLine(r.reason));
+    } else if (p.kind === 'ports' && p.status === 'done') {
+      (r.ports || []).forEach(function (x) { out.push('Puerto ' + x.port + ': ' + (PORT_STATES[x.state] || 'error')); });
+    }
+    return out.join('\n');
+  }
+
+  // Copia al portapapeles: Clipboard API (localhost es contexto seguro) y, si falla, textarea + execCommand.
+  function copyText(text) {
+    function fallback() {
+      return new Promise(function (resolve, reject) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.readOnly = true; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        if (ok) resolve(); else reject(new Error('copy'));
+      });
+    }
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+      return nav.clipboard.writeText(text).then(null, fallback);
+    }
+    return fallback();
+  }
+  function copySummary(s, mode) {
+    return copyText(buildSummary(s, mode)).then(
+      function () { core.pushToast('Resumen copiado al portapapeles', ''); },
+      function () { core.pushToast('No se pudo copiar el resumen', 'error'); });
+  }
+
+  // Exportar del Panel: usa el registro guardado (history_id); sin él, deshabilitado con el motivo.
+  function exportModel(s, mode) {
+    const src = mode === 'test' ? (s.test || {}) : (s.probe || {});
+    const id = src.history_id || '';
+    let why = '';
+    if (!s.history_enabled) why = 'Historial desactivado';
+    else if (!id) why = 'No se guardó en el historial';
+    return { enabled: !why, id: id, why: why };
+  }
+
   function destLabel(dev) { return dev ? dev.alias + ' (' + (dev.ips || []).join(', ') + ')' : ''; }
 
   // Cabecera común: título, etiqueta de estado, línea PHY y Repetir.
@@ -290,13 +368,13 @@
     if (mode === 'test') {
       const dg = t.diagnosis || {};
       const tag = STATUS_TAGS[t.status] || STATUS_TAGS.done;
-      return { title: 'Destino: ' + (dev ? destLabel(dev) : 'sin seleccionar'), tag: tag, sub: dg.local || dg.remote ? ((s.self && s.self.alias) || 'Este equipo') + ': ' + linkLine(dg.local) + '  →  ' + (dev ? dev.alias : 'destino') + ': ' + linkLine(dg.remote) : '',
+      return { mode: 'test', title: 'Destino: ' + (dev ? destLabel(dev) : 'sin seleccionar'), tag: tag, sub: dg.local || dg.remote ? ((s.self && s.self.alias) || 'Este equipo') + ': ' + linkLine(dg.local) + '  →  ' + (dev ? dev.alias : 'destino') + ': ' + linkLine(dg.remote) : '',
         repeat: { kind: 'test', enabled: !!s.can_test && !!dev && t.status !== 'queued' && t.status !== 'running' && t.status !== 'cancelling', why: s.can_test ? '' : (s.test_blocked_reason || '') } };
     }
     const target = (devices(s).filter(function (x) { return x.id === p.target_id; })[0]);
     const net = p.kind === 'internet' || p.kind === 'speed';
     const tag = STATUS_TAGS[p.status] || STATUS_TAGS.done;
-    return { title: (PROBE_NAMES[p.kind] || 'Diagnóstico') + (!net && target ? ' · ' + destLabel(target) : ''), tag: tag, sub: '',
+    return { mode: 'probe', title: (PROBE_NAMES[p.kind] || 'Diagnóstico') + (!net && target ? ' · ' + destLabel(target) : ''), tag: tag, sub: '',
       repeat: { kind: p.kind, enabled: !!s.can_probe && p.status !== 'running' && p.status !== 'cancelling' && (net || !!target), why: s.can_probe ? '' : (s.probe_blocked_reason || '') } };
   }
 
@@ -331,6 +409,15 @@
     b.disabled = !hm.repeat.enabled; b.title = hm.repeat.enabled ? '' : hm.repeat.why;
     b.addEventListener('click', function () { repeat(b, hm.repeat.kind); });
     acts.appendChild(b);
+    const ex = exportModel(s, hm.mode), eb = el('button', 'btn sm', '⤓ Exportar'); eb.type = 'button';
+    eb.disabled = !ex.enabled; eb.title = ex.why;
+    eb.addEventListener('click', function () {
+      if (ex.enabled && window.NPerfModals) window.NPerfModals.openExport({ ids: [ex.id] });
+    });
+    acts.appendChild(eb);
+    const cb = el('button', 'btn sm', '⧉ Copiar resumen'); cb.type = 'button';
+    cb.addEventListener('click', function () { copySummary(s, hm.mode); });
+    acts.appendChild(cb);
     box.appendChild(acts);
     return box;
   }
@@ -620,6 +707,7 @@
     render: function (s) { renderBar(s); renderStrip(s); renderResult(s); },
     resultModel: function (s) { return { mode: viewMode(s, false), head: headModel(s, 'test'), kpis: kpiModels(s), sem: semModel(s) }; },
     kpiModels: kpiModels, semModel: semModel, viewMode: viewMode, headModel: headModel, buildResult: buildResult, bloatMs: bloatMs,
+    buildSummary: buildSummary, exportModel: exportModel, copyText: copyText,
     phasesFor: phasesFor, barModel: barModel, stripModel: stripModel, fmtElapsed: fmtElapsed
   };
 })();

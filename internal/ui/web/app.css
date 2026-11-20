@@ -482,3 +482,4 @@ body.captura .m-tool{display:none}
 .gcard .chart-box{max-width:none}
 .notes{margin:0;padding:8px 12px 8px 28px;font-size:12px;color:var(--text-secondary)}
 .surf>.tw{margin:0}
+.rhead .acts .btn[disabled]{cursor:not-allowed}

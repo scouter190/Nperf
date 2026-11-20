@@ -675,3 +675,53 @@ const tick=()=>new Promise(r=>setTimeout(r,5));
 		t.Fatalf("ajustes: %v\n%s", err, out)
 	}
 }
+
+// Panel (spec 008 T11): el resumen no filtra MAC, BSSID ni clave; Exportar sin id queda deshabilitado con motivo.
+func TestPanelSummaryAndExport(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node no disponible")
+	}
+	dir := t.TempDir()
+	app := read(t, "app.js")
+	core := app[strings.Index(app, "// Núcleo reutilizable"):]
+	if err := os.WriteFile(filepath.Join(dir, "core.js"), []byte(core), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "panel.js"), []byte(read(t, "panel.js")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	js := `const vm=require('vm'),fs=require('fs'),assert=require('assert'),path=require('path');
+function node(tag){return {tag,children:[],textContent:'',className:'',style:{},select(){},appendChild(c){this.children.push(c);this.lastChild=c;return c;},setAttribute(){},addEventListener(){}};}
+const ctx={window:{},document:{createElement:node,createTextNode:(x)=>({text:x}),addEventListener(){},getElementById(){return null;}},JSON,Date,Promise,Object,Array,String,Number,Math,Set,isFinite,setTimeout(){},clearTimeout(){}};
+ctx.el=(tag,cls,text)=>{const e=node(tag);e.className=cls||'';if(text!==undefined)e.textContent=String(text);return e;};
+vm.createContext(ctx);
+for (const f of ['core.js','panel.js']) vm.runInContext(fs.readFileSync(path.join(process.argv[2],f),'utf8'),ctx);
+const P=ctx.window.NPerfPanel;
+const link={kind:'wifi',tx_bps:866000000,rx_bps:866000000,ssid:'Casa',bssid:'aa:bb:cc:dd:ee:ff',mac:'11:22:33:44:55:66'};
+const s={directions:[],self:{alias:'x',mac:'11:22:33:44:55:66'},peers:[{id:'p1',alias:'Srv',ips:['10.0.0.2'],mac:'11:22:33:44:55:66',bssid:'aa:bb:cc:dd:ee:ff'}],no_agent:[],selected_id:'p1',direction:'both',can_test:true,can_probe:true,key:'SECRETO-123',history_enabled:true,
+ test:{status:'done',history_id:'h1',key:'SECRETO-123',diagnosis:{local:link,remote:link,fwd:{color:'green',percent:90,text:'Sin limitación'}},report:{key:'SECRETO-123',notes:['nota'],tcp:{fwd:{status:'measured',throughput_mbps:500,bytes:1e8,retransmissions:null}},rtt:{status:'measured',min_ms:1,avg_ms:2,max_ms:3}}},probe:{status:'idle'}};
+const txt=P.buildSummary(s,'test');
+assert(txt.includes('500')&&txt.includes('Srv')&&txt.includes('Sin limitación'),txt);
+assert(!/aa:bb|11:22|SECRETO|bssid/i.test(txt),txt);
+const p=JSON.parse(JSON.stringify(s));p.test={status:'idle'};p.probe={status:'done',kind:'ping',target_id:'p1',history_id:'h2',result:{sent:4,received:4,loss_pct:0,rtt_status:'ok',min_ms:1,avg_ms:2,max_ms:3,replies:[{from:'aa:bb:cc:dd:ee:ff'}]},combined:{healthy:true,messages:['Todo bien']}};
+const ptxt=P.buildSummary(p,'probe');assert(ptxt.includes('Todo bien')&&!/aa:bb|SECRETO/.test(ptxt),ptxt);
+// Exportar: con id habilitado; sin id o historial desactivado, deshabilitado con el motivo
+let m=P.exportModel(s,'test');assert(m.enabled&&m.id==='h1'&&m.why==='');
+m=P.exportModel(Object.assign({},s,{test:{status:'done'}}),'test');assert(!m.enabled&&m.why==='No se guardó en el historial');
+m=P.exportModel(Object.assign({},s,{history_enabled:false}),'test');assert(!m.enabled&&m.why==='Historial desactivado');
+m=P.exportModel(p,'probe');assert(m.enabled&&m.id==='h2');
+// respaldo: sin Clipboard API se usa execCommand
+let copied=false;ctx.navigator=undefined;
+ctx.document.body={appendChild(){},removeChild(){}};
+ctx.document.execCommand=(c)=>{copied=c==='copy';return true;};
+P.copyText('x').then(()=>{assert(copied);console.log('ok');});`
+	script := filepath.Join(t.TempDir(), "t.js")
+	if err := os.WriteFile(script, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script, dir).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("resumen y exportar del Panel: %v\n%s", err, out)
+	}
+}
