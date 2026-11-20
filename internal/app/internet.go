@@ -73,9 +73,10 @@ func (a *App) launchProbe(kind string, run func(context.Context) (json.RawMessag
 		}
 		a.mu.Unlock()
 
-		herr := a.saveRecord(rec(final))
+		hid, herr := a.saveRecord(rec(final))
 
 		a.mu.Lock()
+		final.HistoryID = hid
 		a.histWarn = histWarning(herr)
 		if a.probeGen == gen && a.probe.Running {
 			a.probe = final

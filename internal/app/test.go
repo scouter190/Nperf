@@ -133,9 +133,10 @@ func (a *App) StartTest() error {
 			Direction: dir, DurationS: o.Duration.Seconds(), Streams: o.Streams, Version: version.Current}, src, dst)
 		a.mu.Unlock()
 
-		herr := a.saveRecord(rec)
+		hid, herr := a.saveRecord(rec)
 
 		a.mu.Lock()
+		final.HistoryID = hid
 		a.histWarn = histWarning(herr)
 		if a.gen == gen && a.test.Running {
 			a.test = final

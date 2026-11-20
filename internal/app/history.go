@@ -58,18 +58,44 @@ func rawJSON(v any) json.RawMessage {
 
 // saveRecord guarda r si el historial está activado. Un fallo se devuelve para avisar;
 // desactivado o sin almacén no es fallo.
-func (a *App) saveRecord(r *history.Record) error {
+func (a *App) saveRecord(r *history.Record) (string, error) {
 	if a.d.History == nil {
-		return nil
+		return "", nil
 	}
 	a.histMu.Lock()
 	defer a.histMu.Unlock()
 	if !a.d.History.Enabled {
-		return nil
+		return "", nil
 	}
 	r.Version = version.Current
-	_, err := a.d.History.Save(r)
-	return err
+	id, err := a.d.History.Save(r)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// clearDeletedHistoryID vacía el history_id del estado si su registro ya no existe.
+func (a *App) clearDeletedHistoryID() {
+	a.mu.Lock()
+	tid, pid := a.test.HistoryID, a.probe.HistoryID
+	a.mu.Unlock()
+	gone := func(id string) bool {
+		if id == "" {
+			return false
+		}
+		_, err := a.d.History.Get(id)
+		return err != nil
+	}
+	tg, pg := gone(tid), gone(pid)
+	a.mu.Lock()
+	if tg && a.test.HistoryID == tid {
+		a.test.HistoryID = ""
+	}
+	if pg && a.probe.HistoryID == pid {
+		a.probe.HistoryID = ""
+	}
+	a.mu.Unlock()
 }
 
 // histWarning devuelve el aviso a publicar según el resultado del guardado.
@@ -127,7 +153,9 @@ func (a *App) DeleteHistory(ids []string) (int, error) {
 	if a.d.History == nil {
 		return 0, errors.New("historial no disponible")
 	}
-	return a.d.History.Delete(ids)
+	n, err := a.d.History.Delete(ids)
+	a.clearDeletedHistoryID()
+	return n, err
 }
 
 // DeleteAllHistory borra todos los registros.
@@ -135,7 +163,9 @@ func (a *App) DeleteAllHistory() (int, error) {
 	if a.d.History == nil {
 		return 0, errors.New("historial no disponible")
 	}
-	return a.d.History.DeleteAll()
+	n, err := a.d.History.DeleteAll()
+	a.clearDeletedHistoryID()
+	return n, err
 }
 
 // SetHistoryEnabled activa o desactiva el guardado y lo persiste en la configuración.

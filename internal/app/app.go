@@ -106,6 +106,8 @@ type TestState struct {
 	Diagnosis *Diagnosis `json:"diagnosis,omitempty"`
 	// Chart: gráfica en vivo; se conserva en done/cancelled/error hasta el siguiente TEST!.
 	Chart *Chart `json:"chart,omitempty"`
+	// HistoryID: id del registro guardado (vacío si no se guardó o se borró).
+	HistoryID string `json:"history_id,omitempty"`
 }
 
 // State es el snapshot serializable para la UI.

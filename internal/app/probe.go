@@ -55,6 +55,8 @@ type ProbeState struct {
 	Error    string          `json:"error,omitempty"`
 	Result   json.RawMessage `json:"result,omitempty"`
 	Combined *CombinedState  `json:"combined,omitempty"`
+	// HistoryID: id del registro guardado (vacío si no se guardó o se borró).
+	HistoryID string `json:"history_id,omitempty"`
 }
 
 // probeTarget es el destino resuelto en texto: nombre pedido y, si ya es IP, la dirección.
@@ -150,9 +152,10 @@ func (a *App) StartProbe(kind, id string) error {
 		a.mu.Unlock()
 
 		// Se guarda antes de publicar, para que el registro sea igual a State().
-		herr := a.saveRecord(a.probeRecord(final, tgt.Raw))
+		hid, herr := a.saveRecord(a.probeRecord(final, tgt.Raw))
 
 		a.mu.Lock()
+		final.HistoryID = hid
 		a.histWarn = histWarning(herr)
 		if a.probeGen == gen && a.probe.Running {
 			a.probe = final
