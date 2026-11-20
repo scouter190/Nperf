@@ -30,4 +30,4 @@ Olas: las tareas de una misma ola pueden ir en paralelo (archivos disjuntos). **
 
 ## Ola 6 (cierre)
 - [ ] T17 Limpieza: quitar CSS y JS muertos de la UI antigua; repasar que cada método de la lista blanca se usa y que no quedan IDs huérfanos (internal/ui/web/*, ui_test.go) — `go vet`, `go test ./...` y `-race` en verde; test de ids de index.html referenciados por el JS.
-- [ ] T18 `docs/validacion-gui-v2.md` completo con los criterios 11-22 paso a paso (docs/validacion-gui-v2.md) — el reviewer comprueba que cada criterio manual tiene pasos y resultado esperado; validación del usuario en Windows 10 y 11.
+- [x] T18 `docs/validacion-gui-v2.md` completo con los criterios 11-22 paso a paso (docs/validacion-gui-v2.md) — el reviewer comprueba que cada criterio manual tiene pasos y resultado esperado; validación del usuario en Windows 10 y 11.
